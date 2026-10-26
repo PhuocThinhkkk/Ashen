@@ -1,7 +1,9 @@
 import GUI from 'lil-gui';
-import type { PlayerTuning } from '../entities/Player';
 
-export type DebugTuning = PlayerTuning & {
+export type DebugTuning = {
+  speed: number;
+  dashMultiplier: number;
+  acceleration: number;
   cameraLag: number;
   exposure: number;
   maxDpr: number;

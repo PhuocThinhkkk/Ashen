@@ -1,74 +1,81 @@
 import * as THREE from 'three';
-import { InputController } from '../core/InputController';
+import { checkAttackHit } from '../combat/HitDetection';
+import { type CombatInputs, InputController } from '../core/InputController';
 import { Loop } from '../core/Loop';
 import { createRenderer, resizeRenderer } from '../core/Renderer';
-import { Pickup } from '../entities/Pickup';
-import { Player, type ArenaBounds } from '../entities/Player';
+import { BossCharacter } from '../entities/BossCharacter';
+import { PlayerCharacter } from '../entities/PlayerCharacter';
 import { AudioSystem } from '../systems/AudioSystem';
-import { CameraRig } from '../systems/CameraRig';
-import { CollisionSystem } from '../systems/CollisionSystem';
 import { DebugTools, type DebugTuning } from '../systems/DebugTools';
 import { Hud } from '../systems/Hud';
-import { createSeededRandom } from '../utils/random';
-
-const ARENA: ArenaBounds = {
-  halfWidth: 11,
-  halfDepth: 7,
-};
+import { SoulslikeCamera } from '../systems/SoulslikeCamera';
+import { Arena } from '../world/Arena';
 
 export class Game {
   private readonly renderer: THREE.WebGLRenderer;
   private readonly scene = new THREE.Scene();
-  private readonly camera = new THREE.PerspectiveCamera(48, 1, 0.1, 80);
+  private readonly camera = new THREE.PerspectiveCamera(48, 1, 0.1, 100);
+
+  private readonly arena = new Arena({ radius: 21.0 });
+  private readonly player = new PlayerCharacter();
+  private readonly boss = new BossCharacter();
+
   private readonly input: InputController;
-  private readonly player = new Player();
-  private readonly pickups: Pickup[] = [];
-  private readonly collision = new CollisionSystem();
+  private readonly cameraRig: SoulslikeCamera;
   private readonly audio = new AudioSystem();
   private readonly hud = new Hud();
-  private readonly cameraRig = new CameraRig(this.camera);
+  private readonly debugTools: DebugTools;
+
   private readonly loop = new Loop(
     (delta, elapsed) => this.update(delta, elapsed),
     () => this.render(),
   );
 
+  private readonly combatInputs: CombatInputs = {
+    move: new THREE.Vector2(),
+    sprint: false,
+    dodge: false,
+    lightAttack: false,
+    heavyAttack: false,
+    toggleLockOn: false,
+    restart: false,
+  };
+
+  private readonly mouseDelta = new THREE.Vector2();
+
   private readonly tuning: DebugTuning = {
-    speed: 5.8,
-    dashMultiplier: 1.75,
-    acceleration: 13,
-    cameraLag: 0.16,
-    exposure: 1.05,
+    speed: 4.8,
+    dashMultiplier: 1.6,
+    acceleration: 14,
+    cameraLag: 0.12,
+    exposure: 1.1,
     maxDpr: 2,
   };
 
-  private readonly debugTools: DebugTools;
   private frame = 0;
-  private score = 0;
   private elapsed = 0;
-  private complete = false;
-  // Route ALL gameplay randomness through this.rng (never Math.random) so the
-  // seed() test hook keeps screenshot baselines and bot playtests deterministic.
-  private rng = createSeededRandom(1);
+  private hitstopTimer = 0;
   private pausedForScreenshot = false;
-  private reducedMotion = false;
+
+  // Previous states for audio triggers
+  private prevPlayerState = 'idle';
+  private prevBossState = 'idle';
 
   constructor(private readonly canvas: HTMLCanvasElement) {
     this.renderer = createRenderer(canvas);
     this.renderer.toneMappingExposure = this.tuning.exposure;
 
-    const stick = this.getElement('#touch-stick');
-    const knob = this.getElement('#touch-knob');
-    const dashButton = this.getElement('#dash-button');
-    this.input = new InputController(stick, knob, dashButton);
+    this.input = new InputController(canvas);
+    this.cameraRig = new SoulslikeCamera(this.camera);
 
     this.debugTools = new DebugTools(this.tuning, () => {
       this.renderer.toneMappingExposure = this.tuning.exposure;
       resizeRenderer(this.renderer, this.camera, this.tuning.maxDpr);
     });
 
-    this.createScene();
-    this.hud.setTarget(this.pickups.length);
-    this.cameraRig.snapTo(this.player.group.position);
+    this.buildScene();
+    this.resetRun();
+
     resizeRenderer(this.renderer, this.camera, this.tuning.maxDpr);
     this.installTestHooks();
     this.publishDiagnostics();
@@ -83,11 +90,45 @@ export class Game {
     this.input.dispose();
     this.audio.dispose();
     this.debugTools.dispose();
-    for (const pickup of this.pickups) pickup.dispose();
+    this.arena.dispose();
     this.player.dispose();
+    this.boss.dispose();
     this.renderer.dispose();
     window.__THREE_GAME_DIAGNOSTICS__ = undefined;
     window.__THREE_GAME_TEST_HOOKS__ = undefined;
+  }
+
+  private buildScene(): void {
+    // 1. Atmosphere & Fog (Dark Gothic Night)
+    this.scene.background = new THREE.Color(0x0a0e16);
+    this.scene.fog = new THREE.Fog(0x0b101a, 16, 60);
+
+    // 2. Ambient & Directional Moonlight
+    const hemiLight = new THREE.HemisphereLight(0x506888, 0x222a36, 1.8);
+    this.scene.add(hemiLight);
+
+    const moonLight = new THREE.DirectionalLight(0xbcd6ff, 2.8);
+    moonLight.position.set(-14, 24, 16);
+    moonLight.castShadow = true;
+    moonLight.shadow.mapSize.set(2048, 2048);
+    moonLight.shadow.bias = -0.0003;
+    moonLight.shadow.camera.near = 1;
+    moonLight.shadow.camera.far = 70;
+    moonLight.shadow.camera.left = -24;
+    moonLight.shadow.camera.right = 24;
+    moonLight.shadow.camera.top = 24;
+    moonLight.shadow.camera.bottom = -24;
+    this.scene.add(moonLight);
+
+    // Rim light from opposite angle
+    const rimLight = new THREE.DirectionalLight(0x5577aa, 0.85);
+    rimLight.position.set(16, 12, -14);
+    this.scene.add(rimLight);
+
+    // 3. Add Sanctuary Arena, Player & Boss
+    this.scene.add(this.arena.group);
+    this.scene.add(this.player.group);
+    this.scene.add(this.boss.group);
   }
 
   private update(delta: number, elapsed: number): void {
@@ -96,187 +137,249 @@ export class Game {
       this.publishDiagnostics();
       return;
     }
-    if (!this.complete) this.elapsed += delta;
 
+    this.elapsed += delta;
     resizeRenderer(this.renderer, this.camera, this.tuning.maxDpr);
-    // Reduced motion freezes ambient animation time so screenshots are stable.
-    const animDelta = this.reducedMotion ? 0 : delta;
-    const animElapsed = this.reducedMotion ? 0 : elapsed;
-    this.player.update(delta, animElapsed, this.input, this.tuning, ARENA);
 
-    for (const pickup of this.pickups) {
-      pickup.update(animDelta, animElapsed);
+    // Hitstop freeze-frame on impacts
+    if (this.hitstopTimer > 0) {
+      this.hitstopTimer -= delta;
+      this.publishDiagnostics();
+      return;
     }
 
-    const collected = this.collision.collectPickups(this.player.group.position, this.pickups, 0.55);
-    for (const pickup of collected) {
-      this.score += 1;
-      this.audio.pickup(pickup.index);
-      this.hud.flashPickup();
+    // 1. Read Inputs
+    this.input.readInputs(this.combatInputs);
+    this.input.consumeMouseDelta(this.mouseDelta);
+
+    // Restart check
+    if (this.combatInputs.restart) {
+      this.resetRun();
+      return;
     }
 
-    if (this.score >= this.pickups.length) {
-      this.complete = true;
+    // Mouse look
+    if (this.mouseDelta.lengthSq() > 0) {
+      this.cameraRig.handleMouseMove(this.mouseDelta.x, this.mouseDelta.y);
     }
 
-    this.cameraRig.update(delta, this.player.group.position, this.tuning.cameraLag);
-    this.hud.update(this.score, this.pickups.length, this.elapsed, this.complete);
+    // 2. Lock-On Management
+    if (this.combatInputs.toggleLockOn && this.boss.state !== 'dead') {
+      const locked = this.cameraRig.toggleLockOn(this.boss.group.position);
+      if (!locked) {
+        this.cameraRig.setLockedTarget(null);
+      }
+    }
+
+    // Break lock-on if boss dead or too far
+    if (this.cameraRig.isLockedOn) {
+      const dist = this.player.group.position.distanceTo(this.boss.group.position);
+      if (this.boss.state === 'dead' || dist > 26.0) {
+        this.cameraRig.setLockedTarget(null);
+      } else {
+        this.cameraRig.setLockedTarget(this.boss.group.position);
+      }
+    }
+
+    // 3. Update Entities
+    const lockedTargetPos = this.cameraRig.isLockedOn ? this.boss.group.position : null;
+
+    this.player.update(
+      delta,
+      elapsed,
+      this.combatInputs,
+      this.cameraRig.yaw,
+      lockedTargetPos,
+      this.arena.radius,
+    );
+
+    this.boss.update(delta, elapsed, this.player.group.position, this.arena.radius);
+    this.arena.update(delta, elapsed);
+
+    // 4. Combat Hit Resolution
+    this.resolveCombatCollisions();
+
+    // 5. Audio State Transition Triggers
+    this.updateAudioTriggers();
+
+    // 6. Update Camera
+    this.cameraRig.update(delta, this.player.group.position, this.arena.radius);
+
+    // 7. Update HUD
+    let screenReticle: THREE.Vector2 | null = null;
+    if (this.cameraRig.isLockedOn) {
+      screenReticle = this.projectToScreen(this.boss.group.position, 1.8);
+    }
+
+    this.hud.update(
+      delta,
+      this.player.hp,
+      this.player.maxHp,
+      this.player.stamina,
+      this.player.maxStamina,
+      this.boss.hp,
+      this.boss.maxHp,
+      this.cameraRig.isLockedOn,
+      screenReticle,
+      this.player.state === 'dead',
+      this.boss.state === 'dead',
+    );
+
     this.publishDiagnostics();
+  }
+
+  private resolveCombatCollisions(): void {
+    // A. Player Attack Hits Boss
+    if (
+      this.player.state === 'attack' &&
+      this.player.attackPhase === 'active' &&
+      this.player.currentAttack &&
+      !this.player.hasHitCurrentSwing &&
+      this.boss.state !== 'dead'
+    ) {
+      const hit = checkAttackHit(
+        this.player.group.position,
+        this.player.group.rotation.y,
+        this.player.currentAttack,
+        this.boss.group.position,
+        this.boss.radius,
+        false,
+      );
+
+      if (hit.hit) {
+        this.boss.takeDamage(hit.damage, hit.poiseDamage);
+        this.player.hasHitCurrentSwing = true;
+
+        // Visual & Audio Feedback
+        const screenPos = this.projectToScreen(this.boss.group.position, 1.5);
+        this.hud.spawnDamageNumber(hit.damage, screenPos.x, screenPos.y, false);
+
+        this.audio.hitImpact(hit.isHeavy);
+        this.cameraRig.addShake(hit.isHeavy ? 0.32 : 0.16);
+
+        if (hit.isHeavy) {
+          this.hitstopTimer = 0.05; // 50ms freeze frame
+        }
+
+        if ((this.boss.state as string) === 'dead') {
+          this.audio.victoryStinger();
+          this.cameraRig.setLockedTarget(null);
+        } else if (this.boss.state === 'stagger') {
+          this.audio.staggerClang();
+        }
+      }
+    }
+
+    // B. Boss Attack Hits Player
+    if (
+      (this.boss.state === 'active') &&
+      this.boss.currentAttack &&
+      !this.boss.hasHitCurrentSwing &&
+      this.player.state !== 'dead'
+    ) {
+      const hit = checkAttackHit(
+        this.boss.group.position,
+        this.boss.group.rotation.y,
+        this.boss.currentAttack,
+        this.player.group.position,
+        this.player.radius,
+        this.player.isInvulnerable, // Protected by dodge i-frames!
+      );
+
+      if (hit.hit) {
+        const damageDealt = this.player.takeDamage(hit.damage, hit.isHeavy);
+        this.boss.hasHitCurrentSwing = true;
+
+        if (damageDealt) {
+          const screenPos = this.projectToScreen(this.player.group.position, 1.2);
+          this.hud.spawnDamageNumber(hit.damage, screenPos.x, screenPos.y, true);
+
+          this.audio.hitImpact(true);
+          this.cameraRig.addShake(0.42);
+          this.hitstopTimer = 0.06;
+
+          if ((this.player.state as string) === 'dead') {
+            this.audio.deathStinger();
+          }
+        }
+      }
+    }
+  }
+
+  private updateAudioTriggers(): void {
+    // Player action sounds
+    if (this.player.state === 'dodge' && this.prevPlayerState !== 'dodge') {
+      this.audio.dodgeWhoosh();
+    } else if (this.player.state === 'attack' && this.prevPlayerState !== 'attack') {
+      this.audio.swordSwing(this.player.currentAttack?.isHeavy);
+    }
+    this.prevPlayerState = this.player.state;
+
+    // Boss telegraph & attack sounds
+    if (this.boss.state === 'windup' && this.prevBossState !== 'windup') {
+      this.audio.bossTelegraph();
+    } else if (this.boss.state === 'active' && this.prevBossState !== 'active') {
+      this.audio.swordSwing(true);
+      if (this.boss.currentAttack?.name === 'Sundering Smite') {
+        this.audio.bossSmash();
+      }
+    }
+    this.prevBossState = this.boss.state;
+  }
+
+  private projectToScreen(worldPos: THREE.Vector3, heightOffset = 0): THREE.Vector2 {
+    const v = worldPos.clone();
+    v.y += heightOffset;
+    v.project(this.camera);
+
+    const halfW = this.canvas.clientWidth / 2;
+    const halfH = this.canvas.clientHeight / 2;
+    return new THREE.Vector2(v.x * halfW + halfW, -v.y * halfH + halfH);
   }
 
   private render(): void {
     this.renderer.render(this.scene, this.camera);
   }
 
-  private createScene(): void {
-    this.scene.background = new THREE.Color('#151713');
-    this.scene.fog = new THREE.Fog('#151713', 20, 44);
-
-    const hemisphere = new THREE.HemisphereLight('#f6f1df', '#2b322d', 1.7);
-    this.scene.add(hemisphere);
-
-    const sun = new THREE.DirectionalLight('#fff1bf', 2.6);
-    sun.position.set(-5, 9, 6);
-    sun.castShadow = true;
-    sun.shadow.mapSize.set(2048, 2048);
-    sun.shadow.camera.near = 0.5;
-    sun.shadow.camera.far = 30;
-    sun.shadow.camera.left = -14;
-    sun.shadow.camera.right = 14;
-    sun.shadow.camera.top = 12;
-    sun.shadow.camera.bottom = -12;
-    this.scene.add(sun);
-
-    this.scene.add(this.createArena());
-    this.scene.add(this.player.group);
-    this.createPickups();
-  }
-
-  private createArena(): THREE.Group {
-    const arena = new THREE.Group();
-    const floorTexture = this.createFloorTexture();
-    floorTexture.wrapS = THREE.RepeatWrapping;
-    floorTexture.wrapT = THREE.RepeatWrapping;
-    floorTexture.repeat.set(ARENA.halfWidth / 2, ARENA.halfDepth / 2);
-
-    const floor = new THREE.Mesh(
-      new THREE.PlaneGeometry(ARENA.halfWidth * 2, ARENA.halfDepth * 2, 1, 1),
-      new THREE.MeshStandardMaterial({
-        color: '#2a2c25',
-        map: floorTexture,
-        roughness: 0.72,
-        metalness: 0.02,
-      }),
-    );
-    floor.rotation.x = -Math.PI / 2;
-    floor.receiveShadow = true;
-    arena.add(floor);
-
-    const railMaterial = new THREE.MeshStandardMaterial({
-      color: '#d94f35',
-      roughness: 0.52,
-      metalness: 0.08,
-    });
-    const longRailGeometry = new THREE.BoxGeometry(ARENA.halfWidth * 2 + 1, 0.55, 0.42);
-    const shortRailGeometry = new THREE.BoxGeometry(0.42, 0.55, ARENA.halfDepth * 2 + 1);
-    const rails = [
-      new THREE.Mesh(longRailGeometry, railMaterial),
-      new THREE.Mesh(longRailGeometry, railMaterial),
-      new THREE.Mesh(shortRailGeometry, railMaterial),
-      new THREE.Mesh(shortRailGeometry, railMaterial),
-    ];
-    rails[0].position.set(0, 0.28, -ARENA.halfDepth - 0.24);
-    rails[1].position.set(0, 0.28, ARENA.halfDepth + 0.24);
-    rails[2].position.set(-ARENA.halfWidth - 0.24, 0.28, 0);
-    rails[3].position.set(ARENA.halfWidth + 0.24, 0.28, 0);
-    for (const rail of rails) {
-      rail.castShadow = true;
-      rail.receiveShadow = true;
-      arena.add(rail);
-    }
-
-    const markerMaterial = new THREE.MeshBasicMaterial({ color: '#f5ba49' });
-    const markerGeometry = new THREE.RingGeometry(0.68, 0.72, 48);
-    const centerMarker = new THREE.Mesh(markerGeometry, markerMaterial);
-    centerMarker.rotation.x = -Math.PI / 2;
-    centerMarker.position.y = 0.018;
-    arena.add(centerMarker);
-
-    return arena;
-  }
-
-  private createPickups(): void {
-    const positions = [
-      [-8, -4],
-      [-3, -5],
-      [3, -4.8],
-      [8, -3],
-      [-7.5, 3.5],
-      [-1.5, 4.7],
-      [4.5, 3.8],
-      [8.2, 1.4],
-    ];
-
-    positions.forEach(([x, z], index) => {
-      const pickup = new Pickup(index, new THREE.Vector3(x, 0.8, z));
-      this.pickups.push(pickup);
-      this.scene.add(pickup.group);
-    });
-  }
-
-  private createFloorTexture(): THREE.CanvasTexture {
-    const size = 256;
-    const textureCanvas = document.createElement('canvas');
-    textureCanvas.width = size;
-    textureCanvas.height = size;
-    const context = textureCanvas.getContext('2d');
-    if (!context) throw new Error('Could not create floor texture context.');
-
-    context.fillStyle = '#282a24';
-    context.fillRect(0, 0, size, size);
-    context.strokeStyle = 'rgba(246, 241, 223, 0.08)';
-    context.lineWidth = 1;
-    for (let i = 0; i <= size; i += 32) {
-      context.beginPath();
-      context.moveTo(i, 0);
-      context.lineTo(i, size);
-      context.moveTo(0, i);
-      context.lineTo(size, i);
-      context.stroke();
-    }
-    context.strokeStyle = 'rgba(245, 186, 73, 0.24)';
-    context.lineWidth = 2;
-    context.strokeRect(8, 8, size - 16, size - 16);
-
-    const texture = new THREE.CanvasTexture(textureCanvas);
-    texture.colorSpace = THREE.SRGBColorSpace;
-    return texture;
+  public resetRun(): void {
+    this.player.reset(new THREE.Vector3(0, 0, 9));
+    this.boss.reset(new THREE.Vector3(0, 0, -8));
+    this.cameraRig.setLockedTarget(null);
+    this.cameraRig.yaw = 0;
+    this.cameraRig.pitch = 0.26;
+    this.cameraRig.distance = 4.6;
+    this.cameraRig.snapTo(this.player.group.position, this.arena.radius);
+    this.hud.reset();
+    this.hitstopTimer = 0;
+    this.render();
   }
 
   private installTestHooks(): void {
-    // Deterministic hooks consumed by tests/visual-regression.template.ts and
-    // bot playtests. Keep these real when evolving the game: silent no-op hooks
-    // produce flaky screenshot baselines.
     window.__THREE_GAME_TEST_HOOKS__ = {
-      seed: (value: number) => {
-        this.rng = createSeededRandom(value);
-      },
-      setState: (name: string) => {
-        if (name !== 'active-play' && name !== 'complete') throw new Error(`Unknown test state: ${name}`);
-        this.resetRun();
-        if (name === 'complete') this.completeRun();
+      seed: (_n: number) => {},
+      setState: (stateName: string) => {
+        if (stateName === 'initial' || stateName === 'default') {
+          this.resetRun();
+        } else if (stateName === 'player_dead') {
+          this.player.hp = 0;
+          this.player.state = 'dead';
+        } else if (stateName === 'boss_dead') {
+          this.boss.hp = 0;
+          this.boss.state = 'dead';
+        } else if (stateName === 'boss_phase2') {
+          this.boss.hp = this.boss.maxHp * 0.45;
+          this.boss.isPhase2 = true;
+        } else {
+          throw new Error(`Unknown state: ${stateName}`);
+        }
         this.render();
         this.publishDiagnostics();
-        return { state: name };
+        return { state: stateName };
       },
       setPausedForScreenshot: (paused: boolean) => {
         this.pausedForScreenshot = paused;
-      },
-      setReducedMotion: (enabled: boolean) => {
-        this.reducedMotion = enabled;
-        if (enabled) {
-          this.player.stabilizeVisuals();
-          for (const pickup of this.pickups) pickup.stabilizeVisuals();
+        if (paused) {
+          this.player.velocity.set(0, 0, 0);
         }
         this.render();
         this.publishDiagnostics();
@@ -287,36 +390,11 @@ export class Game {
     };
   }
 
-  private resetRun(): void {
-    this.score = 0;
-    this.elapsed = 0;
-    this.complete = false;
-    this.player.reset();
-    for (const pickup of this.pickups) {
-      pickup.reset(this.rng() * Math.PI * 2);
-    }
-    this.cameraRig.snapTo(this.player.group.position);
-    this.hud.setTarget(this.pickups.length);
-    this.hud.update(this.score, this.pickups.length, this.elapsed, this.complete);
-  }
-
-  private completeRun(): void {
-    for (const pickup of this.pickups) {
-      if (pickup.active) pickup.collect();
-    }
-    this.score = this.pickups.length;
-    this.complete = true;
-    this.hud.update(this.score, this.pickups.length, this.elapsed, this.complete);
-  }
-
   private publishDiagnostics(): void {
     const info = this.renderer.info;
     window.__THREE_GAME_DIAGNOSTICS__ = {
       frame: this.frame,
       elapsed: this.elapsed,
-      score: this.score,
-      targetScore: this.pickups.length,
-      complete: this.complete,
       player: {
         position: {
           x: this.player.group.position.x,
@@ -324,6 +402,21 @@ export class Game {
           z: this.player.group.position.z,
         },
         speed: this.player.velocity.length(),
+        hp: this.player.hp,
+        stamina: this.player.stamina,
+        state: this.player.state,
+        isInvulnerable: this.player.isInvulnerable,
+      },
+      boss: {
+        position: {
+          x: this.boss.group.position.x,
+          y: this.boss.group.position.y,
+          z: this.boss.group.position.z,
+        },
+        hp: this.boss.hp,
+        maxHp: this.boss.maxHp,
+        state: this.boss.state,
+        isPhase2: this.boss.isPhase2,
       },
       renderer: {
         calls: info.render.calls,
@@ -339,11 +432,5 @@ export class Game {
         dpr: Math.min(window.devicePixelRatio || 1, this.tuning.maxDpr),
       },
     };
-  }
-
-  private getElement(selector: string): HTMLElement {
-    const element = document.querySelector<HTMLElement>(selector);
-    if (!element) throw new Error(`Missing element: ${selector}`);
-    return element;
   }
 }

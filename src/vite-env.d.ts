@@ -3,12 +3,20 @@
 interface ThreeGameDiagnostics {
   frame: number;
   elapsed: number;
-  score: number;
-  targetScore: number;
-  complete: boolean;
   player: {
     position: { x: number; y: number; z: number };
     speed: number;
+    hp: number;
+    stamina: number;
+    state: string;
+    isInvulnerable: boolean;
+  };
+  boss: {
+    position: { x: number; y: number; z: number };
+    hp: number;
+    maxHp: number;
+    state: string;
+    isPhase2: boolean;
   };
   renderer: {
     calls: number;
@@ -26,15 +34,10 @@ interface ThreeGameDiagnostics {
 }
 
 interface ThreeGameTestHooks {
-  /** Re-seed the game RNG; all gameplay randomness must flow through it. */
   seed(value: number): void | Promise<void>;
-  /** Acknowledge after setup/assets are ready; throw for unknown states. */
   setState(name: string): { state: string } | Promise<{ state: string }>;
-  /** Stop simulation/state transitions immediately; keep rendering. Await optional synchronization. */
   setPausedForScreenshot(paused: boolean): void | Promise<void>;
-  /** Stabilize ambient/idle visuals without requiring an unpaused simulation tick. */
-  setReducedMotion(enabled: boolean): void | Promise<void>;
-  /** Hide debug UI (lil-gui) before capturing. */
+  setReducedMotion?(enabled: boolean): void | Promise<void>;
   hideDebugUi(hidden: boolean): void | Promise<void>;
 }
 

@@ -1,13 +1,16 @@
 :root {
-  color: #f6f1df;
-  background: #111312;
+  color: #e5ded2;
+  background: #06080e;
   font-family:
-    Avenir Next,
-    Avenir,
-    "Segoe UI",
-    sans-serif;
+    "Cinzel",
+    "Garamond",
+    "Georgia",
+    "Times New Roman",
+    serif;
   font-synthesis: none;
   text-rendering: geometricPrecision;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 * {
@@ -21,18 +24,7 @@ body,
   height: 100%;
   margin: 0;
   overflow: hidden;
-}
-
-body {
-  min-width: 320px;
-}
-
-#app {
-  position: relative;
-  background:
-    radial-gradient(circle at 18% 18%, rgba(245, 186, 73, 0.16), transparent 26rem),
-    radial-gradient(circle at 82% 72%, rgba(72, 186, 167, 0.14), transparent 24rem),
-    #111312;
+  background: #06080e;
 }
 
 #game-canvas {
@@ -40,70 +32,354 @@ body {
   width: 100vw;
   height: 100vh;
   outline: none;
-  touch-action: none;
+  cursor: crosshair;
 }
 
-#hud {
+/* ========================================================
+   1. Player Bars (Top-Left)
+   ======================================================== */
+#player-bars {
   position: absolute;
-  top: max(16px, env(safe-area-inset-top));
-  left: max(16px, env(safe-area-inset-left));
+  top: max(24px, env(safe-area-inset-top));
+  left: max(28px, env(safe-area-inset-left));
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 10px;
   pointer-events: none;
-  color: #f6f1df;
-  text-transform: uppercase;
-  letter-spacing: 0;
+  z-index: 10;
 }
 
-.hud-metric {
-  min-width: 92px;
-  padding: 8px 10px;
-  border: 1px solid rgba(246, 241, 223, 0.24);
-  background: rgba(17, 19, 18, 0.72);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.24);
-  backdrop-filter: blur(10px);
+.bar-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.hud-metric span {
-  display: block;
-  color: rgba(246, 241, 223, 0.68);
-  font-size: 0.68rem;
-}
-
-.hud-metric strong {
-  display: block;
-  margin-top: 2px;
-  font-size: 1.08rem;
-}
-
-#status-line {
-  min-width: 132px;
-  padding: 9px 11px;
-  border-left: 3px solid #f5ba49;
-  background: rgba(17, 19, 18, 0.6);
+.bar-label {
+  font-size: 0.72rem;
   font-weight: 700;
-  font-size: 0.78rem;
+  color: #b5954a;
+  letter-spacing: 1px;
+  width: 24px;
 }
 
+.bar-track {
+  position: relative;
+  width: 280px;
+  height: 14px;
+  background: rgba(14, 18, 24, 0.85);
+  border: 1px solid rgba(181, 149, 74, 0.45);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6), inset 0 1px 3px rgba(0, 0, 0, 0.8);
+  overflow: hidden;
+}
+
+.bar-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  transition: width 0.08s ease-out;
+  z-index: 2;
+}
+
+.bar-chip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background: #8b1818;
+  transition: width 0.4s ease-out;
+  z-index: 1;
+}
+
+.hp-fill {
+  background: linear-gradient(180deg, #db2c2c 0%, #aa1414 100%);
+  box-shadow: 0 0 10px rgba(219, 44, 44, 0.5);
+}
+
+.stamina-fill {
+  background: linear-gradient(180deg, #38d665 0%, #1f9443 100%);
+  box-shadow: 0 0 8px rgba(46, 187, 90, 0.4);
+}
+
+.stamina-wrapper .bar-track {
+  width: 220px;
+  height: 10px;
+}
+
+.bar-text {
+  font-size: 0.68rem;
+  color: rgba(229, 222, 210, 0.75);
+  letter-spacing: 0.5px;
+}
+
+/* ========================================================
+   2. Boss HUD (Bottom-Center)
+   ======================================================== */
+#boss-hud {
+  position: absolute;
+  bottom: max(32px, env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: min(720px, 88vw);
+  pointer-events: none;
+  z-index: 10;
+  transition: opacity 0.5s ease-out;
+}
+
+.boss-header {
+  text-align: center;
+  margin-bottom: 6px;
+}
+
+.boss-title {
+  display: block;
+  font-size: 0.65rem;
+  letter-spacing: 3px;
+  color: #8c734b;
+  text-transform: uppercase;
+}
+
+.boss-name {
+  margin: 2px 0 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: 2.5px;
+  color: #edd9ba;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.9), 0 0 16px rgba(255, 68, 0, 0.3);
+}
+
+.boss-bar-track {
+  position: relative;
+  width: 100%;
+  height: 18px;
+  background: rgba(10, 12, 16, 0.92);
+  border: 1px solid #7a5e2a;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.8), inset 0 2px 6px rgba(0, 0, 0, 0.9);
+  overflow: hidden;
+}
+
+.boss-hp-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background: linear-gradient(180deg, #d32020 0%, #871010 100%);
+  box-shadow: 0 0 14px rgba(211, 32, 32, 0.6);
+  transition: width 0.08s ease-out;
+  z-index: 2;
+}
+
+.boss-hp-chip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background: #ffaa33;
+  transition: width 0.55s ease-out;
+  z-index: 1;
+}
+
+/* ========================================================
+   3. Lock-On Reticle
+   ======================================================== */
+#lockon-reticle {
+  position: absolute;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  z-index: 15;
+  transition: opacity 0.2s ease-out;
+}
+
+.reticle-diamond {
+  width: 18px;
+  height: 18px;
+  border: 2px solid #ffaa33;
+  transform: rotate(45deg);
+  box-shadow: 0 0 12px rgba(255, 170, 51, 0.8);
+  animation: reticlePulse 1.8s infinite ease-in-out;
+}
+
+@keyframes reticlePulse {
+  0%, 100% {
+    transform: rotate(45deg) scale(1);
+    opacity: 0.8;
+  }
+  50% {
+    transform: rotate(45deg) scale(1.25);
+    opacity: 1;
+  }
+}
+
+/* ========================================================
+   4. Floating Combat Damage Numbers
+   ======================================================== */
+#damage-container {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 12;
+}
+
+.damage-number {
+  position: absolute;
+  font-family: "Cinzel", "Georgia", serif;
+  font-weight: 800;
+  font-size: 1.45rem;
+  color: #ffdd44;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9), 0 0 12px rgba(255, 110, 0, 0.8);
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  animation: damageFloat 0.85s ease-out forwards;
+}
+
+.damage-number.player-damage {
+  color: #ff4433;
+  font-size: 1.6rem;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.95), 0 0 16px rgba(255, 0, 0, 0.9);
+}
+
+@keyframes damageFloat {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -30%) scale(0.6);
+  }
+  20% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.2);
+  }
+  80% {
+    opacity: 1;
+    transform: translate(-50%, -100%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -130%) scale(0.8);
+  }
+}
+
+/* ========================================================
+   5. Controls Guide (Bottom-Left)
+   ======================================================== */
+#controls-guide {
+  position: absolute;
+  bottom: max(24px, env(safe-area-inset-bottom));
+  left: max(28px, env(safe-area-inset-left));
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 10px 14px;
+  background: rgba(10, 14, 20, 0.72);
+  border: 1px solid rgba(181, 149, 74, 0.28);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(8px);
+  pointer-events: none;
+  z-index: 8;
+  font-size: 0.72rem;
+  color: rgba(229, 222, 210, 0.8);
+  letter-spacing: 0.6px;
+}
+
+kbd {
+  display: inline-block;
+  padding: 1px 5px;
+  font-family: monospace;
+  font-size: 0.75rem;
+  color: #ffaa33;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(181, 149, 74, 0.4);
+  border-radius: 3px;
+  margin-right: 4px;
+}
+
+/* ========================================================
+   6. Death & Victory Banners
+   ======================================================== */
+.banner-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
+  z-index: 25;
+  transition: opacity 1.2s ease-in;
+}
+
+.death-title {
+  margin: 0;
+  font-size: clamp(3rem, 10vw, 5.5rem);
+  font-weight: 700;
+  letter-spacing: 12px;
+  color: #b51818;
+  text-shadow: 0 0 32px rgba(181, 24, 24, 0.8), 0 4px 16px rgba(0, 0, 0, 0.95);
+  animation: bannerFadeIn 1.4s ease-out forwards;
+}
+
+.victory-title {
+  margin: 0;
+  font-size: clamp(2.4rem, 8vw, 4.8rem);
+  font-weight: 700;
+  letter-spacing: 10px;
+  color: #e5bd57;
+  text-shadow: 0 0 32px rgba(229, 189, 87, 0.85), 0 4px 18px rgba(0, 0, 0, 0.95);
+  animation: bannerFadeIn 1.4s ease-out forwards;
+}
+
+.banner-prompt {
+  margin-top: 18px;
+  font-size: 1.15rem;
+  letter-spacing: 3px;
+  color: #edd9ba;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8);
+  animation: bannerFadeIn 2.2s ease-out forwards;
+}
+
+@keyframes bannerFadeIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.hidden {
+  display: none !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+/* ========================================================
+   7. Touch Controls (Mobile)
+   ======================================================== */
 #touch-controls {
   position: absolute;
-  right: max(18px, env(safe-area-inset-right));
-  bottom: max(18px, env(safe-area-inset-bottom));
-  left: max(18px, env(safe-area-inset-left));
+  right: max(20px, env(safe-area-inset-right));
+  bottom: max(20px, env(safe-area-inset-bottom));
+  left: max(20px, env(safe-area-inset-left));
   display: none;
   justify-content: space-between;
   align-items: flex-end;
   pointer-events: none;
+  z-index: 20;
 }
 
 #touch-stick {
   position: relative;
-  width: clamp(96px, 24vw, 132px);
-  aspect-ratio: 1;
-  border: 1px solid rgba(246, 241, 223, 0.28);
+  width: 110px;
+  height: 110px;
+  border: 2px solid rgba(181, 149, 74, 0.4);
   border-radius: 50%;
-  background: rgba(17, 19, 18, 0.52);
+  background: rgba(10, 14, 20, 0.6);
   pointer-events: auto;
   touch-action: none;
 }
@@ -112,45 +388,40 @@ body {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 42%;
-  aspect-ratio: 1;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
-  background: #f5ba49;
-  box-shadow: 0 0 24px rgba(245, 186, 73, 0.44);
+  background: #b5954a;
+  box-shadow: 0 0 16px rgba(181, 149, 74, 0.6);
   transform: translate(-50%, -50%);
 }
 
-#dash-button {
-  width: clamp(74px, 18vw, 96px);
-  aspect-ratio: 1;
-  border: 1px solid rgba(246, 241, 223, 0.3);
-  border-radius: 50%;
-  color: #111312;
-  background: #48baa7;
-  font-weight: 800;
+.touch-action-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
   pointer-events: auto;
+}
+
+.touch-action-buttons button {
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  border: 2px solid #b5954a;
+  background: rgba(14, 18, 24, 0.85);
+  color: #edd9ba;
+  font-family: inherit;
+  font-weight: 700;
+  font-size: 0.8rem;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
   touch-action: none;
 }
 
-@media (pointer: coarse), (max-width: 760px) {
-  #hud {
-    right: max(12px, env(safe-area-inset-right));
-    left: max(12px, env(safe-area-inset-left));
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-
-  .hud-metric {
-    min-width: 78px;
-    padding: 7px 8px;
-  }
-
-  #status-line {
-    min-width: min(148px, 48vw);
-    font-size: 0.72rem;
-  }
-
+@media (pointer: coarse) {
   #touch-controls {
     display: flex;
+  }
+  #controls-guide {
+    display: none;
   }
 }

@@ -1,0 +1,60 @@
+import * as THREE from 'three';
+import type { AttackDefinition } from './FrameCombat';
+
+export interface HitResult {
+  hit: boolean;
+  damage: number;
+  poiseDamage: number;
+  isHeavy: boolean;
+  contactPoint?: THREE.Vector3;
+}
+
+const vToTarget = new THREE.Vector3();
+const vAttackerForward = new THREE.Vector3();
+
+export function checkAttackHit(
+  attackerPosition: THREE.Vector3,
+  attackerRotationY: number,
+  attack: AttackDefinition,
+  targetPosition: THREE.Vector3,
+  targetRadius: number,
+  targetInvulnerable: boolean,
+): HitResult {
+  if (targetInvulnerable) {
+    return { hit: false, damage: 0, poiseDamage: 0, isHeavy: false };
+  }
+
+  // Vector from attacker to target in XZ plane
+  vToTarget.set(targetPosition.x - attackerPosition.x, 0, targetPosition.z - attackerPosition.z);
+  const distance = vToTarget.length();
+
+  const maxRange = attack.range + targetRadius;
+  if (distance > maxRange || distance < 0.001) {
+    return { hit: false, damage: 0, poiseDamage: 0, isHeavy: false };
+  }
+
+  // Attacker forward vector in XZ plane (0 angle is facing -Z in Three.js standard)
+  vAttackerForward.set(
+    -Math.sin(attackerRotationY),
+    0,
+    -Math.cos(attackerRotationY)
+  ).normalize();
+
+  vToTarget.normalize();
+  const angleCos = vAttackerForward.dot(vToTarget);
+  const minCos = Math.cos(attack.arcAngle / 2);
+
+  if (angleCos >= minCos) {
+    const contact = attackerPosition.clone().addScaledVector(vAttackerForward, Math.min(distance, attack.range * 0.8));
+    contact.y = targetPosition.y + 1.0;
+    return {
+      hit: true,
+      damage: attack.damage,
+      poiseDamage: attack.poiseDamage,
+      isHeavy: !!attack.isHeavy,
+      contactPoint: contact,
+    };
+  }
+
+  return { hit: false, damage: 0, poiseDamage: 0, isHeavy: false };
+}
