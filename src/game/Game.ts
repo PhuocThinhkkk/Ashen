@@ -196,6 +196,18 @@ export class Game {
     this.boss.update(delta, elapsed, this.player.group.position, this.arena.radius);
     this.arena.update(delta, elapsed);
 
+    // Entity collision separation (prevent player clipping through boss)
+    const sepX = this.player.group.position.x - this.boss.group.position.x;
+    const sepZ = this.player.group.position.z - this.boss.group.position.z;
+    const sepDistSq = sepX * sepX + sepZ * sepZ;
+    const minDist = this.player.radius + this.boss.radius;
+    if (sepDistSq < minDist * minDist && sepDistSq > 0.0001) {
+      const sepDist = Math.sqrt(sepDistSq);
+      const push = minDist - sepDist;
+      this.player.group.position.x += (sepX / sepDist) * push;
+      this.player.group.position.z += (sepZ / sepDist) * push;
+    }
+
     // 4. Combat Hit Resolution
     this.resolveCombatCollisions();
 
@@ -363,12 +375,14 @@ export class Game {
         } else if (stateName === 'player_dead') {
           this.player.hp = 0;
           this.player.state = 'dead';
+          this.player.playAction('HumanArmature|Death', 0.1, THREE.LoopOnce, true, 1.0);
         } else if (stateName === 'boss_dead') {
           this.boss.hp = 0;
           this.boss.state = 'dead';
+          this.boss.playAction('die', 0.1, THREE.LoopOnce, true, 1.0);
         } else if (stateName === 'boss_phase2') {
           this.boss.hp = this.boss.maxHp * 0.45;
-          this.boss.isPhase2 = true;
+          this.boss.triggerPhase2(this.player.group.position);
         } else {
           throw new Error(`Unknown state: ${stateName}`);
         }
@@ -386,6 +400,22 @@ export class Game {
       },
       hideDebugUi: (hidden: boolean) => {
         this.debugTools.setHidden(hidden);
+      },
+      getPlayerWeaponDistanceToHand: () => {
+        if (!this.player.handBone || !this.player.swordObject) return 999;
+        const handWorld = new THREE.Vector3();
+        const swordWorld = new THREE.Vector3();
+        this.player.handBone.getWorldPosition(handWorld);
+        this.player.swordObject.getWorldPosition(swordWorld);
+        return handWorld.distanceTo(swordWorld);
+      },
+      getBossWeaponDistanceToHand: () => {
+        if (!this.boss.handBone || !this.boss.greatswordGroup) return 999;
+        const handWorld = new THREE.Vector3();
+        const swordWorld = new THREE.Vector3();
+        this.boss.handBone.getWorldPosition(handWorld);
+        this.boss.greatswordGroup.getWorldPosition(swordWorld);
+        return handWorld.distanceTo(swordWorld);
       },
     };
   }
@@ -406,6 +436,8 @@ export class Game {
         stamina: this.player.stamina,
         state: this.player.state,
         isInvulnerable: this.player.isInvulnerable,
+        loaded: this.player.isLoaded,
+        activeClip: this.player.currentActionName,
       },
       boss: {
         position: {
@@ -417,7 +449,10 @@ export class Game {
         maxHp: this.boss.maxHp,
         state: this.boss.state,
         isPhase2: this.boss.isPhase2,
+        loaded: this.boss.isLoaded,
+        activeClip: this.boss.currentActionName,
       },
+      assetsLoaded: this.player.isLoaded && this.boss.isLoaded,
       renderer: {
         calls: info.render.calls,
         triangles: info.render.triangles,

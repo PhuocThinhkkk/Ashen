@@ -1,8 +1,8 @@
 # Project Handoff: Browser-Based 3D Soulslike Boss Fight
 
-**Date:** Current Checkpoint (Post-Milestone 1, 2 & Milestone 3 Verification Gate)  
+**Date:** Current Checkpoint (Post-Milestone 1, 2 & 3 Complete)  
 **Engine & Tech Stack:** Three.js (`^0.184.0`), TypeScript (strict mode), Vite (`^8.0.13`), Playwright (`^1.60.0`), Web Audio API  
-**Status:** Milestone 1 & 2 fully complete and tested; Milestone 3 asset verification gate passed. Ready for Milestone 3 character & animation integration into the main game.
+**Status:** Milestones 1, 2, and 3 fully complete and tested in browser with Playwright. Ready for Milestone 4 (Combat Polish & Refinement).
 
 ---
 
@@ -32,75 +32,68 @@ A single-boss combat experience inspired by Elden Ring's combat feel, running lo
 - **Hit Detection & Combat Feedback (`src/combat/HitDetection.ts`, `src/systems/Hud.ts`):** Hurtbox sweep tests, i-frame protection, 50ms hitstop freeze frames, floating damage numbers, player/boss health bars with lagging damage chips, "YOU DIED" and "LEGEND VANQUISHED" banners, instant restart with `[R]`.
 - **Automated Tests:** 3 combat E2E tests (`tests/combat.spec.ts`) + 1 visual smoke test (`tests/visual.spec.ts`) passing in Google Chrome via Playwright.
 
-### Milestone 3 Verification Gate (Complete & Verified in Browser)
-Before touching main game code, candidate 3D models were tested in an isolated browser environment (`/asset-test.html` + `tests/asset-validation.spec.ts`):
-1. **License Verification:**
-   - `HunterG4.glb` / `G4Ax.glb`: MIT License (Cat / `Third-Person-Controller--SoulsLIke-Godot4`).
-   - `enemy_2.glb`: MIT License (NovemberDev / `novemberdev_soulslike_darksouls_godot`).
-   - `KnightCharacter.glb` / `Sword.glb`: CC0 1.0 Universal Public Domain (Quaternius).
-2. **Defect Found in `HunterG4.glb`:** The mesh terminates at the waist belt with zero leg geometry in the GLB (torso mannequin). **Do not use for the player.**
-3. **Verified Player Replacement:** **`KnightCharacter.glb` + `Sword.glb`** (Quaternius, CC0):
-   - Complete medieval knight model with plate armor, helmet, boots, and gradient palette texture (393 KB).
-   - 31-bone humanoid skeleton with 12 baked animations (`Idle`, `Idle_swordRight`, `Walking`, `Run`, `Roll_sword`, `Run_swordAttack`, `swordAttackJump`, `Death`).
-   - Scaled to 1.80m height (`scaleFactor = 1.80 / rawHeight`).
-   - Weapon (`Sword.glb`) sockets cleanly into `PalmR` bone with zero drift across all animation frames.
-4. **Verified Boss Asset:** **`enemy_2.glb`** (NovemberDev, MIT):
-   - 59-bone armored knight boss (height 2.46m at 1.15x scale).
-   - 10 baked animations (`attack`, `idle`, `walking`, `hit`, `die`, etc.).
-   - Filter out two Blender helper objects: `hand_shape` (ground plane) and `Cylinder` (root axe). Socket weapon to `handR`.
-5. **Captured Evidence:** Screenshots in `artifacts/screenshots/` (`asset-validation-idle.png`, `asset-validation-player-attack.png`, `asset-validation-boss-attack.png`).
+### Milestone 3: 3D Character & Animation Integration (Complete & Verified in Browser)
+1. **Player Character Integration (`src/entities/PlayerCharacter.ts`):**
+   - Replaced geometric placeholder with `KnightCharacter.glb` (Quaternius, CC0, 393KB).
+   - Scaled to 1.80m height and oriented facing -Z standard forward.
+   - Socketed `Sword.glb` (Quaternius, CC0, 41KB) to verified `PalmR` hand bone.
+   - Stripped horizontal root motion from `Hips` and `Body` tracks (`processInPlace`).
+   - Integrated `THREE.AnimationMixer` mapped to:
+     - `idle` -> `HumanArmature|Idle_swordRight`
+     - `walking` -> `HumanArmature|Walking`
+     - `sprinting` -> `HumanArmature|Run`
+     - `attack` (light combo) -> `HumanArmature|Run_swordAttack` (timeScale 1.15)
+     - `attack` (heavy) -> `HumanArmature|swordAttackJump` (timeScale 0.95)
+     - `dodge` -> `HumanArmature|Roll_sword` (timeScale 2.5)
+     - `stagger` -> Rapid blend to idle flinch (fallback for lack of baked hit clip)
+     - `dead` -> `HumanArmature|Death`
+2. **Boss Character Integration (`src/entities/BossCharacter.ts`):**
+   - Replaced geometric placeholder with `enemy_2.glb` (NovemberDev, MIT, 3.5MB).
+   - Scaled to 1.15x (~2.46m height).
+   - Filtered out Blender helper meshes (`hand_shape` and `Cylinder`).
+   - Socketed procedural glowing Greatsword to verified `hand.R` bone with Euler rotation `(-0.4π, 0, 0.4)`. Preserved dynamic telegraph glow pulsing and Phase 2 fiery red visual transformation.
+   - Stripped horizontal root motion from `hips` track (`processInPlace`).
+   - Integrated `THREE.AnimationMixer` mapped to:
+     - `idle` -> `idle`
+     - `approach` -> `walking`
+     - `windup` / `active` -> `attack`
+     - `stagger` -> `hit`
+     - `phaseTransition` -> `taunt`
+     - `dead` -> `die`
+3. **Combat Kinematics & Point-Blank Hit Detection (`src/combat/HitDetection.ts`, `src/game/Game.ts`):**
+   - Added point-blank hit tolerance (`distance <= targetRadius`) so forward lunges inside target hurtboxes register reliably.
+   - Added character capsule separation in `Game.ts` to prevent player clipping through the boss center.
+   - Player attack startup aims towards `lockedTargetPos`.
+4. **Captured Evidence:** Screenshots in `artifacts/screenshots/`:
+   - `main-game-idle.png`
+   - `main-game-combat.png`
+   - `main-game-player-attack.png`
+   - `main-game-boss-phase2.png`
+   - `asset-validation-idle.png`
+   - `asset-validation-boss-attack.png`
+   - `combat-boss-encounter.png`
 
 ---
 
 ## 3. What Has NOT Yet Been Implemented
 
-1. **Main Game Model Integration (Milestone 3):**
-   - The main game (`src/game/Game.ts`) still instantiates the geometric placeholder player (`src/entities/PlayerCharacter.ts`) and placeholder boss (`src/entities/BossCharacter.ts`).
-   - The verified `KnightCharacter.glb` and `enemy_2.glb` must now be loaded into the player and boss entities.
-2. **Milestone 4 (Combat Polish & Refinement):**
+1. **Milestone 4 (Combat Polish & Refinement):**
    - Fine-tuning turn deceleration and attack commitment.
    - Additional boss combo variations for Phase 2.
-3. **Milestone 5 (Visual, VFX & Audio Polish):**
+2. **Milestone 5 (Visual, VFX & Audio Polish):**
    - Blade swing ribbons / weapon trail geometry.
    - Impact spark particle bursts.
    - Enhanced lighting and fog depth.
-4. **Milestone 6 (QA & Static Release):**
+3. **Milestone 6 (QA & Static Release):**
    - Production static deployment readiness and final release audit.
 
 ---
 
-## 4. Exact Next Task: Milestone 3 Full Integration
+## 4. Exact Next Task: Milestone 4 (Combat Polish & Refinement)
 
-In the new session, execute the following steps:
-
-1. **Update `src/entities/PlayerCharacter.ts`:**
-   - Load `/assets/test-models/KnightCharacter.glb` via `GLTFLoader`.
-   - Scale to 1.80m height.
-   - Socket `/assets/test-models/Sword.glb` to `PalmR` (with `scale: 0.01` to counteract armature scale).
-   - Initialize `THREE.AnimationMixer` and map combat states to clips:
-     - `idle` -> `HumanArmature|Idle_swordRight`
-     - `moving` (walk) -> `HumanArmature|Walking`
-     - `moving` (sprint) -> `HumanArmature|Run`
-     - `attack` (light) -> `HumanArmature|Run_swordAttack` (timeScale 1.15)
-     - `attack` (heavy) -> `HumanArmature|swordAttackJump` (timeScale 0.95)
-     - `dodge` -> `HumanArmature|Roll_sword`
-     - `dead` -> `HumanArmature|Death`
-   - Strip horizontal root motion from `Hips` track (`processInPlace`).
-2. **Update `src/entities/BossCharacter.ts`:**
-   - Load `/assets/test-models/enemy_2.glb` via `GLTFLoader`.
-   - Scale to 1.15x (~2.46m height).
-   - Set helper meshes (`hand_shape` and `Cylinder`) to `visible = false`.
-   - Socket greatsword model to `handR`.
-   - Initialize `THREE.AnimationMixer` and map boss states:
-     - `idle` -> `idle`
-     - `approach` -> `walking`
-     - `windup` / `active` -> `attack`
-     - `stagger` -> `hit`
-     - `dead` -> `die`
-3. **Verify:**
-   - Run `npm run build` (confirm 0 TypeScript errors).
-   - Run `npx playwright test --project=desktop-chrome` (confirm all tests pass).
-   - Inspect captured combat screenshots in `artifacts/screenshots/`.
+In the new session, start Milestone 4 work:
+- Fine-tune combat commitment, turn deceleration, and evasive recovery windows.
+- Add Phase 2 boss combo variations and enhanced combat juice.
 
 ---
 

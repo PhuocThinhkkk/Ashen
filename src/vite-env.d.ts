@@ -10,6 +10,8 @@ interface ThreeGameDiagnostics {
     stamina: number;
     state: string;
     isInvulnerable: boolean;
+    loaded?: boolean;
+    activeClip?: string;
   };
   boss: {
     position: { x: number; y: number; z: number };
@@ -17,7 +19,10 @@ interface ThreeGameDiagnostics {
     maxHp: number;
     state: string;
     isPhase2: boolean;
+    loaded?: boolean;
+    activeClip?: string;
   };
+  assetsLoaded?: boolean;
   renderer: {
     calls: number;
     triangles: number;
@@ -39,6 +44,8 @@ interface ThreeGameTestHooks {
   setPausedForScreenshot(paused: boolean): void | Promise<void>;
   setReducedMotion?(enabled: boolean): void | Promise<void>;
   hideDebugUi(hidden: boolean): void | Promise<void>;
+  getPlayerWeaponDistanceToHand?(): number;
+  getBossWeaponDistanceToHand?(): number;
 }
 
 interface Window {

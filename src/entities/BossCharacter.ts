@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { type AttackDefinition, BOSS_ATTACKS } from '../combat/FrameCombat';
 
 export type BossState =
@@ -10,6 +11,24 @@ export type BossState =
   | 'stagger'
   | 'phaseTransition'
   | 'dead';
+
+function processInPlace(clip: THREE.AnimationClip, rootBoneName: string): void {
+  const rootLower = rootBoneName.toLowerCase();
+  for (const track of clip.tracks) {
+    if (track instanceof THREE.VectorKeyframeTrack && track.name.endsWith('.position')) {
+      const boneName = track.name.split('.')[0].toLowerCase();
+      if (boneName === rootLower || boneName.endsWith(`|${rootLower}`)) {
+        const v = track.values;
+        const x0 = v[0];
+        const z0 = v[2];
+        for (let i = 0; i < v.length; i += 3) {
+          v[i] = x0;
+          v[i + 2] = z0;
+        }
+      }
+    }
+  }
+}
 
 export class BossCharacter {
   public readonly group = new THREE.Group();
@@ -33,26 +52,21 @@ export class BossCharacter {
   // Telegraph warning indicator
   public telegraphGlow = 0;
 
-  // Meshes & Weapon Sockets
-  private readonly bodyMesh: THREE.Mesh;
-  private readonly greatswordGroup = new THREE.Group();
-  private readonly bladeMaterial: THREE.MeshStandardMaterial;
+  // Weapon & Material
+  public readonly greatswordGroup = new THREE.Group();
+  public readonly bladeMaterial: THREE.MeshStandardMaterial;
+  public handBone: THREE.Object3D | null = null;
+
+  // Model & Animation State
+  public isLoaded = false;
+  public readonly loadPromise: Promise<void>;
+  public mixer: THREE.AnimationMixer | null = null;
+  public currentActionName = '';
+  private readonly actions = new Map<string, THREE.AnimationAction>();
+  private currentAction: THREE.AnimationAction | null = null;
+  private modelScene: THREE.Group | null = null;
 
   constructor() {
-    // 1. Materials
-    const obsidianArmorMat = new THREE.MeshStandardMaterial({
-      color: 0x14161a,
-      roughness: 0.35,
-      metalness: 0.88,
-    });
-    const darkGoldMat = new THREE.MeshStandardMaterial({
-      color: 0x7a5e2a,
-      roughness: 0.4,
-      metalness: 0.8,
-    });
-    const emberEyeMat = new THREE.MeshBasicMaterial({
-      color: 0xff3300,
-    });
     this.bladeMaterial = new THREE.MeshStandardMaterial({
       color: 0x222428,
       emissive: 0xff4400,
@@ -61,59 +75,8 @@ export class BossCharacter {
       metalness: 0.9,
     });
 
-    // 2. Imposing Boss Silhouette (Height ~2.8m)
-    // Legs & Base
-    const torsoGeo = new THREE.CylinderGeometry(0.55, 0.45, 1.2, 10);
-    this.bodyMesh = new THREE.Mesh(torsoGeo, obsidianArmorMat);
-    this.bodyMesh.position.y = 1.6;
-    this.bodyMesh.castShadow = true;
-    this.bodyMesh.receiveShadow = true;
-    this.group.add(this.bodyMesh);
-
-    // Heavy Pauldrons
-    const pauldronGeo = new THREE.BoxGeometry(0.48, 0.36, 0.55);
-    const pLeft = new THREE.Mesh(pauldronGeo, darkGoldMat);
-    pLeft.position.set(-0.78, 2.1, 0);
-    pLeft.castShadow = true;
-    this.group.add(pLeft);
-
-    const pRight = new THREE.Mesh(pauldronGeo, darkGoldMat);
-    pRight.position.set(0.78, 2.1, 0);
-    pRight.castShadow = true;
-    this.group.add(pRight);
-
-    // Horned Great Helm
-    const helmGeo = new THREE.BoxGeometry(0.52, 0.58, 0.56);
-    const helm = new THREE.Mesh(helmGeo, obsidianArmorMat);
-    helm.position.set(0, 2.45, 0);
-    helm.castShadow = true;
-
-    // Glowing Horns
-    const hornGeo = new THREE.ConeGeometry(0.12, 0.65, 6);
-    const hornL = new THREE.Mesh(hornGeo, darkGoldMat);
-    hornL.position.set(-0.28, 0.35, -0.05);
-    hornL.rotation.z = 0.5;
-    hornL.rotation.x = -0.2;
-    helm.add(hornL);
-
-    const hornR = new THREE.Mesh(hornGeo, darkGoldMat);
-    hornR.position.set(0.28, 0.35, -0.05);
-    hornR.rotation.z = -0.5;
-    hornR.rotation.x = -0.2;
-    helm.add(hornR);
-
-    // Slit Eye Visor
-    const eyeGeo = new THREE.BoxGeometry(0.38, 0.06, 0.08);
-    const eyes = new THREE.Mesh(eyeGeo, emberEyeMat);
-    eyes.position.set(0, 0.05, -0.29);
-    helm.add(eyes);
-    this.group.add(helm);
-
-    // Massive Two-Handed Greatsword
     this.buildGreatsword();
-    this.greatswordGroup.position.set(0.85, 1.4, -0.3);
-    this.greatswordGroup.rotation.set(-0.4, 0.2, -0.5);
-    this.group.add(this.greatswordGroup);
+    this.loadPromise = this.loadAssets();
   }
 
   private buildGreatsword(): void {
@@ -134,7 +97,7 @@ export class BossCharacter {
     grip.castShadow = true;
     this.greatswordGroup.add(grip);
 
-    // Massive Crossguard
+    // Crossguard
     const guardGeo = new THREE.BoxGeometry(0.75, 0.1, 0.14);
     const guard = new THREE.Mesh(guardGeo, goldMat);
     guard.position.y = 0.04;
@@ -149,8 +112,97 @@ export class BossCharacter {
     this.greatswordGroup.add(blade);
   }
 
+  private async loadAssets(): Promise<void> {
+    const loader = new GLTFLoader();
+
+    const bossGltf = await loader.loadAsync('/assets/test-models/enemy_2.glb');
+    this.modelScene = bossGltf.scene;
+
+    // Scale to 1.15x (~2.46m height) and align forward orientation (-Z)
+    this.modelScene.scale.set(1.15, 1.15, 1.15);
+    this.modelScene.rotation.y = Math.PI;
+    this.modelScene.updateMatrixWorld(true);
+
+    // Hide helper meshes (hand_shape and Cylinder) and find handR bone
+    this.modelScene.traverse((obj) => {
+      if (obj.name === 'hand_shape' || obj.name === 'Cylinder') {
+        obj.visible = false;
+      }
+      if (obj instanceof THREE.Mesh) {
+        obj.castShadow = true;
+        obj.receiveShadow = true;
+      }
+      if (obj instanceof THREE.Bone || (obj as any).isBone) {
+        const name = obj.name.toLowerCase();
+        if (name === 'handr' || name === 'hand.r' || name.includes('handr') || name.includes('hand.r')) {
+          this.handBone = obj;
+        }
+      }
+    });
+
+    // Socket verified greatsword model to handR bone
+    if (this.handBone) {
+      this.greatswordGroup.position.set(0, 0, 0);
+      this.greatswordGroup.rotation.set(-Math.PI * 0.4, 0, 0.4);
+      this.handBone.add(this.greatswordGroup);
+    }
+
+    // Process animations
+    this.mixer = new THREE.AnimationMixer(this.modelScene);
+
+    for (const clip of bossGltf.animations) {
+      processInPlace(clip, 'hips');
+      const action = this.mixer.clipAction(clip);
+      this.actions.set(clip.name, action);
+    }
+
+    this.group.add(this.modelScene);
+    this.isLoaded = true;
+
+    // Play initial idle
+    this.playAction('idle', 0.1);
+  }
+
+  public playAction(
+    name: string,
+    fadeDuration = 0.2,
+    loop: THREE.AnimationActionLoopStyles = THREE.LoopRepeat,
+    clampWhenFinished = false,
+    timeScale = 1.0,
+  ): THREE.AnimationAction | null {
+    const action = this.actions.get(name);
+    if (!action) return null;
+
+    if (this.currentAction === action && action.isRunning()) {
+      action.timeScale = timeScale;
+      return action;
+    }
+
+    action.reset();
+    action.setLoop(loop, loop === THREE.LoopRepeat ? Infinity : 1);
+    action.clampWhenFinished = clampWhenFinished;
+    action.timeScale = timeScale;
+
+    if (this.currentAction) {
+      this.currentAction.crossFadeTo(action, fadeDuration, true);
+    }
+    action.play();
+    this.currentAction = action;
+    this.currentActionName = name;
+    return action;
+  }
+
   public update(delta: number, elapsed: number, playerPos: THREE.Vector3, arenaRadius: number): void {
-    if (this.state === 'dead') return;
+    if (this.mixer) {
+      this.mixer.update(delta);
+    }
+
+    if (this.state === 'dead') {
+      if (this.currentActionName !== 'die') {
+        this.playAction('die', 0.15, THREE.LoopOnce, true, 1.0);
+      }
+      return;
+    }
 
     // Poise passive regeneration
     if (this.poise < this.maxPoise && this.state !== 'stagger') {
@@ -159,7 +211,7 @@ export class BossCharacter {
 
     // Phase 2 check (under 50% HP)
     if (!this.isPhase2 && this.hp <= this.maxHp * 0.5 && this.state !== 'phaseTransition') {
-      this.triggerPhase2();
+      this.triggerPhase2(playerPos);
       return;
     }
 
@@ -169,7 +221,7 @@ export class BossCharacter {
         this.updateIdle(delta, playerPos);
         break;
       case 'approach':
-        this.updateApproach(delta, elapsed, playerPos);
+        this.updateApproach(delta, playerPos);
         break;
       case 'windup':
       case 'active':
@@ -180,7 +232,7 @@ export class BossCharacter {
         this.updateStagger(delta);
         break;
       case 'phaseTransition':
-        this.updatePhaseTransition(delta);
+        this.updatePhaseTransition(delta, playerPos);
         break;
     }
 
@@ -202,15 +254,15 @@ export class BossCharacter {
     this.stateTimer += delta;
     this.faceTarget(playerPos, delta * 4.0);
 
+    this.playAction('idle', 0.2, THREE.LoopRepeat, false, 1.0);
+
     const dist = this.distanceTo(playerPos);
     const idleLimit = this.isPhase2 ? 0.4 : 0.8;
 
     if (this.stateTimer >= idleLimit) {
       if (dist <= 3.8) {
-        // Close range: choose between Sweep or Slam
         this.chooseAttack(Math.random() > 0.5 ? BOSS_ATTACKS.sweep : BOSS_ATTACKS.slam);
       } else if (dist <= 7.5) {
-        // Medium range: approach or rush
         if (Math.random() > 0.4) {
           this.state = 'approach';
           this.stateTimer = 0;
@@ -218,20 +270,20 @@ export class BossCharacter {
           this.chooseAttack(BOSS_ATTACKS.rush);
         }
       } else {
-        // Far range: rush gap closer or approach
         this.chooseAttack(BOSS_ATTACKS.rush);
       }
     }
   }
 
-  private updateApproach(delta: number, elapsed: number, playerPos: THREE.Vector3): void {
+  private updateApproach(delta: number, playerPos: THREE.Vector3): void {
     this.stateTimer += delta;
     this.faceTarget(playerPos, delta * 6.0);
+
+    this.playAction('walking', 0.2, THREE.LoopRepeat, false, this.isPhase2 ? 1.3 : 1.0);
 
     const dist = this.distanceTo(playerPos);
     const speed = this.isPhase2 ? 4.2 : 3.2;
 
-    // Walk forward
     const fwd = new THREE.Vector3(
       -Math.sin(this.group.rotation.y),
       0,
@@ -239,7 +291,6 @@ export class BossCharacter {
     ).normalize();
 
     this.group.position.addScaledVector(fwd, speed * delta);
-    this.group.position.y = Math.sin(elapsed * 8.0) * 0.04;
 
     if (dist <= 3.6 || this.stateTimer >= 2.5) {
       this.chooseAttack(Math.random() > 0.4 ? BOSS_ATTACKS.sweep : BOSS_ATTACKS.slam);
@@ -252,6 +303,12 @@ export class BossCharacter {
     this.state = 'windup';
     this.hasHitCurrentSwing = false;
     this.telegraphGlow = 0;
+
+    const speedMod = this.isPhase2 ? 1.15 : 1.0;
+    const totalDuration = (attack.startup + attack.active + attack.recovery) / speedMod;
+    const attackTimeScale = 2.25 / totalDuration;
+
+    this.playAction('attack', 0.15, THREE.LoopOnce, true, attackTimeScale);
   }
 
   private updateAttackFrames(delta: number, playerPos: THREE.Vector3): void {
@@ -268,31 +325,15 @@ export class BossCharacter {
 
     if (this.attackTimer < startup) {
       this.state = 'windup';
-      // Slow turn tracking during windup, stops tracking right before release
       const progress = this.attackTimer / startup;
       if (progress < 0.75) {
         this.faceTarget(playerPos, delta * 4.0);
       }
-
-      // Visual telegraph tell: blade draws back and glows with intense heat
       this.telegraphGlow = progress;
-
-      if (this.currentAttack.name === 'Ashen Cleave') {
-        // Draw blade back to right shoulder
-        this.greatswordGroup.rotation.set(-0.8 - 0.6 * progress, 0.4 + 1.2 * progress, -0.6);
-      } else if (this.currentAttack.name === 'Sundering Smite') {
-        // Raise sword high overhead with both hands
-        this.greatswordGroup.rotation.set(-2.2 * progress, 0.1, 0.2);
-        this.greatswordGroup.position.set(0, 1.8 + 0.4 * progress, -0.1);
-      } else {
-        // Ash Rush: crouch stance
-        this.greatswordGroup.rotation.set(-0.2, 0.1, -0.4);
-      }
     } else if (this.attackTimer < startup + active) {
       this.state = 'active';
       this.telegraphGlow = 1.0;
 
-      // Forward lunge impulse
       const fwd = new THREE.Vector3(
         -Math.sin(this.group.rotation.y),
         0,
@@ -301,40 +342,15 @@ export class BossCharacter {
 
       const impulse = (this.currentAttack.forwardImpulse / active) * delta;
       this.group.position.addScaledVector(fwd, impulse);
-
-      const activeProgress = (this.attackTimer - startup) / active;
-
-      if (this.currentAttack.name === 'Ashen Cleave') {
-        // Swift horizontal slash from right to left
-        this.greatswordGroup.rotation.set(0.2, 1.6 - 3.2 * activeProgress, 0.3);
-      } else if (this.currentAttack.name === 'Sundering Smite') {
-        // Overhead smash slamming into the arena floor
-        this.greatswordGroup.rotation.set(-2.2 + 2.8 * activeProgress, 0, 0);
-        this.greatswordGroup.position.set(0, 2.2 - 1.2 * activeProgress, -0.6);
-      } else {
-        // Forward piercing thrust
-        this.greatswordGroup.rotation.set(1.4, 0, 0);
-        this.greatswordGroup.position.set(0, 1.4, -0.8 - activeProgress * 0.6);
-      }
     } else if (this.attackTimer < startup + active + recovery) {
-      this.state = 'recovery'; // PUNISH WINDOW!
+      this.state = 'recovery';
       this.telegraphGlow = Math.max(0, 1.0 - (this.attackTimer - startup - active) / (recovery * 0.5));
-
-      // Blade resting on ground during recovery
-      const recProgress = (this.attackTimer - startup - active) / recovery;
-      if (recProgress > 0.8) {
-        // Slowly lifting back up
-        this.greatswordGroup.rotation.set(-0.4, 0.2, -0.5);
-        this.greatswordGroup.position.set(0.85, 1.4, -0.3);
-      }
     } else {
-      // Finished: return to idle
       this.state = 'idle';
       this.stateTimer = 0;
       this.currentAttack = null;
       this.telegraphGlow = 0;
-      this.greatswordGroup.rotation.set(-0.4, 0.2, -0.5);
-      this.greatswordGroup.position.set(0.85, 1.4, -0.3);
+      this.playAction('idle', 0.2);
     }
   }
 
@@ -345,19 +361,17 @@ export class BossCharacter {
 
     if (this.hp <= 0) {
       this.state = 'dead';
-      this.group.rotation.x = -Math.PI / 2; // collapse forward
-      this.group.position.y = 0.4;
+      this.playAction('die', 0.15, THREE.LoopOnce, true, 1.0);
       return true;
     }
 
-    // Poise break / stagger check
     this.poise -= poiseDamage;
     if (this.poise <= 0 && this.state !== 'stagger' && this.state !== 'phaseTransition') {
       this.state = 'stagger';
       this.stateTimer = 0;
       this.currentAttack = null;
       this.poise = this.maxPoise;
-      this.group.position.y = 0.4; // drop to one knee
+      this.playAction('hit', 0.1, THREE.LoopOnce, true, 0.8);
     }
 
     return true;
@@ -366,30 +380,36 @@ export class BossCharacter {
   private updateStagger(delta: number): void {
     this.stateTimer += delta;
     if (this.stateTimer >= 2.2) {
-      // Recover from stagger
       this.state = 'idle';
       this.stateTimer = 0;
-      this.group.position.y = 0;
+      this.playAction('idle', 0.2);
     }
   }
 
-  private triggerPhase2(): void {
+  public triggerPhase2(playerPos?: THREE.Vector3): void {
     this.isPhase2 = true;
     this.state = 'phaseTransition';
     this.stateTimer = 0;
     this.currentAttack = null;
+    if (playerPos) {
+      this.faceTarget(playerPos, 1.0);
+    }
     this.bladeMaterial.color.setHex(0x551100);
     this.bladeMaterial.emissive.setHex(0xff3300);
+    this.playAction('taunt', 0.2, THREE.LoopOnce, true, 1.0);
   }
 
-  private updatePhaseTransition(delta: number): void {
+  private updatePhaseTransition(delta: number, playerPos?: THREE.Vector3): void {
     this.stateTimer += delta;
-    // Roar & ignite animation
+    if (playerPos) {
+      this.faceTarget(playerPos, delta * 3.0);
+    }
     this.telegraphGlow = Math.sin(this.stateTimer * 8.0) * 0.5 + 0.5;
     if (this.stateTimer >= 2.0) {
       this.state = 'idle';
       this.stateTimer = 0;
       this.telegraphGlow = 0;
+      this.playAction('idle', 0.2);
     }
   }
 
@@ -422,13 +442,19 @@ export class BossCharacter {
     this.telegraphGlow = 0;
 
     this.group.position.copy(spawnPos);
-    this.group.rotation.set(0, Math.PI, 0); // Face player (+Z)
-    this.greatswordGroup.rotation.set(-0.4, 0.2, -0.5);
-    this.greatswordGroup.position.set(0.85, 1.4, -0.3);
+    this.group.position.y = 0;
+    this.group.rotation.set(0, Math.PI, 0);
+
+    this.bladeMaterial.color.setHex(0x222428);
     this.bladeMaterial.emissive.setHex(0xff4400);
+
+    this.playAction('idle', 0.1);
   }
 
   public dispose(): void {
+    if (this.mixer) {
+      this.mixer.stopAllAction();
+    }
     this.group.traverse((obj) => {
       if (obj instanceof THREE.Mesh) {
         obj.geometry.dispose();

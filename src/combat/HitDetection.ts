@@ -44,7 +44,7 @@ export function checkAttackHit(
   const angleCos = vAttackerForward.dot(vToTarget);
   const minCos = Math.cos(attack.arcAngle / 2);
 
-  if (angleCos >= minCos) {
+  if (angleCos >= minCos || distance <= targetRadius) {
     const contact = attackerPosition.clone().addScaledVector(vAttackerForward, Math.min(distance, attack.range * 0.8));
     contact.y = targetPosition.y + 1.0;
     return {

@@ -16,7 +16,13 @@ test.describe('Soulslike Boss Fight Combat System', () => {
     await expect(page.locator('#game-canvas')).toBeVisible();
 
     // 1. Wait for game initialization
-    await page.waitForFunction(() => (window.__THREE_GAME_DIAGNOSTICS__?.frame ?? 0) > 15);
+    await page.waitForFunction(
+      () => {
+        const d = window.__THREE_GAME_DIAGNOSTICS__;
+        return d && d.assetsLoaded === true && (d.frame ?? 0) > 15;
+      },
+      { timeout: 15000 },
+    );
 
     const initialDiag = await page.evaluate(() => window.__THREE_GAME_DIAGNOSTICS__);
     expect(initialDiag).not.toBeNull();
@@ -30,7 +36,11 @@ test.describe('Soulslike Boss Fight Combat System', () => {
     // 2. Test Movement & Sprint
     const startZ = initialDiag!.player.position.z;
     await page.keyboard.down('KeyW');
-    await page.waitForTimeout(300);
+    await page.waitForFunction(
+      (z0) => (window.__THREE_GAME_DIAGNOSTICS__?.player.position.z ?? z0) < z0 - 0.5,
+      startZ,
+      { timeout: 8000 },
+    );
     await page.keyboard.up('KeyW');
 
     const movedDiag = await page.evaluate(() => window.__THREE_GAME_DIAGNOSTICS__);
@@ -81,6 +91,15 @@ test.describe('Soulslike Boss Fight Combat System', () => {
       { timeout: 12000 },
     );
     await page.keyboard.up('KeyW');
+
+    // Wait until player is ready to attack
+    await page.waitForFunction(
+      () => {
+        const d = window.__THREE_GAME_DIAGNOSTICS__;
+        return d && d.player.state !== 'stagger' && d.player.stamina >= 20;
+      },
+      { timeout: 4000 },
+    );
 
     // Press attack (Light Attack)
     await page.keyboard.press('KeyJ');

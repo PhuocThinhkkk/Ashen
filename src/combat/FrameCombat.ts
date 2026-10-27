@@ -75,7 +75,7 @@ export const PLAYER_ATTACKS: Record<string, AttackDefinition> = {
 export const PLAYER_DODGE: DodgeDefinition = {
   duration: 0.50,
   invulnerableStart: 0.04,
-  invulnerableEnd: 0.34, // 300ms of solid invincibility window
+  invulnerableEnd: 0.44, // 400ms of solid invincibility window
   speed: 9.8,
   staminaCost: 20,
 };

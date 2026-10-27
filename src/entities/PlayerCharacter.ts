@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import {
   type AttackDefinition,
   type DodgeDefinition,
@@ -8,6 +9,24 @@ import {
 import type { CombatInputs } from '../core/InputController';
 
 export type PlayerState = 'idle' | 'moving' | 'dodge' | 'attack' | 'stagger' | 'dead';
+
+function processInPlace(clip: THREE.AnimationClip, rootBoneName: string): void {
+  const rootLower = rootBoneName.toLowerCase();
+  for (const track of clip.tracks) {
+    if (track instanceof THREE.VectorKeyframeTrack && track.name.endsWith('.position')) {
+      const boneName = track.name.split('.')[0].toLowerCase();
+      if (boneName === rootLower || boneName.endsWith(`|${rootLower}`)) {
+        const v = track.values;
+        const x0 = v[0];
+        const z0 = v[2];
+        for (let i = 0; i < v.length; i += 3) {
+          v[i] = x0;
+          v[i + 2] = z0;
+        }
+      }
+    }
+  }
+}
 
 export class PlayerCharacter {
   public readonly group = new THREE.Group();
@@ -39,126 +58,111 @@ export class PlayerCharacter {
   // Stagger
   public staggerTimer = 0;
 
-  // Meshes & Sockets
-  private readonly swordGroup = new THREE.Group();
-  private readonly bodyMesh: THREE.Mesh;
-  private readonly helmMesh: THREE.Mesh;
-  private readonly capeMesh: THREE.Mesh;
-  private swordBaseRotation = new THREE.Euler(0, 0, 0);
+  // Model & Animation State
+  public isLoaded = false;
+  public readonly loadPromise: Promise<void>;
+  public mixer: THREE.AnimationMixer | null = null;
+  public currentActionName = '';
+  public handBone: THREE.Object3D | null = null;
+  public swordObject: THREE.Object3D | null = null;
+  private readonly actions = new Map<string, THREE.AnimationAction>();
+  private currentAction: THREE.AnimationAction | null = null;
+  private modelScene: THREE.Group | null = null;
 
   constructor() {
-    // 1. Build Player Mesh Hierarchy (Atmospheric Stylized Dark Knight)
-    const armorMat = new THREE.MeshStandardMaterial({
-      color: 0x222a36,
-      roughness: 0.45,
-      metalness: 0.75,
-    });
-    const goldMat = new THREE.MeshStandardMaterial({
-      color: 0x9b7b3a,
-      roughness: 0.35,
-      metalness: 0.85,
-    });
-    const visorMat = new THREE.MeshBasicMaterial({
-      color: 0x44ddff,
-    });
-    const capeMat = new THREE.MeshStandardMaterial({
-      color: 0x181e28,
-      roughness: 0.9,
-      side: THREE.DoubleSide,
-    });
-
-    // Torso / Plate
-    const bodyGeo = new THREE.CapsuleGeometry(0.38, 0.72, 6, 12);
-    this.bodyMesh = new THREE.Mesh(bodyGeo, armorMat);
-    this.bodyMesh.position.y = 0.85;
-    this.bodyMesh.castShadow = true;
-    this.bodyMesh.receiveShadow = true;
-    this.group.add(this.bodyMesh);
-
-    // Pauldrons (Shoulders)
-    const pauldronGeo = new THREE.BoxGeometry(0.24, 0.18, 0.32);
-    const pLeft = new THREE.Mesh(pauldronGeo, goldMat);
-    pLeft.position.set(-0.46, 1.15, 0);
-    pLeft.castShadow = true;
-    this.group.add(pLeft);
-
-    const pRight = new THREE.Mesh(pauldronGeo, goldMat);
-    pRight.position.set(0.46, 1.15, 0);
-    pRight.castShadow = true;
-    this.group.add(pRight);
-
-    // Helmet with glowing slit
-    const helmGeo = new THREE.BoxGeometry(0.36, 0.4, 0.4);
-    this.helmMesh = new THREE.Mesh(helmGeo, armorMat);
-    this.helmMesh.position.set(0, 1.5, 0);
-    this.helmMesh.castShadow = true;
-
-    const visorGeo = new THREE.BoxGeometry(0.26, 0.05, 0.06);
-    const visorMesh = new THREE.Mesh(visorGeo, visorMat);
-    visorMesh.position.set(0, 0.04, -0.21);
-    this.helmMesh.add(visorMesh);
-    this.group.add(this.helmMesh);
-
-    // Flowing Cape
-    const capeGeo = new THREE.PlaneGeometry(0.7, 1.1, 4, 4);
-    this.capeMesh = new THREE.Mesh(capeGeo, capeMat);
-    this.capeMesh.position.set(0, 0.9, 0.28);
-    this.capeMesh.rotation.x = 0.15;
-    this.capeMesh.castShadow = true;
-    this.group.add(this.capeMesh);
-
-    // Sword in Right Hand Socket
-    this.buildSword();
-    this.swordGroup.position.set(0.5, 0.8, -0.2);
-    this.swordBaseRotation.set(-0.3, 0.2, -0.4);
-    this.swordGroup.rotation.copy(this.swordBaseRotation);
-    this.group.add(this.swordGroup);
+    this.loadPromise = this.loadAssets();
   }
 
-  private buildSword(): void {
-    const steelMat = new THREE.MeshStandardMaterial({
-      color: 0xc8d4e4,
-      roughness: 0.25,
-      metalness: 0.95,
+  private async loadAssets(): Promise<void> {
+    const loader = new GLTFLoader();
+
+    // 1. Load Player Knight model
+    const knightGltf = await loader.loadAsync('/assets/test-models/KnightCharacter.glb');
+    this.modelScene = knightGltf.scene;
+
+    // Scale to exactly 1.80m height and orient to Three.js standard -Z forward
+    const rawBox = new THREE.Box3().setFromObject(this.modelScene);
+    const rawSize = new THREE.Vector3();
+    rawBox.getSize(rawSize);
+    const scaleFactor = 1.80 / (rawSize.y || 1);
+    this.modelScene.scale.set(scaleFactor, scaleFactor, scaleFactor);
+    this.modelScene.rotation.y = Math.PI;
+    this.modelScene.updateMatrixWorld(true);
+
+    // Shadows & bone search
+    this.modelScene.traverse((obj) => {
+      if (obj instanceof THREE.Mesh) {
+        obj.castShadow = true;
+        obj.receiveShadow = true;
+      }
+      if (obj instanceof THREE.Bone) {
+        const name = obj.name.toLowerCase();
+        if (name === 'palmr' || name === 'palm.r' || name.includes('palmr') || name.includes('middlehand.r')) {
+          this.handBone = obj;
+        }
+      }
     });
-    const hiltMat = new THREE.MeshStandardMaterial({
-      color: 0x6a4a22,
-      roughness: 0.6,
-      metalness: 0.2,
+
+    // 2. Load Weapon (Sword.glb) and socket into PalmR bone
+    const swordGltf = await loader.loadAsync('/assets/test-models/Sword.glb');
+    this.swordObject = swordGltf.scene;
+    this.swordObject.traverse((obj) => {
+      if (obj instanceof THREE.Mesh) {
+        obj.castShadow = true;
+      }
     });
-    const goldMat = new THREE.MeshStandardMaterial({
-      color: 0xb5954a,
-      roughness: 0.35,
-      metalness: 0.85,
-    });
+    this.swordObject.position.set(0, 0, 0);
+    this.swordObject.rotation.set(0, 0, 0);
+    this.swordObject.scale.set(0.01, 0.01, 0.01);
 
-    // Grip
-    const gripGeo = new THREE.CylinderGeometry(0.03, 0.03, 0.32, 8);
-    const grip = new THREE.Mesh(gripGeo, hiltMat);
-    grip.position.y = -0.16;
-    grip.castShadow = true;
-    this.swordGroup.add(grip);
+    if (this.handBone) {
+      this.handBone.add(this.swordObject);
+    }
 
-    // Crossguard
-    const guardGeo = new THREE.BoxGeometry(0.36, 0.05, 0.08);
-    const guard = new THREE.Mesh(guardGeo, goldMat);
-    guard.position.y = 0.02;
-    guard.castShadow = true;
-    this.swordGroup.add(guard);
+    // 3. Process animations and strip root motion
+    this.mixer = new THREE.AnimationMixer(this.modelScene);
 
-    // Pommel
-    const pommelGeo = new THREE.SphereGeometry(0.05, 8, 8);
-    const pommel = new THREE.Mesh(pommelGeo, goldMat);
-    pommel.position.y = -0.34;
-    pommel.castShadow = true;
-    this.swordGroup.add(pommel);
+    for (const clip of knightGltf.animations) {
+      processInPlace(clip, 'Hips');
+      processInPlace(clip, 'Body');
+      const action = this.mixer.clipAction(clip);
+      this.actions.set(clip.name, action);
+    }
 
-    // Blade
-    const bladeGeo = new THREE.BoxGeometry(0.10, 1.15, 0.02);
-    const blade = new THREE.Mesh(bladeGeo, steelMat);
-    blade.position.y = 0.62;
-    blade.castShadow = true;
-    this.swordGroup.add(blade);
+    this.group.add(this.modelScene);
+    this.isLoaded = true;
+
+    // Start in idle posture
+    this.playAction('HumanArmature|Idle_swordRight', 0.1);
+  }
+
+  public playAction(
+    name: string,
+    fadeDuration = 0.15,
+    loop: THREE.AnimationActionLoopStyles = THREE.LoopRepeat,
+    clampWhenFinished = false,
+    timeScale = 1.0,
+  ): THREE.AnimationAction | null {
+    const action = this.actions.get(name);
+    if (!action) return null;
+
+    if (this.currentAction === action && action.isRunning()) {
+      action.timeScale = timeScale;
+      return action;
+    }
+
+    action.reset();
+    action.setLoop(loop, loop === THREE.LoopRepeat ? Infinity : 1);
+    action.clampWhenFinished = clampWhenFinished;
+    action.timeScale = timeScale;
+
+    if (this.currentAction) {
+      this.currentAction.crossFadeTo(action, fadeDuration, true);
+    }
+    action.play();
+    this.currentAction = action;
+    this.currentActionName = name;
+    return action;
   }
 
   public update(
@@ -169,7 +173,16 @@ export class PlayerCharacter {
     lockedTargetPos: THREE.Vector3 | null,
     arenaRadius: number,
   ): void {
-    if (this.state === 'dead') return;
+    if (this.mixer) {
+      this.mixer.update(delta);
+    }
+
+    if (this.state === 'dead') {
+      if (this.currentActionName !== 'HumanArmature|Death') {
+        this.playAction('HumanArmature|Death', 0.1, THREE.LoopOnce, true, 1.0);
+      }
+      return;
+    }
 
     // 1. Stamina Regeneration
     if (this.staminaRegenDelay > 0) {
@@ -185,7 +198,7 @@ export class PlayerCharacter {
         this.updateDodge(delta);
         break;
       case 'attack':
-        this.updateAttack(delta, inputs);
+        this.updateAttack(delta, inputs, lockedTargetPos);
         break;
       case 'stagger':
         this.updateStagger(delta);
@@ -204,14 +217,11 @@ export class PlayerCharacter {
       this.group.position.x = (this.group.position.x / dist) * maxR;
       this.group.position.z = (this.group.position.z / dist) * maxR;
     }
-
-    // 4. Update Weapon Visuals during attacks
-    this.updateSwordAnimation(delta);
   }
 
   private updateLocomotion(
     delta: number,
-    elapsed: number,
+    _elapsed: number,
     inputs: CombatInputs,
     cameraYaw: number,
     lockedTargetPos: THREE.Vector3 | null,
@@ -224,30 +234,34 @@ export class PlayerCharacter {
 
     // Check Attack input
     if (inputs.lightAttack && this.stamina >= PLAYER_ATTACKS.light1.staminaCost) {
+      if (lockedTargetPos) {
+        const dx = lockedTargetPos.x - this.group.position.x;
+        const dz = lockedTargetPos.z - this.group.position.z;
+        this.group.rotation.y = Math.atan2(-dx, -dz);
+      }
       this.startAttack(PLAYER_ATTACKS.light1, 1);
       return;
     }
     if (inputs.heavyAttack && this.stamina >= PLAYER_ATTACKS.heavy.staminaCost) {
+      if (lockedTargetPos) {
+        const dx = lockedTargetPos.x - this.group.position.x;
+        const dz = lockedTargetPos.z - this.group.position.z;
+        this.group.rotation.y = Math.atan2(-dx, -dz);
+      }
       this.startAttack(PLAYER_ATTACKS.heavy, 0);
       return;
     }
 
     // Camera-relative direction calculation
-    // Camera forward is (-sin(yaw), 0, -cos(yaw))
-    // Camera right is (cos(yaw), 0, -sin(yaw))
     const sinYaw = Math.sin(cameraYaw);
     const cosYaw = Math.cos(cameraYaw);
-
     const fwdX = -sinYaw;
     const fwdZ = -cosYaw;
     const rightX = cosYaw;
     const rightZ = -sinYaw;
 
-    // inputs.move.x is horizontal (-1 left, +1 right)
-    // inputs.move.y is vertical (-1 forward, +1 backward)
     const moveDirX = inputs.move.x * rightX - inputs.move.y * fwdX;
     const moveDirZ = inputs.move.x * rightZ - inputs.move.y * fwdZ;
-
     const moveMag = Math.sqrt(moveDirX * moveDirX + moveDirZ * moveDirZ);
 
     if (moveMag > 0.05) {
@@ -266,7 +280,6 @@ export class PlayerCharacter {
 
       // Facing Direction
       if (lockedTargetPos) {
-        // Face locked boss while strafing
         const dx = lockedTargetPos.x - this.group.position.x;
         const dz = lockedTargetPos.z - this.group.position.z;
         const targetAngle = Math.atan2(-dx, -dz);
@@ -275,7 +288,6 @@ export class PlayerCharacter {
         while (diff < -Math.PI) diff += Math.PI * 2;
         this.group.rotation.y += diff * Math.min(1.0, delta * 12.0);
       } else {
-        // Face movement direction
         const targetAngle = Math.atan2(-this.velocity.x, -this.velocity.z);
         let diff = targetAngle - this.group.rotation.y;
         while (diff > Math.PI) diff -= Math.PI * 2;
@@ -284,14 +296,14 @@ export class PlayerCharacter {
       }
 
       this.state = 'moving';
-      // Walk bob
-      this.group.position.y = Math.sin(elapsed * 12.0) * 0.05;
-      this.capeMesh.rotation.x = 0.35 + Math.sin(elapsed * 12.0) * 0.12;
+      if (isSprinting) {
+        this.playAction('HumanArmature|Run', 0.15, THREE.LoopRepeat, false, 1.0);
+      } else {
+        this.playAction('HumanArmature|Walking', 0.15, THREE.LoopRepeat, false, 1.0);
+      }
     } else {
       this.velocity.set(0, 0, 0);
       this.state = 'idle';
-      this.group.position.y = 0;
-      this.capeMesh.rotation.x = 0.15 + Math.sin(elapsed * 2.0) * 0.04;
 
       if (lockedTargetPos) {
         const dx = lockedTargetPos.x - this.group.position.x;
@@ -302,6 +314,8 @@ export class PlayerCharacter {
         while (diff < -Math.PI) diff += Math.PI * 2;
         this.group.rotation.y += diff * Math.min(1.0, delta * 10.0);
       }
+
+      this.playAction('HumanArmature|Idle_swordRight', 0.2, THREE.LoopRepeat, false, 1.0);
     }
   }
 
@@ -327,7 +341,6 @@ export class PlayerCharacter {
         inputs.move.x * rightZ - inputs.move.y * fwdZ,
       ).normalize();
     } else {
-      // Roll backward if stationary
       this.dodgeDirection.set(
         Math.sin(this.group.rotation.y),
         0,
@@ -335,34 +348,27 @@ export class PlayerCharacter {
       ).normalize();
     }
 
-    // Turn mesh towards roll direction
     this.group.rotation.y = Math.atan2(-this.dodgeDirection.x, -this.dodgeDirection.z);
+    this.playAction('HumanArmature|Roll_sword', 0.08, THREE.LoopOnce, true, 2.5);
   }
 
   private updateDodge(delta: number): void {
     this.dodgeTimer += delta;
 
-    // Check i-frames
     this.isInvulnerable =
       this.dodgeTimer >= this.dodgeConfig.invulnerableStart &&
       this.dodgeTimer <= this.dodgeConfig.invulnerableEnd;
 
-    // Roll movement curve (fast initial impulse, decelerating)
     const progress = this.dodgeTimer / this.dodgeConfig.duration;
     const speedCurve = Math.cos(progress * Math.PI * 0.5);
     const speed = this.dodgeConfig.speed * speedCurve;
 
     this.group.position.addScaledVector(this.dodgeDirection, speed * delta);
 
-    // Roll visual dip
-    this.group.position.y = Math.sin(progress * Math.PI) * 0.25;
-    this.bodyMesh.rotation.x = progress * Math.PI * 2;
-
     if (this.dodgeTimer >= this.dodgeConfig.duration) {
       this.state = 'idle';
       this.isInvulnerable = false;
-      this.bodyMesh.rotation.x = 0;
-      this.group.position.y = 0;
+      this.playAction('HumanArmature|Idle_swordRight', 0.15);
     }
   }
 
@@ -377,9 +383,15 @@ export class PlayerCharacter {
 
     this.stamina = Math.max(0, this.stamina - attack.staminaCost);
     this.staminaRegenDelay = 1.1;
+
+    if (attack.isHeavy) {
+      this.playAction('HumanArmature|swordAttackJump', 0.08, THREE.LoopOnce, true, 0.95);
+    } else {
+      this.playAction('HumanArmature|Run_swordAttack', 0.08, THREE.LoopOnce, true, 1.15);
+    }
   }
 
-  private updateAttack(delta: number, inputs: CombatInputs): void {
+  private updateAttack(delta: number, inputs: CombatInputs, lockedTargetPos: THREE.Vector3 | null = null): void {
     if (!this.currentAttack) {
       this.state = 'idle';
       return;
@@ -387,7 +399,6 @@ export class PlayerCharacter {
 
     this.attackTimer += delta;
 
-    // Queue combo hit if player attacks during recovery window
     if (this.attackPhase === 'recovery' && inputs.lightAttack && this.comboStep > 0 && this.comboStep < 3) {
       this.comboQueued = true;
     }
@@ -396,20 +407,26 @@ export class PlayerCharacter {
 
     if (this.attackTimer < startup) {
       this.attackPhase = 'startup';
-      // Slight forward step
+      if (lockedTargetPos) {
+        const dx = lockedTargetPos.x - this.group.position.x;
+        const dz = lockedTargetPos.z - this.group.position.z;
+        const targetAngle = Math.atan2(-dx, -dz);
+        let diff = targetAngle - this.group.rotation.y;
+        while (diff > Math.PI) diff -= Math.PI * 2;
+        while (diff < -Math.PI) diff += Math.PI * 2;
+        this.group.rotation.y += diff * Math.min(1.0, delta * 8.0);
+      }
       const step = (delta / startup) * forwardImpulse * 0.2;
       const fwd = new THREE.Vector3(-Math.sin(this.group.rotation.y), 0, -Math.cos(this.group.rotation.y));
       this.group.position.addScaledVector(fwd, step);
     } else if (this.attackTimer < startup + active) {
       this.attackPhase = 'active';
-      // Forward lunge during active damage window
       const step = (delta / active) * forwardImpulse * 0.8;
       const fwd = new THREE.Vector3(-Math.sin(this.group.rotation.y), 0, -Math.cos(this.group.rotation.y));
       this.group.position.addScaledVector(fwd, step);
     } else if (this.attackTimer < startup + active + recovery) {
       this.attackPhase = 'recovery';
     } else {
-      // Attack finished: proceed to next combo step or return to idle
       if (this.comboQueued && this.comboStep === 1 && this.stamina >= PLAYER_ATTACKS.light2.staminaCost) {
         this.startAttack(PLAYER_ATTACKS.light2, 2);
       } else if (this.comboQueued && this.comboStep === 2 && this.stamina >= PLAYER_ATTACKS.light3.staminaCost) {
@@ -420,34 +437,8 @@ export class PlayerCharacter {
         this.attackPhase = 'none';
         this.comboStep = 0;
         this.comboQueued = false;
+        this.playAction('HumanArmature|Idle_swordRight', 0.15);
       }
-    }
-  }
-
-  private updateSwordAnimation(delta: number): void {
-    if (this.state === 'attack' && this.currentAttack) {
-      const { startup, active, recovery } = this.currentAttack;
-
-      if (this.attackPhase === 'startup') {
-        // Wind-up: pull sword back
-        const p = this.attackTimer / startup;
-        this.swordGroup.rotation.set(-1.2 * p, 0.6 * p, -0.6);
-      } else if (this.attackPhase === 'active') {
-        // Swift slash arc across front
-        const p = (this.attackTimer - startup) / active;
-        this.swordGroup.rotation.set(0.6 - 1.8 * p, -0.8 + 1.6 * p, 0.4);
-      } else {
-        // Recovery: return to base
-        const p = (this.attackTimer - startup - active) / recovery;
-        this.swordGroup.rotation.x = THREE.MathUtils.lerp(this.swordGroup.rotation.x, this.swordBaseRotation.x, p);
-        this.swordGroup.rotation.y = THREE.MathUtils.lerp(this.swordGroup.rotation.y, this.swordBaseRotation.y, p);
-        this.swordGroup.rotation.z = THREE.MathUtils.lerp(this.swordGroup.rotation.z, this.swordBaseRotation.z, p);
-      }
-    } else {
-      // Idle / locomotion weapon posture
-      this.swordGroup.rotation.x = THREE.MathUtils.lerp(this.swordGroup.rotation.x, this.swordBaseRotation.x, delta * 8.0);
-      this.swordGroup.rotation.y = THREE.MathUtils.lerp(this.swordGroup.rotation.y, this.swordBaseRotation.y, delta * 8.0);
-      this.swordGroup.rotation.z = THREE.MathUtils.lerp(this.swordGroup.rotation.z, this.swordBaseRotation.z, delta * 8.0);
     }
   }
 
@@ -458,8 +449,8 @@ export class PlayerCharacter {
 
     if (this.hp <= 0) {
       this.state = 'dead';
-      this.group.rotation.x = Math.PI / 2; // collapse backwards
-      this.group.position.y = 0.2;
+      this.velocity.set(0, 0, 0);
+      this.playAction('HumanArmature|Death', 0.1, THREE.LoopOnce, true, 1.0);
       return true;
     }
 
@@ -467,6 +458,8 @@ export class PlayerCharacter {
       this.state = 'stagger';
       this.staggerTimer = isHeavy ? 0.45 : 0.25;
       this.currentAttack = null;
+      // Stagger fallback: rapid blend to idle flinch
+      this.playAction('HumanArmature|Idle', 0.05, THREE.LoopRepeat, false, 1.5);
     }
 
     return true;
@@ -476,6 +469,7 @@ export class PlayerCharacter {
     this.staggerTimer -= delta;
     if (this.staggerTimer <= 0) {
       this.state = 'idle';
+      this.playAction('HumanArmature|Idle_swordRight', 0.15);
     }
   }
 
@@ -493,12 +487,17 @@ export class PlayerCharacter {
     this.staggerTimer = 0;
 
     this.group.position.copy(spawnPos);
-    this.group.rotation.set(0, 0, 0); // Face boss (-Z)
-    this.bodyMesh.rotation.set(0, 0, 0);
+    this.group.position.y = 0;
+    this.group.rotation.set(0, 0, 0);
     this.velocity.set(0, 0, 0);
+
+    this.playAction('HumanArmature|Idle_swordRight', 0.1);
   }
 
   public dispose(): void {
+    if (this.mixer) {
+      this.mixer.stopAllAction();
+    }
     this.group.traverse((obj) => {
       if (obj instanceof THREE.Mesh) {
         obj.geometry.dispose();

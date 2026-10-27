@@ -241,6 +241,32 @@ async function loadAssets() {
     diagnostics.boss.bonesCount = bBones;
     diagnostics.boss.handBoneFound = !!bossHandBone;
 
+    // Attach Greatsword to boss hand bone
+    if (bossHandBone) {
+      const bossSwordGroup = new THREE.Group();
+      const gripGeo = new THREE.CylinderGeometry(0.04, 0.04, 0.6, 8);
+      const gripMat = new THREE.MeshStandardMaterial({ color: 0x332211, roughness: 0.7 });
+      const grip = new THREE.Mesh(gripGeo, gripMat);
+      grip.position.y = -0.3;
+      bossSwordGroup.add(grip);
+
+      const guardGeo = new THREE.BoxGeometry(0.7, 0.1, 0.12);
+      const guardMat = new THREE.MeshStandardMaterial({ color: 0x8c6d2c, roughness: 0.3, metalness: 0.8 });
+      const guard = new THREE.Mesh(guardGeo, guardMat);
+      bossSwordGroup.add(guard);
+
+      const bladeGeo = new THREE.BoxGeometry(0.2, 2.0, 0.04);
+      const bladeMat = new THREE.MeshStandardMaterial({ color: 0x222428, emissive: 0xff4400, emissiveIntensity: 0.6, roughness: 0.3, metalness: 0.9 });
+      const blade = new THREE.Mesh(bladeGeo, bladeMat);
+      blade.position.y = 1.0;
+      bossSwordGroup.add(blade);
+
+      bossSwordGroup.traverse((o) => { if (o instanceof THREE.Mesh) o.castShadow = true; });
+      bossSwordGroup.position.set(0, 0, 0);
+      bossSwordGroup.rotation.set(-Math.PI * 0.4, 0, 0.4);
+      bossHandBone.add(bossSwordGroup);
+    }
+
     // Boss Animations
     bossMixer = new THREE.AnimationMixer(bossScene);
     diagnostics.boss.clips = bossGltf.animations.map((a) => a.name);
