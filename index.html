@@ -30,6 +30,31 @@
         </div>
       </section>
 
+      <!-- Model Selection HUD Panel (Top Right) -->
+      <section id="model-select-panel" aria-label="Character Model Selection">
+        <div class="model-select-header">
+          <span class="model-select-badge">3D REGISTRY</span>
+          <h3 class="model-select-title">MODEL SELECT</h3>
+          <button id="model-select-toggle" class="model-select-toggle" type="button" aria-expanded="true">Hide</button>
+        </div>
+        <div id="model-select-body" class="model-select-body">
+          <div class="model-select-row">
+            <label for="player-model-select">Player Body</label>
+            <select id="player-model-select" class="model-dropdown">
+              <option value="knight">Knight (Default)</option>
+              <option value="samurai">Samurai</option>
+            </select>
+          </div>
+          <div class="model-select-row">
+            <label for="boss-model-select">Boss Body</label>
+            <select id="boss-model-select" class="model-dropdown">
+              <option value="titan">Titan (Ashen Knight)</option>
+            </select>
+          </div>
+          <div id="model-select-status" class="model-select-status">Active: Knight vs Titan</div>
+        </div>
+      </section>
+
       <!-- Lock-On Reticle -->
       <div id="lockon-reticle" class="hidden">
         <div class="reticle-diamond"></div>

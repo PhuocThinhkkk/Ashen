@@ -425,3 +425,137 @@ kbd {
     display: none;
   }
 }
+
+/* ========================================================
+   8. Model Selection HUD Panel (Top-Right)
+   ======================================================== */
+#model-select-panel {
+  position: absolute;
+  top: max(20px, env(safe-area-inset-top));
+  right: max(260px, calc(env(safe-area-inset-right) + 260px));
+  display: flex;
+  flex-direction: column;
+  width: 220px;
+  background: rgba(10, 14, 22, 0.88);
+  border: 1px solid rgba(181, 149, 74, 0.45);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(10px);
+  padding: 10px 14px;
+  border-radius: 4px;
+  z-index: 20;
+  color: #e5ded2;
+  font-family: inherit;
+  user-select: none;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+@media (max-width: 800px) {
+  #model-select-panel {
+    right: max(16px, env(safe-area-inset-right));
+    top: 90px;
+  }
+}
+
+#model-select-panel.hidden {
+  display: none !important;
+}
+
+.model-select-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(181, 149, 74, 0.25);
+  padding-bottom: 6px;
+  margin-bottom: 8px;
+}
+
+.model-select-badge {
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: #b5954a;
+  text-transform: uppercase;
+}
+
+.model-select-title {
+  margin: 0;
+  font-size: 0.75rem;
+  letter-spacing: 1.5px;
+  font-weight: 700;
+  color: #e5bd57;
+  text-shadow: 0 0 10px rgba(229, 189, 87, 0.4);
+}
+
+.model-select-toggle {
+  background: rgba(181, 149, 74, 0.15);
+  border: 1px solid rgba(181, 149, 74, 0.4);
+  color: #e5bd57;
+  font-size: 0.65rem;
+  padding: 2px 7px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.model-select-toggle:hover {
+  background: rgba(181, 149, 74, 0.35);
+  color: #ffffff;
+}
+
+.model-select-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.model-select-body.collapsed {
+  display: none;
+}
+
+.model-select-row {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.model-select-row label {
+  font-size: 0.65rem;
+  letter-spacing: 0.8px;
+  color: rgba(229, 222, 210, 0.75);
+  text-transform: uppercase;
+}
+
+.model-dropdown {
+  background: #121824;
+  border: 1px solid rgba(181, 149, 74, 0.4);
+  border-radius: 3px;
+  color: #e5ded2;
+  font-family: inherit;
+  font-size: 0.72rem;
+  padding: 4px 6px;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.model-dropdown:hover,
+.model-dropdown:focus {
+  border-color: #e5bd57;
+  box-shadow: 0 0 8px rgba(229, 189, 87, 0.3);
+}
+
+.model-dropdown option {
+  background: #0d121a;
+  color: #e5ded2;
+}
+
+.model-select-status {
+  margin-top: 4px;
+  font-size: 0.62rem;
+  color: #b5954a;
+  letter-spacing: 0.5px;
+  font-style: italic;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

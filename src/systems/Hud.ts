@@ -1,5 +1,14 @@
 import * as THREE from 'three';
 
+export interface HudModelControls {
+  playerModels: { id: string; name: string }[];
+  currentPlayerModel: string;
+  onPlayerModelChange: (modelId: string) => Promise<void> | void;
+  bossModels: { id: string; name: string }[];
+  currentBossModel: string;
+  onBossModelChange: (modelId: string) => Promise<void> | void;
+}
+
 export class Hud {
   private readonly playerHpFill: HTMLElement;
   private readonly playerHpChip: HTMLElement;
@@ -15,10 +24,18 @@ export class Hud {
   private readonly deathOverlay: HTMLElement;
   private readonly victoryOverlay: HTMLElement;
 
+  // Model Selection UI Elements
+  private readonly modelSelectPanel: HTMLElement | null;
+  private readonly playerModelSelect: HTMLSelectElement | null;
+  private readonly bossModelSelect: HTMLSelectElement | null;
+  private readonly modelSelectToggle: HTMLButtonElement | null;
+  private readonly modelSelectBody: HTMLElement | null;
+  private readonly modelSelectStatus: HTMLElement | null;
+
   private playerChipHp = 100;
   private bossChipHp = 420;
 
-  constructor() {
+  constructor(modelControls?: HudModelControls) {
     this.playerHpFill = this.getEl('#player-hp-fill');
     this.playerHpChip = this.getEl('#player-hp-chip');
     this.playerHpText = this.getEl('#player-hp-text');
@@ -32,6 +49,81 @@ export class Hud {
     this.damageContainer = this.getEl('#damage-container');
     this.deathOverlay = this.getEl('#death-overlay');
     this.victoryOverlay = this.getEl('#victory-overlay');
+
+    this.modelSelectPanel = document.querySelector<HTMLElement>('#model-select-panel');
+    this.playerModelSelect = document.querySelector<HTMLSelectElement>('#player-model-select');
+    this.bossModelSelect = document.querySelector<HTMLSelectElement>('#boss-model-select');
+    this.modelSelectToggle = document.querySelector<HTMLButtonElement>('#model-select-toggle');
+    this.modelSelectBody = document.querySelector<HTMLElement>('#model-select-body');
+    this.modelSelectStatus = document.querySelector<HTMLElement>('#model-select-status');
+
+    if (this.modelSelectToggle && this.modelSelectBody) {
+      this.modelSelectToggle.addEventListener('click', () => {
+        const isCollapsed = this.modelSelectBody!.classList.toggle('collapsed');
+        this.modelSelectToggle!.textContent = isCollapsed ? 'Show' : 'Hide';
+        this.modelSelectToggle!.setAttribute('aria-expanded', String(!isCollapsed));
+      });
+    }
+
+    if (modelControls) {
+      if (this.playerModelSelect) {
+        this.playerModelSelect.innerHTML = '';
+        for (const m of modelControls.playerModels) {
+          const opt = document.createElement('option');
+          opt.value = m.id;
+          opt.textContent = m.name;
+          if (m.id === modelControls.currentPlayerModel) opt.selected = true;
+          this.playerModelSelect.appendChild(opt);
+        }
+        this.playerModelSelect.addEventListener('change', () => {
+          if (this.playerModelSelect) {
+            modelControls.onPlayerModelChange(this.playerModelSelect.value);
+          }
+        });
+      }
+
+      if (this.bossModelSelect) {
+        this.bossModelSelect.innerHTML = '';
+        for (const m of modelControls.bossModels) {
+          const opt = document.createElement('option');
+          opt.value = m.id;
+          opt.textContent = m.name;
+          if (m.id === modelControls.currentBossModel) opt.selected = true;
+          this.bossModelSelect.appendChild(opt);
+        }
+        this.bossModelSelect.addEventListener('change', () => {
+          if (this.bossModelSelect) {
+            modelControls.onBossModelChange(this.bossModelSelect.value);
+          }
+        });
+      }
+
+      this.syncModels(modelControls.currentPlayerModel, modelControls.currentBossModel);
+    }
+  }
+
+  public syncModels(playerModelId: string, bossModelId: string): void {
+    if (this.playerModelSelect && this.playerModelSelect.value !== playerModelId) {
+      this.playerModelSelect.value = playerModelId;
+    }
+    if (this.bossModelSelect && this.bossModelSelect.value !== bossModelId) {
+      this.bossModelSelect.value = bossModelId;
+    }
+    if (this.modelSelectStatus) {
+      const pName = this.playerModelSelect?.selectedOptions[0]?.text || playerModelId;
+      const bName = this.bossModelSelect?.selectedOptions[0]?.text || bossModelId;
+      this.modelSelectStatus.textContent = `Active: ${pName} vs ${bName}`;
+    }
+  }
+
+  public setSelectionHidden(hidden: boolean): void {
+    if (this.modelSelectPanel) {
+      if (hidden) {
+        this.modelSelectPanel.classList.add('hidden');
+      } else {
+        this.modelSelectPanel.classList.remove('hidden');
+      }
+    }
   }
 
   public update(

@@ -34,7 +34,7 @@ test.describe('Milestone 3 Main Game Model & Animation Integration', () => {
     expect(initialDiag?.assetsLoaded).toBe(true);
     expect(initialDiag?.player.loaded).toBe(true);
     expect(initialDiag?.boss.loaded).toBe(true);
-    expect(initialDiag?.player.activeClip).toBe('HumanArmature|Idle_swordRight');
+    expect(initialDiag?.player.activeClip).toBe('idle');
     expect(initialDiag?.boss.activeClip).toBe('idle');
 
     // Verify initial weapon attachments
@@ -53,14 +53,14 @@ test.describe('Milestone 3 Main Game Model & Animation Integration', () => {
 
     const walkDiag = await page.evaluate(() => window.__THREE_GAME_DIAGNOSTICS__);
     expect(walkDiag?.player.state).toBe('moving');
-    expect(walkDiag?.player.activeClip).toBe('HumanArmature|Walking');
+    expect(walkDiag?.player.activeClip).toBe('walk');
 
     // Hold Shift for sprint
     await page.keyboard.down('ShiftLeft');
     await page.waitForTimeout(300);
 
     const sprintDiag = await page.evaluate(() => window.__THREE_GAME_DIAGNOSTICS__);
-    expect(sprintDiag?.player.activeClip).toBe('HumanArmature|Run');
+    expect(sprintDiag?.player.activeClip).toBe('run');
     expect(sprintDiag?.player.speed).toBeGreaterThan(6.0);
 
     await page.keyboard.up('ShiftLeft');
@@ -69,7 +69,7 @@ test.describe('Milestone 3 Main Game Model & Animation Integration', () => {
 
     const postMoveDiag = await page.evaluate(() => window.__THREE_GAME_DIAGNOSTICS__);
     expect(postMoveDiag?.player.state).toBe('idle');
-    expect(postMoveDiag?.player.activeClip).toBe('HumanArmature|Idle_swordRight');
+    expect(postMoveDiag?.player.activeClip).toBe('idle');
 
     // 3. Test Dodge Roll & Weapon Attachment during Roll
     await page.keyboard.press('Space');
@@ -79,13 +79,13 @@ test.describe('Milestone 3 Main Game Model & Animation Integration', () => {
     const rollStart = Date.now();
     while (Date.now() - rollStart < 500) {
       const clip = await page.evaluate(() => window.__THREE_GAME_DIAGNOSTICS__?.player.activeClip);
-      if (clip === 'HumanArmature|Roll_sword') sawRollClip = true;
+      if (clip === 'dodge' || clip === 'HumanArmature|Roll_sword') sawRollClip = true;
       const dist = await page.evaluate(() => window.__THREE_GAME_TEST_HOOKS__?.getPlayerWeaponDistanceToHand?.() ?? 999);
       if (dist > maxRollWeaponDist) maxRollWeaponDist = dist;
       await page.waitForTimeout(30);
     }
 
-    expect(sawRollClip, 'Dodge should trigger Roll_sword animation').toBe(true);
+    expect(sawRollClip, 'Dodge should trigger dodge animation').toBe(true);
     expect(maxRollWeaponDist, 'Sword must stay firmly attached during roll').toBeLessThan(0.20);
 
     // 4. Test Lock-On & Approach Boss
@@ -107,6 +107,15 @@ test.describe('Milestone 3 Main Game Model & Animation Integration', () => {
     await page.keyboard.up('KeyW');
     await page.waitForTimeout(200);
 
+    // Wait until player is ready to attack
+    await page.waitForFunction(
+      () => {
+        const d = window.__THREE_GAME_DIAGNOSTICS__;
+        return d && d.player.state !== 'stagger' && d.player.stamina >= 20;
+      },
+      { timeout: 4000 },
+    );
+
     // Capture combat confrontation screenshot
     await page.screenshot({ path: 'artifacts/screenshots/main-game-combat.png', fullPage: true });
 
@@ -117,7 +126,7 @@ test.describe('Milestone 3 Main Game Model & Animation Integration', () => {
     // Check light attack animation
     await page.waitForFunction(() => window.__THREE_GAME_DIAGNOSTICS__?.player.state === 'attack', { timeout: 2000 });
     const attackClip = await page.evaluate(() => window.__THREE_GAME_DIAGNOSTICS__?.player.activeClip);
-    expect(attackClip).toBe('HumanArmature|Run_swordAttack');
+    expect(attackClip).toBe('attack_light');
 
     // Capture player attack screenshot
     await page.screenshot({ path: 'artifacts/screenshots/main-game-player-attack.png', fullPage: true });
@@ -151,7 +160,7 @@ test.describe('Milestone 3 Main Game Model & Animation Integration', () => {
 
     await page.waitForFunction(() => window.__THREE_GAME_DIAGNOSTICS__?.player.state === 'attack', { timeout: 2000 });
     const heavyClip = await page.evaluate(() => window.__THREE_GAME_DIAGNOSTICS__?.player.activeClip);
-    expect(heavyClip).toBe('HumanArmature|swordAttackJump');
+    expect(heavyClip).toBe('attack_heavy');
 
     await page.waitForFunction(
       (hp) => (window.__THREE_GAME_DIAGNOSTICS__?.boss.hp ?? 420) < hp,
@@ -168,7 +177,7 @@ test.describe('Milestone 3 Main Game Model & Animation Integration', () => {
 
     const phase2Diag = await page.evaluate(() => window.__THREE_GAME_DIAGNOSTICS__);
     expect(phase2Diag?.boss.isPhase2).toBe(true);
-    expect(phase2Diag?.boss.activeClip).toBe('taunt');
+    expect(phase2Diag?.boss.activeClip).toBe('special');
 
     await page.screenshot({ path: 'artifacts/screenshots/main-game-boss-phase2.png', fullPage: true });
 
@@ -178,7 +187,7 @@ test.describe('Milestone 3 Main Game Model & Animation Integration', () => {
 
     const playerDeadDiag = await page.evaluate(() => window.__THREE_GAME_DIAGNOSTICS__);
     expect(playerDeadDiag?.player.state).toBe('dead');
-    expect(playerDeadDiag?.player.activeClip).toBe('HumanArmature|Death');
+    expect(playerDeadDiag?.player.activeClip).toBe('death');
     await expect(page.locator('#death-overlay')).toBeVisible();
 
     // 9. Test Instant In-Engine Restart (KeyR)
@@ -189,7 +198,7 @@ test.describe('Milestone 3 Main Game Model & Animation Integration', () => {
     expect(resetDiag?.player.hp).toBe(100);
     expect(resetDiag?.boss.hp).toBe(420);
     expect(resetDiag?.player.state).toBe('idle');
-    expect(resetDiag?.player.activeClip).toBe('HumanArmature|Idle_swordRight');
+    expect(resetDiag?.player.activeClip).toBe('idle');
     expect(resetDiag?.boss.activeClip).toBe('idle');
     await expect(page.locator('#death-overlay')).toBeHidden();
 
@@ -262,5 +271,131 @@ test.describe('Milestone 3 Main Game Model & Animation Integration', () => {
       await page.waitForTimeout(25);
     }
     expect(hasInvulnerable, 'Player gains invulnerability frames during roll').toBe(true);
+  });
+
+  test('verifies multi-model registry dynamic switching and boss handR sword alignment during swing', async ({
+    page,
+  }) => {
+    const consoleErrors: string[] = [];
+    const pageErrors: string[] = [];
+
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') consoleErrors.push(msg.text());
+    });
+    page.on('pageerror', (err) => pageErrors.push(err.message));
+
+    await page.goto('/');
+    await expect(page.locator('#game-canvas')).toBeVisible();
+
+    await page.waitForFunction(() => window.__THREE_GAME_DIAGNOSTICS__?.assetsLoaded === true);
+
+    // 1. Verify default model registrations and initial socket distances
+    const diag1 = await page.evaluate(() => window.__THREE_GAME_DIAGNOSTICS__);
+    expect(diag1?.player.modelId).toBe('knight');
+    expect(diag1?.boss.modelId).toBe('titan');
+
+    const initBossDist = await page.evaluate(
+      () => window.__THREE_GAME_TEST_HOOKS__?.getBossWeaponDistanceToHand?.() ?? 999,
+    );
+    expect(initBossDist).toBeLessThan(0.05);
+
+    // 2. Sample sword attachment during boss attack swing to verify it tracks handR throughout motion
+    await page.evaluate(() => {
+      window.__THREE_GAME_TEST_HOOKS__?.setState('initial');
+    });
+
+    // Move close to trigger boss attack
+    await page.keyboard.press('KeyQ');
+    await page.keyboard.down('KeyW');
+    await page.waitForFunction(
+      () => {
+        const d = window.__THREE_GAME_DIAGNOSTICS__;
+        if (!d) return false;
+        const dx = d.player.position.x - d.boss.position.x;
+        const dz = d.player.position.z - d.boss.position.z;
+        return Math.sqrt(dx * dx + dz * dz) <= 2.8;
+      },
+      { timeout: 8000 },
+    );
+    await page.keyboard.up('KeyW');
+
+    // Sample distance during boss active swing frames
+    let maxSwingDist = 0;
+    const swingStart = Date.now();
+    while (Date.now() - swingStart < 2000) {
+      const dist = await page.evaluate(
+        () => window.__THREE_GAME_TEST_HOOKS__?.getBossWeaponDistanceToHand?.() ?? 999,
+      );
+      if (dist > maxSwingDist) maxSwingDist = dist;
+      await page.waitForTimeout(50);
+    }
+    expect(maxSwingDist, 'Greatsword must remain attached to handR throughout swing arc').toBeLessThan(0.05);
+
+    // 3. Test on-screen Model Selection UI & dropdown interactions
+    const modelSelectPanel = page.locator('#model-select-panel');
+    await expect(modelSelectPanel).toBeVisible();
+
+    const playerDropdown = page.locator('#player-model-select');
+    const bossDropdown = page.locator('#boss-model-select');
+    const statusText = page.locator('#model-select-status');
+
+    await expect(playerDropdown).toBeVisible();
+    await expect(bossDropdown).toBeVisible();
+    await expect(playerDropdown).toHaveValue('knight');
+    await expect(bossDropdown).toHaveValue('titan');
+    await expect(statusText).toContainText('Knight');
+
+    // Capture screenshot showing where the Model Selection UI is located on screen
+    await page.screenshot({ path: 'artifacts/screenshots/model-selection-ui.png', fullPage: true });
+
+    // Select Samurai from dropdown UI
+    await playerDropdown.selectOption('samurai');
+    await page.waitForFunction(() => window.__THREE_GAME_DIAGNOSTICS__?.player.modelId === 'samurai');
+    await page.waitForFunction(() => window.__THREE_GAME_DIAGNOSTICS__?.player.loaded === true);
+
+    const samuraiDiag = await page.evaluate(() => window.__THREE_GAME_DIAGNOSTICS__);
+    expect(samuraiDiag?.player.modelId).toBe('samurai');
+    expect(samuraiDiag?.player.loaded).toBe(true);
+
+    const samuraiSwordDist = await page.evaluate(
+      () => window.__THREE_GAME_TEST_HOOKS__?.getPlayerWeaponDistanceToHand?.() ?? 999,
+    );
+    expect(samuraiSwordDist).toBeLessThan(0.10);
+
+    // Switch back to knight from dropdown UI
+    await playerDropdown.selectOption('knight');
+    await page.waitForFunction(() => window.__THREE_GAME_DIAGNOSTICS__?.player.modelId === 'knight');
+
+    const knightRestoredDiag = await page.evaluate(() => window.__THREE_GAME_DIAGNOSTICS__);
+    expect(knightRestoredDiag?.player.modelId).toBe('knight');
+    expect(knightRestoredDiag?.player.loaded).toBe(true);
+
+    // Test collapse / expand toggle
+    const toggleBtn = page.locator('#model-select-toggle');
+    await toggleBtn.click();
+    await expect(page.locator('#model-select-body')).toHaveClass(/collapsed/);
+    await expect(toggleBtn).toHaveText('Show');
+
+    await toggleBtn.click();
+    await expect(page.locator('#model-select-body')).not.toHaveClass(/collapsed/);
+    await expect(toggleBtn).toHaveText('Hide');
+
+    // 4. Test runtime model switching on Boss
+    await page.evaluate(async () => {
+      await window.__THREE_GAME_TEST_HOOKS__?.setBossModel?.('titan');
+    });
+
+    const titanDiag = await page.evaluate(() => window.__THREE_GAME_DIAGNOSTICS__);
+    expect(titanDiag?.boss.modelId).toBe('titan');
+    expect(titanDiag?.boss.loaded).toBe(true);
+
+    const titanSwordDist = await page.evaluate(
+      () => window.__THREE_GAME_TEST_HOOKS__?.getBossWeaponDistanceToHand?.() ?? 999,
+    );
+    expect(titanSwordDist).toBeLessThan(0.05);
+
+    // Verify 0 console errors and 0 page errors throughout
+    expect(consoleErrors).toEqual([]);
+    expect(pageErrors).toEqual([]);
   });
 });

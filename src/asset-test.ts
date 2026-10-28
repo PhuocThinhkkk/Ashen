@@ -133,8 +133,8 @@ function processInPlace(clip: THREE.AnimationClip, rootBoneName: string, scaleFa
 
 async function loadAssets() {
   try {
-    loadStatusEl.textContent = 'Loading KnightCharacter.glb...';
-    const hunterGltf = await loader.loadAsync('/assets/test-models/KnightCharacter.glb');
+    loadStatusEl.textContent = 'Loading knight.glb...';
+    const hunterGltf = await loader.loadAsync('/assets/models/players/knight.glb');
     const hunterScene = hunterGltf.scene;
     hunterScene.position.set(-1.4, 0, 0);
 
@@ -171,7 +171,7 @@ async function loadAssets() {
 
     // Load Weapon (Sword.glb) and attach to hand
     loadStatusEl.textContent = 'Loading Sword.glb...';
-    const swordGltf = await loader.loadAsync('/assets/test-models/Sword.glb');
+    const swordGltf = await loader.loadAsync('/assets/weapons/Sword.glb');
     axeObject = swordGltf.scene;
     axeObject.castShadow = true;
     axeObject.traverse((obj) => {
@@ -196,21 +196,26 @@ async function loadAssets() {
       playerActions.set(clip.name, action);
     }
 
-    // Play default Idle_swordRight
-    const idleAction = playerActions.get('HumanArmature|Idle_swordRight') || playerActions.get('HumanArmature|Idle');
+    // Play default idle
+    const idleAction = playerActions.get('idle') || playerActions.get('HumanArmature|Idle_swordRight');
     if (idleAction) {
       idleAction.play();
       currentAction = idleAction;
       diagnostics.player.activeClip = idleAction.getClip().name;
     }
 
-    // 3. Load Boss Model (enemy_2.glb)
-    loadStatusEl.textContent = 'Loading enemy_2.glb...';
-    const bossGltf = await loader.loadAsync('/assets/test-models/enemy_2.glb');
+    // 3. Load Boss Model (titan.glb)
+    loadStatusEl.textContent = 'Loading titan.glb...';
+    const bossGltf = await loader.loadAsync('/assets/models/bosses/titan.glb');
     const bossScene = bossGltf.scene;
     bossScene.position.set(1.4, 0, 0);
-    // Scale slightly to make him imposing (~2.2m tall)
-    bossScene.scale.set(1.15, 1.15, 1.15);
+
+    // Measure raw bounds and scale to exactly 2.40m imposing boss height
+    const rawBossBox = new THREE.Box3().setFromObject(bossScene);
+    const rawBossSize = new THREE.Vector3();
+    rawBossBox.getSize(rawBossSize);
+    const bossScaleFactor = 2.40 / (rawBossSize.y || 1);
+    bossScene.scale.set(bossScaleFactor, bossScaleFactor, bossScaleFactor);
     scene.add(bossScene);
 
     const bossBox = new THREE.Box3().setFromObject(bossScene);
@@ -232,7 +237,7 @@ async function loadAssets() {
       }
       if (obj instanceof THREE.Bone || (obj as any).isBone) {
         bBones++;
-        if (obj.name === 'handR' || obj.name === 'hand.R' || obj.name.toLowerCase().includes('handr')) {
+        if ((obj.name === 'handR' || obj.name === 'hand.R') && !obj.name.includes('IK')) {
           bossHandBone = obj;
         }
       }

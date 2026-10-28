@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { type AttackDefinition, BOSS_ATTACKS } from '../combat/FrameCombat';
+import { ModelLoader } from '../utils/ModelLoader';
 
 export type BossState =
   | 'idle'
@@ -11,24 +11,6 @@ export type BossState =
   | 'stagger'
   | 'phaseTransition'
   | 'dead';
-
-function processInPlace(clip: THREE.AnimationClip, rootBoneName: string): void {
-  const rootLower = rootBoneName.toLowerCase();
-  for (const track of clip.tracks) {
-    if (track instanceof THREE.VectorKeyframeTrack && track.name.endsWith('.position')) {
-      const boneName = track.name.split('.')[0].toLowerCase();
-      if (boneName === rootLower || boneName.endsWith(`|${rootLower}`)) {
-        const v = track.values;
-        const x0 = v[0];
-        const z0 = v[2];
-        for (let i = 0; i < v.length; i += 3) {
-          v[i] = x0;
-          v[i + 2] = z0;
-        }
-      }
-    }
-  }
-}
 
 export class BossCharacter {
   public readonly group = new THREE.Group();
@@ -59,14 +41,20 @@ export class BossCharacter {
 
   // Model & Animation State
   public isLoaded = false;
-  public readonly loadPromise: Promise<void>;
+  public loadPromise: Promise<void>;
   public mixer: THREE.AnimationMixer | null = null;
   public currentActionName = '';
+  public currentModelId = 'titan';
   private readonly actions = new Map<string, THREE.AnimationAction>();
   private currentAction: THREE.AnimationAction | null = null;
   private modelScene: THREE.Group | null = null;
+  private rawClips: THREE.AnimationClip[] = [];
 
-  constructor() {
+  public get modelId(): string {
+    return this.currentModelId;
+  }
+
+  constructor(initialModelId = 'titan') {
     this.bladeMaterial = new THREE.MeshStandardMaterial({
       color: 0x222428,
       emissive: 0xff4400,
@@ -76,7 +64,7 @@ export class BossCharacter {
     });
 
     this.buildGreatsword();
-    this.loadPromise = this.loadAssets();
+    this.loadPromise = this.loadModel(initialModelId);
   }
 
   private buildGreatsword(): void {
@@ -112,18 +100,50 @@ export class BossCharacter {
     this.greatswordGroup.add(blade);
   }
 
-  private async loadAssets(): Promise<void> {
-    const loader = new GLTFLoader();
+  public async loadModel(modelId: string): Promise<void> {
+    this.isLoaded = false;
+    this.currentModelId = modelId;
 
-    const bossGltf = await loader.loadAsync('/assets/test-models/enemy_2.glb');
+    // 1. Detach weapon from existing bone
+    if (this.greatswordGroup.parent) {
+      this.greatswordGroup.parent.remove(this.greatswordGroup);
+    }
+
+    // 2. Stop and dispose existing model scene & animations
+    if (this.mixer) {
+      this.mixer.stopAllAction();
+    }
+    this.actions.clear();
+    this.currentAction = null;
+    this.currentActionName = '';
+
+    if (this.modelScene) {
+      this.group.remove(this.modelScene);
+      this.modelScene.traverse((obj) => {
+        if (obj instanceof THREE.Mesh) {
+          obj.geometry.dispose();
+          if (Array.isArray(obj.material)) {
+            obj.material.forEach((m) => m.dispose());
+          } else {
+            obj.material?.dispose();
+          }
+        }
+      });
+      this.modelScene = null;
+      this.handBone = null;
+    }
+
+    // 3. Load GLTF model dynamically via ModelLoader
+    const bossGltf = await ModelLoader.loadModel('boss', modelId);
     this.modelScene = bossGltf.scene;
+    this.rawClips = bossGltf.animations;
 
     // Scale to 1.15x (~2.46m height) and align forward orientation (-Z)
     this.modelScene.scale.set(1.15, 1.15, 1.15);
     this.modelScene.rotation.y = Math.PI;
     this.modelScene.updateMatrixWorld(true);
 
-    // Hide helper meshes (hand_shape and Cylinder) and find handR bone
+    // Hide helper meshes (hand_shape and Cylinder) and enable shadows
     this.modelScene.traverse((obj) => {
       if (obj.name === 'hand_shape' || obj.name === 'Cylinder') {
         obj.visible = false;
@@ -132,26 +152,28 @@ export class BossCharacter {
         obj.castShadow = true;
         obj.receiveShadow = true;
       }
-      if (obj instanceof THREE.Bone || (obj as any).isBone) {
-        const name = obj.name.toLowerCase();
-        if (name === 'handr' || name === 'hand.r' || name.includes('handr') || name.includes('hand.r')) {
-          this.handBone = obj;
-        }
-      }
     });
 
-    // Socket verified greatsword model to handR bone
+    // 4. Locate target socket hand bone (specifically handR, not IK helper bones)
+    this.handBone = ModelLoader.findSocketBone(this.modelScene, ['handR', 'hand.R']);
+    if (!this.handBone) {
+      console.warn(`[BossCharacter] Hand socket bone not found in model "${modelId}".`);
+    }
+
+    // 5. Parent Greatsword directly to hand bone node with local rotation/position offsets
     if (this.handBone) {
       this.greatswordGroup.position.set(0, 0, 0);
       this.greatswordGroup.rotation.set(-Math.PI * 0.4, 0, 0.4);
       this.handBone.add(this.greatswordGroup);
+      this.handBone.updateMatrixWorld(true);
+      this.greatswordGroup.updateMatrixWorld(true);
     }
 
-    // Process animations
+    // 6. Setup Animation Mixer with standardized clips
     this.mixer = new THREE.AnimationMixer(this.modelScene);
 
     for (const clip of bossGltf.animations) {
-      processInPlace(clip, 'hips');
+      ModelLoader.stripRootMotion(clip, 'hips');
       const action = this.mixer.clipAction(clip);
       this.actions.set(clip.name, action);
     }
@@ -159,7 +181,7 @@ export class BossCharacter {
     this.group.add(this.modelScene);
     this.isLoaded = true;
 
-    // Play initial idle
+    // Play initial idle animation
     this.playAction('idle', 0.1);
   }
 
@@ -170,7 +192,13 @@ export class BossCharacter {
     clampWhenFinished = false,
     timeScale = 1.0,
   ): THREE.AnimationAction | null {
-    const action = this.actions.get(name);
+    let action = this.actions.get(name);
+    if (!action) {
+      const clip = ModelLoader.findClip(this.rawClips, name);
+      if (clip) {
+        action = this.actions.get(clip.name);
+      }
+    }
     if (!action) return null;
 
     if (this.currentAction === action && action.isRunning()) {
@@ -195,6 +223,12 @@ export class BossCharacter {
   public update(delta: number, elapsed: number, playerPos: THREE.Vector3, arenaRadius: number): void {
     if (this.mixer) {
       this.mixer.update(delta);
+    }
+    if (this.modelScene) {
+      this.modelScene.updateMatrixWorld(true);
+    }
+    if (this.handBone) {
+      this.handBone.updateMatrixWorld(true);
     }
 
     if (this.state === 'dead') {
@@ -396,7 +430,7 @@ export class BossCharacter {
     }
     this.bladeMaterial.color.setHex(0x551100);
     this.bladeMaterial.emissive.setHex(0xff3300);
-    this.playAction('taunt', 0.2, THREE.LoopOnce, true, 1.0);
+    this.playAction('special', 0.2, THREE.LoopOnce, true, 1.0);
   }
 
   private updatePhaseTransition(delta: number, playerPos?: THREE.Vector3): void {
@@ -455,6 +489,15 @@ export class BossCharacter {
     if (this.mixer) {
       this.mixer.stopAllAction();
     }
+    if (this.greatswordGroup.parent) {
+      this.greatswordGroup.parent.remove(this.greatswordGroup);
+    }
+    this.greatswordGroup.traverse((obj) => {
+      if (obj instanceof THREE.Mesh) {
+        obj.geometry.dispose();
+      }
+    });
+    this.bladeMaterial.dispose();
     this.group.traverse((obj) => {
       if (obj instanceof THREE.Mesh) {
         obj.geometry.dispose();

@@ -36,14 +36,13 @@ test.describe('Milestone 3 Asset & Animation Validation Gate', () => {
 
     // Verify player clips
     const requiredPlayerClips = [
-      'HumanArmature|Idle',
-      'HumanArmature|Idle_swordRight',
-      'HumanArmature|Walking',
-      'HumanArmature|Run',
-      'HumanArmature|Roll_sword',
-      'HumanArmature|Run_swordAttack',
-      'HumanArmature|swordAttackJump',
-      'HumanArmature|Death',
+      'idle',
+      'walk',
+      'run',
+      'dodge',
+      'attack_light',
+      'attack_heavy',
+      'death',
     ];
     for (const clip of requiredPlayerClips) {
       expect(diag?.player.clips).toContain(clip);
@@ -53,9 +52,9 @@ test.describe('Milestone 3 Asset & Animation Validation Gate', () => {
     expect(diag?.boss.bonesCount).toBeGreaterThanOrEqual(50);
     expect(diag?.boss.handBoneFound).toBe(true);
     expect(diag?.boss.height).toBeGreaterThan(1.8);
-    expect(diag?.boss.height).toBeLessThan(2.8);
+    expect(diag?.boss.height).toBeLessThan(3.0);
 
-    const requiredBossClips = ['attack', 'idle', 'walking', 'hit', 'die'];
+    const requiredBossClips = ['idle', 'walking', 'attack_heavy', 'special', 'hit', 'die'];
     for (const clip of requiredBossClips) {
       expect(diag?.boss.clips).toContain(clip);
     }
@@ -65,7 +64,7 @@ test.describe('Milestone 3 Asset & Animation Validation Gate', () => {
     await page.screenshot({ path: 'artifacts/screenshots/asset-validation-idle.png', fullPage: true });
 
     // 5. Test Weapon Attachment Stability during sword attack Animation
-    await page.evaluate(() => window.__ASSET_TEST__?.playPlayerClip('HumanArmature|Run_swordAttack'));
+    await page.evaluate(() => window.__ASSET_TEST__?.playPlayerClip('attack_light'));
 
     // Sample distance between axe and hand bone throughout attack animation
     const distances: number[] = [];
@@ -84,11 +83,11 @@ test.describe('Milestone 3 Asset & Animation Validation Gate', () => {
     await page.screenshot({ path: 'artifacts/screenshots/asset-validation-player-attack.png', fullPage: true });
 
     // 6. Test Boss Attack Animation
-    await page.evaluate(() => window.__ASSET_TEST__?.playBossClip('attack'));
+    await page.evaluate(() => window.__ASSET_TEST__?.playBossClip('attack_heavy'));
     await page.waitForTimeout(300);
 
     const activeBossClip = await page.evaluate(() => window.__ASSET_TEST__?.diagnostics.boss.activeClip);
-    expect(activeBossClip).toBe('attack');
+    expect(activeBossClip).toBe('attack_heavy');
 
     // Capture Boss Attack Screenshot
     await page.screenshot({ path: 'artifacts/screenshots/asset-validation-boss-attack.png', fullPage: true });

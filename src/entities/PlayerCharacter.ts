@@ -7,26 +7,9 @@ import {
   PLAYER_DODGE,
 } from '../combat/FrameCombat';
 import type { CombatInputs } from '../core/InputController';
+import { ModelLoader } from '../utils/ModelLoader';
 
 export type PlayerState = 'idle' | 'moving' | 'dodge' | 'attack' | 'stagger' | 'dead';
-
-function processInPlace(clip: THREE.AnimationClip, rootBoneName: string): void {
-  const rootLower = rootBoneName.toLowerCase();
-  for (const track of clip.tracks) {
-    if (track instanceof THREE.VectorKeyframeTrack && track.name.endsWith('.position')) {
-      const boneName = track.name.split('.')[0].toLowerCase();
-      if (boneName === rootLower || boneName.endsWith(`|${rootLower}`)) {
-        const v = track.values;
-        const x0 = v[0];
-        const z0 = v[2];
-        for (let i = 0; i < v.length; i += 3) {
-          v[i] = x0;
-          v[i + 2] = z0;
-        }
-      }
-    }
-  }
-}
 
 export class PlayerCharacter {
   public readonly group = new THREE.Group();
@@ -60,27 +43,76 @@ export class PlayerCharacter {
 
   // Model & Animation State
   public isLoaded = false;
-  public readonly loadPromise: Promise<void>;
+  public loadPromise: Promise<void>;
   public mixer: THREE.AnimationMixer | null = null;
   public currentActionName = '';
   public handBone: THREE.Object3D | null = null;
   public swordObject: THREE.Object3D | null = null;
+  public currentModelId = 'knight';
+  private readonly loader = new GLTFLoader();
   private readonly actions = new Map<string, THREE.AnimationAction>();
   private currentAction: THREE.AnimationAction | null = null;
   private modelScene: THREE.Group | null = null;
+  private rawClips: THREE.AnimationClip[] = [];
 
-  constructor() {
-    this.loadPromise = this.loadAssets();
+  public get modelId(): string {
+    return this.currentModelId;
   }
 
-  private async loadAssets(): Promise<void> {
-    const loader = new GLTFLoader();
+  constructor(initialModelId = 'knight') {
+    this.loadPromise = this.loadModel(initialModelId);
+  }
 
-    // 1. Load Player Knight model
-    const knightGltf = await loader.loadAsync('/assets/test-models/KnightCharacter.glb');
-    this.modelScene = knightGltf.scene;
+  public async loadModel(modelId: string): Promise<void> {
+    this.isLoaded = false;
+    this.currentModelId = modelId;
 
-    // Scale to exactly 1.80m height and orient to Three.js standard -Z forward
+    // 1. Detach weapon from existing bone
+    if (this.swordObject && this.swordObject.parent) {
+      this.swordObject.parent.remove(this.swordObject);
+    }
+
+    // 2. Stop and dispose existing model scene & animations
+    if (this.mixer) {
+      this.mixer.stopAllAction();
+    }
+    this.actions.clear();
+    this.currentAction = null;
+    this.currentActionName = '';
+
+    if (this.modelScene) {
+      this.group.remove(this.modelScene);
+      this.modelScene.traverse((obj) => {
+        if (obj instanceof THREE.Mesh) {
+          obj.geometry.dispose();
+          if (Array.isArray(obj.material)) {
+            obj.material.forEach((m) => m.dispose());
+          } else {
+            obj.material?.dispose();
+          }
+        }
+      });
+      this.modelScene = null;
+      this.handBone = null;
+    }
+
+    // 3. Ensure Weapon (Sword.glb) is loaded
+    if (!this.swordObject) {
+      const swordGltf = await this.loader.loadAsync('/assets/weapons/Sword.glb');
+      this.swordObject = swordGltf.scene;
+      this.swordObject.traverse((obj) => {
+        if (obj instanceof THREE.Mesh) {
+          obj.castShadow = true;
+        }
+      });
+    }
+
+    // 4. Load Player Model dynamically via ModelLoader
+    const gltf = await ModelLoader.loadModel('player', modelId);
+    this.modelScene = gltf.scene;
+    this.rawClips = gltf.animations;
+
+    // Scale to exactly 1.80m height and orient standard forward (-Z)
     const rawBox = new THREE.Box3().setFromObject(this.modelScene);
     const rawSize = new THREE.Vector3();
     rawBox.getSize(rawSize);
@@ -89,42 +121,40 @@ export class PlayerCharacter {
     this.modelScene.rotation.y = Math.PI;
     this.modelScene.updateMatrixWorld(true);
 
-    // Shadows & bone search
+    // Shadows
     this.modelScene.traverse((obj) => {
       if (obj instanceof THREE.Mesh) {
         obj.castShadow = true;
         obj.receiveShadow = true;
       }
-      if (obj instanceof THREE.Bone) {
-        const name = obj.name.toLowerCase();
-        if (name === 'palmr' || name === 'palm.r' || name.includes('palmr') || name.includes('middlehand.r')) {
-          this.handBone = obj;
-        }
-      }
     });
 
-    // 2. Load Weapon (Sword.glb) and socket into PalmR bone
-    const swordGltf = await loader.loadAsync('/assets/test-models/Sword.glb');
-    this.swordObject = swordGltf.scene;
-    this.swordObject.traverse((obj) => {
-      if (obj instanceof THREE.Mesh) {
-        obj.castShadow = true;
-      }
-    });
-    this.swordObject.position.set(0, 0, 0);
-    this.swordObject.rotation.set(0, 0, 0);
-    this.swordObject.scale.set(0.01, 0.01, 0.01);
-
-    if (this.handBone) {
-      this.handBone.add(this.swordObject);
+    // 5. Locate PalmR socket bone dynamically
+    this.handBone = ModelLoader.findSocketBone(this.modelScene, [
+      'PalmR',
+      'Palm.R',
+      'mixamorigRightHand',
+      'RightHand',
+    ]);
+    if (!this.handBone) {
+      console.warn(`[PlayerCharacter] Hand socket bone not found in model "${modelId}".`);
     }
 
-    // 3. Process animations and strip root motion
+    // 6. Parent weapon directly to socket bone
+    if (this.handBone && this.swordObject) {
+      this.swordObject.position.set(0, 0, 0);
+      this.swordObject.rotation.set(0, 0, 0);
+      this.swordObject.scale.set(0.01, 0.01, 0.01);
+      this.handBone.add(this.swordObject);
+      this.handBone.updateMatrixWorld(true);
+      this.swordObject.updateMatrixWorld(true);
+    }
+
+    // 7. Setup AnimationMixer with standardized clip names
     this.mixer = new THREE.AnimationMixer(this.modelScene);
 
-    for (const clip of knightGltf.animations) {
-      processInPlace(clip, 'Hips');
-      processInPlace(clip, 'Body');
+    for (const clip of gltf.animations) {
+      ModelLoader.stripRootMotion(clip, ['Hips', 'Body', 'mixamorigHips']);
       const action = this.mixer.clipAction(clip);
       this.actions.set(clip.name, action);
     }
@@ -132,8 +162,8 @@ export class PlayerCharacter {
     this.group.add(this.modelScene);
     this.isLoaded = true;
 
-    // Start in idle posture
-    this.playAction('HumanArmature|Idle_swordRight', 0.1);
+    // Play default standardized idle
+    this.playAction('idle', 0.1);
   }
 
   public playAction(
@@ -143,7 +173,13 @@ export class PlayerCharacter {
     clampWhenFinished = false,
     timeScale = 1.0,
   ): THREE.AnimationAction | null {
-    const action = this.actions.get(name);
+    let action = this.actions.get(name);
+    if (!action) {
+      const clip = ModelLoader.findClip(this.rawClips, name);
+      if (clip) {
+        action = this.actions.get(clip.name);
+      }
+    }
     if (!action) return null;
 
     if (this.currentAction === action && action.isRunning()) {
@@ -176,10 +212,16 @@ export class PlayerCharacter {
     if (this.mixer) {
       this.mixer.update(delta);
     }
+    if (this.modelScene) {
+      this.modelScene.updateMatrixWorld(true);
+    }
+    if (this.handBone) {
+      this.handBone.updateMatrixWorld(true);
+    }
 
     if (this.state === 'dead') {
-      if (this.currentActionName !== 'HumanArmature|Death') {
-        this.playAction('HumanArmature|Death', 0.1, THREE.LoopOnce, true, 1.0);
+      if (this.currentActionName !== 'death') {
+        this.playAction('death', 0.1, THREE.LoopOnce, true, 1.0);
       }
       return;
     }
@@ -297,9 +339,9 @@ export class PlayerCharacter {
 
       this.state = 'moving';
       if (isSprinting) {
-        this.playAction('HumanArmature|Run', 0.15, THREE.LoopRepeat, false, 1.0);
+        this.playAction('run', 0.15, THREE.LoopRepeat, false, 1.0);
       } else {
-        this.playAction('HumanArmature|Walking', 0.15, THREE.LoopRepeat, false, 1.0);
+        this.playAction('walk', 0.15, THREE.LoopRepeat, false, 1.0);
       }
     } else {
       this.velocity.set(0, 0, 0);
@@ -315,7 +357,7 @@ export class PlayerCharacter {
         this.group.rotation.y += diff * Math.min(1.0, delta * 10.0);
       }
 
-      this.playAction('HumanArmature|Idle_swordRight', 0.2, THREE.LoopRepeat, false, 1.0);
+      this.playAction('idle', 0.2, THREE.LoopRepeat, false, 1.0);
     }
   }
 
@@ -349,7 +391,7 @@ export class PlayerCharacter {
     }
 
     this.group.rotation.y = Math.atan2(-this.dodgeDirection.x, -this.dodgeDirection.z);
-    this.playAction('HumanArmature|Roll_sword', 0.08, THREE.LoopOnce, true, 2.5);
+    this.playAction('dodge', 0.08, THREE.LoopOnce, true, 2.5);
   }
 
   private updateDodge(delta: number): void {
@@ -368,7 +410,7 @@ export class PlayerCharacter {
     if (this.dodgeTimer >= this.dodgeConfig.duration) {
       this.state = 'idle';
       this.isInvulnerable = false;
-      this.playAction('HumanArmature|Idle_swordRight', 0.15);
+      this.playAction('idle', 0.15);
     }
   }
 
@@ -385,9 +427,9 @@ export class PlayerCharacter {
     this.staminaRegenDelay = 1.1;
 
     if (attack.isHeavy) {
-      this.playAction('HumanArmature|swordAttackJump', 0.08, THREE.LoopOnce, true, 0.95);
+      this.playAction('attack_heavy', 0.08, THREE.LoopOnce, true, 0.95);
     } else {
-      this.playAction('HumanArmature|Run_swordAttack', 0.08, THREE.LoopOnce, true, 1.15);
+      this.playAction('attack_light', 0.08, THREE.LoopOnce, true, 1.15);
     }
   }
 
@@ -437,7 +479,7 @@ export class PlayerCharacter {
         this.attackPhase = 'none';
         this.comboStep = 0;
         this.comboQueued = false;
-        this.playAction('HumanArmature|Idle_swordRight', 0.15);
+        this.playAction('idle', 0.15);
       }
     }
   }
@@ -450,7 +492,7 @@ export class PlayerCharacter {
     if (this.hp <= 0) {
       this.state = 'dead';
       this.velocity.set(0, 0, 0);
-      this.playAction('HumanArmature|Death', 0.1, THREE.LoopOnce, true, 1.0);
+      this.playAction('death', 0.1, THREE.LoopOnce, true, 1.0);
       return true;
     }
 
@@ -459,7 +501,7 @@ export class PlayerCharacter {
       this.staggerTimer = isHeavy ? 0.45 : 0.25;
       this.currentAttack = null;
       // Stagger fallback: rapid blend to idle flinch
-      this.playAction('HumanArmature|Idle', 0.05, THREE.LoopRepeat, false, 1.5);
+      this.playAction('idle', 0.05, THREE.LoopRepeat, false, 1.5);
     }
 
     return true;
@@ -469,7 +511,7 @@ export class PlayerCharacter {
     this.staggerTimer -= delta;
     if (this.staggerTimer <= 0) {
       this.state = 'idle';
-      this.playAction('HumanArmature|Idle_swordRight', 0.15);
+      this.playAction('idle', 0.15);
     }
   }
 
@@ -491,13 +533,26 @@ export class PlayerCharacter {
     this.group.rotation.set(0, 0, 0);
     this.velocity.set(0, 0, 0);
 
-    this.playAction('HumanArmature|Idle_swordRight', 0.1);
+    this.playAction('idle', 0.1);
   }
 
   public dispose(): void {
     if (this.mixer) {
       this.mixer.stopAllAction();
     }
+    if (this.swordObject && this.swordObject.parent) {
+      this.swordObject.parent.remove(this.swordObject);
+    }
+    this.swordObject?.traverse((obj) => {
+      if (obj instanceof THREE.Mesh) {
+        obj.geometry.dispose();
+        if (Array.isArray(obj.material)) {
+          obj.material.forEach((m) => m.dispose());
+        } else {
+          obj.material?.dispose();
+        }
+      }
+    });
     this.group.traverse((obj) => {
       if (obj instanceof THREE.Mesh) {
         obj.geometry.dispose();

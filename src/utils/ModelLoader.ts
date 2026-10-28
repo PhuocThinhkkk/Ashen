@@ -1,0 +1,186 @@
+import * as THREE from 'three';
+import { GLTF, GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+export type EntityType = 'player' | 'boss';
+
+export class ModelLoader {
+  private static readonly loader = new GLTFLoader();
+
+  /**
+   * Resolves the standardized public asset URL for a given entity type and ID.
+   * Example:
+   *   getModelUrl('player', 'knight')  -> '/assets/models/players/knight.glb'
+   *   getModelUrl('boss', 'titan')     -> '/assets/models/bosses/titan.glb'
+   */
+  public static getModelUrl(type: EntityType, id: string): string {
+    const category = type === 'boss' ? 'bosses' : `${type}s`;
+    return `/assets/models/${category}/${id}.glb`;
+  }
+
+  /**
+   * Asynchronously loads a character model GLTF.
+   */
+  public static async loadModel(type: EntityType, id: string): Promise<GLTF> {
+    const url = this.getModelUrl(type, id);
+    return await this.loader.loadAsync(url);
+  }
+
+  /**
+   * Finds an animation clip by standard name or common state alias.
+   */
+  public static findClip(animations: THREE.AnimationClip[], stateName: string): THREE.AnimationClip | null {
+    // 1. Direct match
+    let clip = THREE.AnimationClip.findByName(animations, stateName);
+    if (clip) return clip;
+
+    // 2. Alias mapping table for smooth transition from legacy names
+    const ALIAS_MAP: Record<string, string[]> = {
+      idle: ['idle', 'HumanArmature|Idle_swordRight', 'HumanArmature|Idle', 'Idle-loop', 'Boss_Idle'],
+      walk: ['walk', 'walking', 'HumanArmature|Walking', 'Walk-loop'],
+      walking: ['walking', 'walk', 'HumanArmature|Walking'],
+      run: ['run', 'HumanArmature|Run', 'Run-loop'],
+      dodge: ['dodge', 'HumanArmature|Roll_sword', 'HumanArmature|Roll', 'Roll', 'Dive_Roll'],
+      attack_light: ['attack_light', 'HumanArmature|Run_swordAttack', 'Attack1', 'Great_Sword_Slash'],
+      attack_heavy: ['attack_heavy', 'attack', 'HumanArmature|swordAttackJump', 'Attack2', 'Heavy_Smash'],
+      special: ['special', 'taunt', 'Roar'],
+      hit: ['hit', 'Hit_Reaction', 'Hurt'],
+      death: ['death', 'die', 'HumanArmature|Death', 'Die'],
+      die: ['die', 'death', 'HumanArmature|Death', 'Die'],
+    };
+
+    // Check if stateName is a known alias
+    const normalized = stateName.toLowerCase();
+    for (const [standardKey, aliases] of Object.entries(ALIAS_MAP)) {
+      if (standardKey === normalized || aliases.some((a) => a.toLowerCase() === normalized)) {
+        for (const candidate of [standardKey, ...aliases]) {
+          clip = THREE.AnimationClip.findByName(animations, candidate);
+          if (clip) return clip;
+        }
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Plays an animation clip on the mixer by its standard state name.
+   */
+  public static playAnimation(
+    mixer: THREE.AnimationMixer,
+    gltfOrClips: { animations: THREE.AnimationClip[] } | THREE.AnimationClip[],
+    stateName: string,
+    options?: {
+      loop?: THREE.AnimationActionLoopStyles;
+      clampWhenFinished?: boolean;
+      timeScale?: number;
+      fadeDuration?: number;
+      currentAction?: THREE.AnimationAction | null;
+    },
+  ): THREE.AnimationAction | null {
+    const clips = Array.isArray(gltfOrClips) ? gltfOrClips : gltfOrClips.animations;
+    const clip = this.findClip(clips, stateName);
+
+    if (!clip) {
+      console.warn(`[ModelLoader] Animation "${stateName}" missing in GLB.`);
+      return null;
+    }
+
+    const action = mixer.clipAction(clip);
+    action.setLoop(
+      options?.loop ?? THREE.LoopRepeat,
+      options?.loop === THREE.LoopOnce ? 1 : Infinity,
+    );
+    action.clampWhenFinished = options?.clampWhenFinished ?? false;
+    action.timeScale = options?.timeScale ?? 1.0;
+
+    if (options?.currentAction && options.currentAction !== action) {
+      options.currentAction.crossFadeTo(action, options.fadeDuration ?? 0.15, true);
+    }
+    action.play();
+    return action;
+  }
+
+  /**
+   * Finds a bone matching target candidate names, avoiding false matches on IK helpers and fingers.
+   */
+  public static findSocketBone(
+    root: THREE.Object3D,
+    candidates: string[] | string,
+  ): THREE.Object3D | null {
+    const list = Array.isArray(candidates) ? candidates : [candidates];
+
+    // 1. Exact case-sensitive match
+    for (const name of list) {
+      let match: THREE.Object3D | null = null;
+      root.traverse((obj) => {
+        if (match) return;
+        if (obj.name === name) match = obj;
+      });
+      if (match) return match;
+    }
+
+    // 2. Case-insensitive exact match (excluding IK)
+    for (const name of list) {
+      const lowerTarget = name.toLowerCase();
+      let match: THREE.Object3D | null = null;
+      root.traverse((obj) => {
+        if (match) return;
+        const lower = obj.name.toLowerCase();
+        if (lower.includes('ik') && !lowerTarget.includes('ik')) return;
+        if (lower === lowerTarget) match = obj;
+      });
+      if (match) return match;
+    }
+
+    // 3. Alphanumeric normalized search
+    for (const name of list) {
+      const normTarget = name.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+      let match: THREE.Object3D | null = null;
+      root.traverse((obj) => {
+        if (match) return;
+        const lower = obj.name.toLowerCase();
+        if (
+          (lower.includes('ik') && !normTarget.includes('ik')) ||
+          lower.includes('thumb') ||
+          lower.includes('index') ||
+          lower.includes('pinky') ||
+          lower.includes('ring')
+        ) {
+          return;
+        }
+        const normObj = lower.replace(/[^a-zA-Z0-9]/g, '');
+        if (normObj === normTarget || normObj.endsWith(normTarget)) {
+          match = obj;
+        }
+      });
+      if (match) return match;
+    }
+
+    return null;
+  }
+
+  /**
+   * Strips horizontal (X/Z) translation from root motion tracks in an AnimationClip.
+   */
+  public static stripRootMotion(
+    clip: THREE.AnimationClip,
+    rootBones: string[] | string = ['hips', 'body'],
+  ): void {
+    const roots = (Array.isArray(rootBones) ? rootBones : [rootBones]).map((r) => r.toLowerCase());
+    for (const track of clip.tracks) {
+      if (track instanceof THREE.VectorKeyframeTrack && track.name.endsWith('.position')) {
+        const boneName = track.name.split('.')[0].toLowerCase();
+        const isRoot = roots.some((r) => boneName === r || boneName.endsWith(`|${r}`));
+        if (isRoot) {
+          const v = track.values;
+          const x0 = v[0];
+          const z0 = v[2];
+          for (let i = 0; i < v.length; i += 3) {
+            v[i] = x0;
+            v[i + 2] = z0;
+          }
+        }
+      }
+    }
+  }
+}

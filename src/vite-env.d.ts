@@ -12,6 +12,7 @@ interface ThreeGameDiagnostics {
     isInvulnerable: boolean;
     loaded?: boolean;
     activeClip?: string;
+    modelId?: string;
   };
   boss: {
     position: { x: number; y: number; z: number };
@@ -21,6 +22,7 @@ interface ThreeGameDiagnostics {
     isPhase2: boolean;
     loaded?: boolean;
     activeClip?: string;
+    modelId?: string;
   };
   assetsLoaded?: boolean;
   renderer: {
@@ -44,6 +46,8 @@ interface ThreeGameTestHooks {
   setPausedForScreenshot(paused: boolean): void | Promise<void>;
   setReducedMotion?(enabled: boolean): void | Promise<void>;
   hideDebugUi(hidden: boolean): void | Promise<void>;
+  setPlayerModel?(modelId: string): Promise<{ playerModel: string }>;
+  setBossModel?(modelId: string): Promise<{ bossModel: string }>;
   getPlayerWeaponDistanceToHand?(): number;
   getBossWeaponDistanceToHand?(): number;
 }

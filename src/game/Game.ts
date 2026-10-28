@@ -11,6 +11,15 @@ import { Hud } from '../systems/Hud';
 import { SoulslikeCamera } from '../systems/SoulslikeCamera';
 import { Arena } from '../world/Arena';
 
+export const AVAILABLE_PLAYER_MODELS = [
+  { id: 'knight', name: 'Knight' },
+  { id: 'samurai', name: 'Samurai' },
+];
+
+export const AVAILABLE_BOSS_MODELS = [
+  { id: 'titan', name: 'Titan (Ashen Knight)' },
+];
+
 export class Game {
   private readonly renderer: THREE.WebGLRenderer;
   private readonly scene = new THREE.Scene();
@@ -23,7 +32,7 @@ export class Game {
   private readonly input: InputController;
   private readonly cameraRig: SoulslikeCamera;
   private readonly audio = new AudioSystem();
-  private readonly hud = new Hud();
+  private readonly hud: Hud;
   private readonly debugTools: DebugTools;
 
   private readonly loop = new Loop(
@@ -68,16 +77,60 @@ export class Game {
     this.input = new InputController(canvas);
     this.cameraRig = new SoulslikeCamera(this.camera);
 
-    this.debugTools = new DebugTools(this.tuning, () => {
-      this.renderer.toneMappingExposure = this.tuning.exposure;
-      resizeRenderer(this.renderer, this.camera, this.tuning.maxDpr);
+    this.hud = new Hud({
+      playerModels: AVAILABLE_PLAYER_MODELS,
+      currentPlayerModel: this.player.modelId,
+      onPlayerModelChange: async (id: string) => {
+        await this.setPlayerModel(id);
+      },
+      bossModels: AVAILABLE_BOSS_MODELS,
+      currentBossModel: this.boss.modelId,
+      onBossModelChange: async (id: string) => {
+        await this.setBossModel(id);
+      },
     });
+
+    this.debugTools = new DebugTools(
+      this.tuning,
+      () => {
+        this.renderer.toneMappingExposure = this.tuning.exposure;
+        resizeRenderer(this.renderer, this.camera, this.tuning.maxDpr);
+      },
+      {
+        playerModels: AVAILABLE_PLAYER_MODELS.map((m) => m.id),
+        currentPlayerModel: this.player.modelId,
+        onPlayerModelChange: async (id: string) => {
+          await this.setPlayerModel(id);
+        },
+        bossModels: AVAILABLE_BOSS_MODELS.map((m) => m.id),
+        currentBossModel: this.boss.modelId,
+        onBossModelChange: async (id: string) => {
+          await this.setBossModel(id);
+        },
+      },
+    );
 
     this.buildScene();
     this.resetRun();
 
     resizeRenderer(this.renderer, this.camera, this.tuning.maxDpr);
     this.installTestHooks();
+    this.publishDiagnostics();
+  }
+
+  public async setPlayerModel(modelId: string): Promise<void> {
+    await this.player.loadModel(modelId);
+    this.hud.syncModels(this.player.modelId, this.boss.modelId);
+    this.debugTools.syncModels(this.player.modelId, this.boss.modelId);
+    this.render();
+    this.publishDiagnostics();
+  }
+
+  public async setBossModel(modelId: string): Promise<void> {
+    await this.boss.loadModel(modelId);
+    this.hud.syncModels(this.player.modelId, this.boss.modelId);
+    this.debugTools.syncModels(this.player.modelId, this.boss.modelId);
+    this.render();
     this.publishDiagnostics();
   }
 
@@ -375,7 +428,7 @@ export class Game {
         } else if (stateName === 'player_dead') {
           this.player.hp = 0;
           this.player.state = 'dead';
-          this.player.playAction('HumanArmature|Death', 0.1, THREE.LoopOnce, true, 1.0);
+          this.player.playAction('death', 0.1, THREE.LoopOnce, true, 1.0);
         } else if (stateName === 'boss_dead') {
           this.boss.hp = 0;
           this.boss.state = 'dead';
@@ -400,9 +453,20 @@ export class Game {
       },
       hideDebugUi: (hidden: boolean) => {
         this.debugTools.setHidden(hidden);
+        this.hud.setSelectionHidden(hidden);
+      },
+      setPlayerModel: async (modelId: string) => {
+        await this.setPlayerModel(modelId);
+        return { playerModel: this.player.modelId };
+      },
+      setBossModel: async (modelId: string) => {
+        await this.setBossModel(modelId);
+        return { bossModel: this.boss.modelId };
       },
       getPlayerWeaponDistanceToHand: () => {
         if (!this.player.handBone || !this.player.swordObject) return 999;
+        this.player.handBone.updateMatrixWorld(true);
+        this.player.swordObject.updateMatrixWorld(true);
         const handWorld = new THREE.Vector3();
         const swordWorld = new THREE.Vector3();
         this.player.handBone.getWorldPosition(handWorld);
@@ -411,6 +475,8 @@ export class Game {
       },
       getBossWeaponDistanceToHand: () => {
         if (!this.boss.handBone || !this.boss.greatswordGroup) return 999;
+        this.boss.handBone.updateMatrixWorld(true);
+        this.boss.greatswordGroup.updateMatrixWorld(true);
         const handWorld = new THREE.Vector3();
         const swordWorld = new THREE.Vector3();
         this.boss.handBone.getWorldPosition(handWorld);
@@ -438,6 +504,7 @@ export class Game {
         isInvulnerable: this.player.isInvulnerable,
         loaded: this.player.isLoaded,
         activeClip: this.player.currentActionName,
+        modelId: this.player.modelId,
       },
       boss: {
         position: {
@@ -451,6 +518,7 @@ export class Game {
         isPhase2: this.boss.isPhase2,
         loaded: this.boss.isLoaded,
         activeClip: this.boss.currentActionName,
+        modelId: this.boss.modelId,
       },
       assetsLoaded: this.player.isLoaded && this.boss.isLoaded,
       renderer: {

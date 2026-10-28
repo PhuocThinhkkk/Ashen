@@ -8,6 +8,11 @@
     "build": "tsc && vite build",
     "preview": "vite preview --host 127.0.0.1",
     "test": "playwright test",
+    "build:models": "node scripts/build-models.mjs",
+    "build:models:clean": "node scripts/build-models.mjs --clean",
+    "watch:models": "node scripts/build-models.mjs --watch",
+    "inspect:model": "node scripts/inspect-model.mjs",
+    "build:model": "blender --background --python scripts/process_mixamo.py --",
     "verify:visual": "playwright test tests/visual.spec.ts",
     "inspect:canvas": "node scripts/inspect-threejs-canvas.mjs"
   },

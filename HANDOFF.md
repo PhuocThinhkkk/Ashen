@@ -105,10 +105,11 @@ souls-browser/
 │   └── screenshots/           # Browser test evidence PNGs
 ├── public/
 │   └── assets/
-│       └── test-models/       # Verified GLB models:
-│           ├── KnightCharacter.glb  (Quaternius Knight, CC0, 393KB)
-│           ├── Sword.glb            (Quaternius Sword, CC0, 41KB)
-│           └── enemy_2.glb          (NovemberDev Armored Knight, MIT, 3.5MB)
+│       ├── models/
+│       │   ├── players/       # Standardized player GLBs (knight.glb, samurai.glb)
+│       │   └── bosses/        # Standardized boss GLBs (titan.glb)
+│       └── weapons/
+│           └── Sword.glb      # Equipment weapon GLB (41KB)
 ├── src/
 │   ├── combat/
 │   │   ├── FrameCombat.ts     # Attack & dodge frame data definitions
