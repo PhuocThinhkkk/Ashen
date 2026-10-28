@@ -1,10 +1,13 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { ModelLoader } from './utils/ModelLoader';
 
 export interface AssetTestDiagnostics {
   loaded: boolean;
   error: string | null;
   player: {
+    modelId: string;
     bonesCount: number;
     clips: string[];
     activeClip: string;
@@ -13,6 +16,7 @@ export interface AssetTestDiagnostics {
     handBoneFound: boolean;
   };
   boss: {
+    modelId: string;
     bonesCount: number;
     clips: string[];
     activeClip: string;
@@ -28,18 +32,31 @@ declare global {
       playPlayerClip: (name: string) => void;
       playBossClip: (name: string) => void;
       getWeaponDistanceToHand: () => number;
+      switchPlayerModel: (modelId: string) => Promise<void>;
+      setPlaybackSpeed: (speed: number) => void;
+      setCamera: (preset: 'both' | 'player' | 'boss' | 'reset') => void;
+      pauseAtMidFrame: (category: 'player' | 'boss', clipName: string) => Promise<{ duration: number; midTime: number }>;
+      captureCanvas: () => string;
+      captureAllAnimations: () => Promise<Record<string, string>>;
     };
   }
 }
 
+// DOM Elements
 const canvas = document.querySelector<HTMLCanvasElement>('#test-canvas')!;
 const loadStatusEl = document.querySelector<HTMLElement>('#load-status')!;
 const playerInfoEl = document.querySelector<HTMLElement>('#player-info')!;
 const bossInfoEl = document.querySelector<HTMLElement>('#boss-info')!;
 const weaponInfoEl = document.querySelector<HTMLElement>('#weapon-info')!;
-const animButtonsEl = document.querySelector<HTMLElement>('#anim-buttons')!;
+const playerActiveLabel = document.querySelector<HTMLElement>('#player-active-label')!;
+const bossActiveLabel = document.querySelector<HTMLElement>('#boss-active-label')!;
+const playerAnimButtonsEl = document.querySelector<HTMLElement>('#player-anim-buttons')!;
+const bossAnimButtonsEl = document.querySelector<HTMLElement>('#boss-anim-buttons')!;
+const playerModelButtonsEl = document.querySelector<HTMLElement>('#player-model-buttons')!;
+const cameraButtonsEl = document.querySelector<HTMLElement>('#camera-buttons')!;
+const speedButtonsEl = document.querySelector<HTMLElement>('#speed-buttons')!;
 
-// 1. Scene & Renderer Setup (Matches Game lighting & fog)
+// 1. Scene & Renderer Setup
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0a0e16);
 scene.fog = new THREE.Fog(0x0b101a, 16, 60);
@@ -57,6 +74,15 @@ renderer.toneMappingExposure = 1.1;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFShadowMap;
 
+// OrbitControls
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 1.2, 0);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.maxDistance = 30;
+controls.minDistance = 1;
+controls.maxPolarAngle = Math.PI / 2 + 0.05;
+
 // Lights
 const hemiLight = new THREE.HemisphereLight(0x506888, 0x222a36, 1.8);
 scene.add(hemiLight);
@@ -65,6 +91,7 @@ const moonLight = new THREE.DirectionalLight(0xbcd6ff, 2.8);
 moonLight.position.set(-14, 24, 16);
 moonLight.castShadow = true;
 moonLight.shadow.mapSize.set(2048, 2048);
+moonLight.shadow.bias = -0.0001;
 scene.add(moonLight);
 
 const rimLight = new THREE.DirectionalLight(0x5577aa, 0.85);
@@ -81,20 +108,27 @@ scene.add(floor);
 
 // 2. State & Loaders
 const loader = new GLTFLoader();
+let currentPlayerScene: THREE.Group | null = null;
+let currentBossScene: THREE.Group | null = null;
 let playerMixer: THREE.AnimationMixer | null = null;
 let bossMixer: THREE.AnimationMixer | null = null;
 const playerActions = new Map<string, THREE.AnimationAction>();
 const bossActions = new Map<string, THREE.AnimationAction>();
-let currentAction: THREE.AnimationAction | null = null;
+let playerRawClips: THREE.AnimationClip[] = [];
+let bossRawClips: THREE.AnimationClip[] = [];
+let currentPlayerAction: THREE.AnimationAction | null = null;
+let currentBossAction: THREE.AnimationAction | null = null;
 
 let playerHandBone: THREE.Object3D | null = null;
 let axeObject: THREE.Object3D | null = null;
 let bossHandBone: THREE.Object3D | null = null;
+let playbackSpeed = 1.0;
 
 const diagnostics: AssetTestDiagnostics = {
   loaded: false,
   error: null,
   player: {
+    modelId: 'knight',
     bonesCount: 0,
     clips: [],
     activeClip: '',
@@ -103,6 +137,7 @@ const diagnostics: AssetTestDiagnostics = {
     handBoneFound: false,
   },
   boss: {
+    modelId: 'titan',
     bonesCount: 0,
     clips: [],
     activeClip: '',
@@ -111,65 +146,96 @@ const diagnostics: AssetTestDiagnostics = {
   },
 };
 
-function processInPlace(clip: THREE.AnimationClip, rootBoneName: string, scaleFactor = 1.0) {
-  // Strip horizontal (X and Z) root translation so animations don't drift away from origin
-  for (const track of clip.tracks) {
-    if ((track.name === `${rootBoneName}.position` || track.name.endsWith('.position')) && track instanceof THREE.VectorKeyframeTrack) {
-      const v = track.values;
-      if (scaleFactor !== 1.0) {
-        for (let i = 0; i < v.length; i++) {
-          v[i] *= scaleFactor;
-        }
-      }
-      const x0 = v[0];
-      const z0 = v[2];
-      for (let i = 0; i < v.length; i += 3) {
-        v[i] = x0;
-        v[i + 2] = z0;
-      }
-    }
-  }
+// Strips horizontal (X and Z) root translation so animations don't drift away from origin
+function stripRootMotion(clip: THREE.AnimationClip, rootBoneName: string) {
+  ModelLoader.stripRootMotion(clip, [rootBoneName, 'hips', 'body', 'HumanArmature|Hips']);
 }
 
-async function loadAssets() {
-  try {
-    loadStatusEl.textContent = 'Loading knight.glb...';
-    const hunterGltf = await loader.loadAsync('/assets/models/players/knight.glb');
-    const hunterScene = hunterGltf.scene;
-    hunterScene.position.set(-1.4, 0, 0);
+// 3. Load Player Model
+async function loadPlayer(modelId: 'knight' | 'samurai') {
+  diagnostics.player.modelId = modelId;
 
-    // Measure raw bounds and scale to exactly 1.80m height
-    const rawBox = new THREE.Box3().setFromObject(hunterScene);
-    const rawSize = new THREE.Vector3();
-    rawBox.getSize(rawSize);
-    const scaleFactor = 1.80 / (rawSize.y || 1);
-    hunterScene.scale.set(scaleFactor, scaleFactor, scaleFactor);
-    hunterScene.updateMatrixWorld(true);
-
-    const playerBox = new THREE.Box3().setFromObject(hunterScene);
-    const playerSize = new THREE.Vector3();
-    playerBox.getSize(playerSize);
-    diagnostics.player.height = parseFloat(playerSize.y.toFixed(2));
-    scene.add(hunterScene);
-
-    // Enable shadows on player
-    let pBones = 0;
-    hunterScene.traverse((obj) => {
+  // Cleanup old player if present
+  if (currentPlayerScene) {
+    if (playerMixer) playerMixer.stopAllAction();
+    playerActions.clear();
+    currentPlayerAction = null;
+    playerHandBone = null;
+    if (axeObject && axeObject.parent) {
+      axeObject.parent.remove(axeObject);
+    }
+    scene.remove(currentPlayerScene);
+    currentPlayerScene.traverse((obj) => {
       if (obj instanceof THREE.Mesh) {
+        obj.geometry.dispose();
+        if (Array.isArray(obj.material)) obj.material.forEach((m) => m.dispose());
+        else obj.material?.dispose();
+      }
+    });
+    currentPlayerScene = null;
+  }
+
+  loadStatusEl.className = 'status-wait';
+  loadStatusEl.textContent = `Loading ${modelId}.glb...`;
+
+  const playerGltf = await loader.loadAsync(`/assets/models/players/${modelId}.glb`);
+  currentPlayerScene = playerGltf.scene;
+  currentPlayerScene.position.set(-1.4, 0, 0);
+
+  // Measure raw bounds and scale to exactly 1.80m height
+  const rawBox = new THREE.Box3().setFromObject(currentPlayerScene);
+  const rawSize = new THREE.Vector3();
+  rawBox.getSize(rawSize);
+  const scaleFactor = 1.80 / (rawSize.y || 1);
+  currentPlayerScene.scale.set(scaleFactor, scaleFactor, scaleFactor);
+  currentPlayerScene.updateMatrixWorld(true);
+
+  const playerBox = new THREE.Box3().setFromObject(currentPlayerScene);
+  const playerSize = new THREE.Vector3();
+  playerBox.getSize(playerSize);
+  diagnostics.player.height = parseFloat(playerSize.y.toFixed(2));
+  scene.add(currentPlayerScene);
+
+  // Skeletons & Bones
+  let pBones = 0;
+  currentPlayerScene.traverse((obj) => {
+    const lower = obj.name.toLowerCase();
+    if (
+      lower.includes('icosphere') ||
+      lower.includes('cylinder') ||
+      lower.includes('hand_shape') ||
+      lower.includes('plane')
+    ) {
+      obj.visible = false;
+    }
+    if (obj instanceof THREE.Mesh) {
+      if (lower.includes('icosphere') || lower.includes('cylinder')) {
+        obj.visible = false;
+      } else {
         obj.castShadow = true;
         obj.receiveShadow = true;
       }
-      if (obj instanceof THREE.Bone) {
-        pBones++;
-        if (obj.name === 'PalmR' || obj.name === 'Palm.R' || obj.name.toLowerCase().includes('palmr') || obj.name.toLowerCase().includes('middlehand')) {
-          playerHandBone = obj;
-        }
+    }
+    if (obj instanceof THREE.Bone) {
+      pBones++;
+      if (
+        obj.name === 'PalmR' ||
+        obj.name === 'Palm.R' ||
+        obj.name === 'MiddleHand.R' ||
+        obj.name.toLowerCase().includes('palmr') ||
+        obj.name.toLowerCase().includes('middlehand.r') ||
+        obj.name.toLowerCase().includes('righthand')
+      ) {
+        if (!playerHandBone) playerHandBone = obj;
       }
-    });
-    diagnostics.player.bonesCount = pBones;
-    diagnostics.player.handBoneFound = !!playerHandBone;
+    }
+  });
 
-    // Load Weapon (Sword.glb) and attach to hand
+  diagnostics.player.bonesCount = pBones;
+  diagnostics.player.handBoneFound = !!playerHandBone;
+
+  // Load Weapon (Sword.glb) if not loaded yet, then attach to hand
+  if (!axeObject) {
     loadStatusEl.textContent = 'Loading Sword.glb...';
     const swordGltf = await loader.loadAsync('/assets/weapons/Sword.glb');
     axeObject = swordGltf.scene;
@@ -177,152 +243,447 @@ async function loadAssets() {
     axeObject.traverse((obj) => {
       if (obj instanceof THREE.Mesh) obj.castShadow = true;
     });
+  }
 
-    if (playerHandBone) {
-      axeObject.position.set(0, 0, 0);
-      axeObject.rotation.set(0, 0, 0);
-      axeObject.scale.set(0.01, 0.01, 0.01);
-      playerHandBone.add(axeObject);
-      diagnostics.player.weaponAttached = true;
+  if (playerHandBone && axeObject) {
+    axeObject.position.set(0, 0, 0);
+    axeObject.rotation.set(0, 0, 0);
+    axeObject.scale.set(0.01, 0.01, 0.01);
+    playerHandBone.add(axeObject);
+    diagnostics.player.weaponAttached = true;
+  }
+
+  // Animations
+  playerMixer = new THREE.AnimationMixer(currentPlayerScene);
+  playerRawClips = playerGltf.animations;
+  diagnostics.player.clips = playerRawClips.map((a) => a.name);
+
+  for (const clip of playerRawClips) {
+    stripRootMotion(clip, 'Hips');
+    const action = playerMixer.clipAction(clip);
+    playerActions.set(clip.name, action);
+  }
+
+  // Populate Player UI buttons
+  populatePlayerButtons();
+
+  // Play default idle
+  playPlayerAnimation('idle');
+
+  // Update Player info line
+  playerInfoEl.innerHTML = `<strong>Player (${modelId}):</strong> Height ${diagnostics.player.height}m | Bones: ${diagnostics.player.bonesCount} | Clips: ${diagnostics.player.clips.length}`;
+  weaponInfoEl.innerHTML = `<strong>Weapon:</strong> Socketed to <span class="status-ok">${playerHandBone ? playerHandBone.name : 'NONE'}</span>`;
+}
+
+// 4. Load Boss Model (titan.glb)
+async function loadBoss() {
+  loadStatusEl.textContent = 'Loading titan.glb...';
+  const bossGltf = await loader.loadAsync('/assets/models/bosses/titan.glb');
+  currentBossScene = bossGltf.scene;
+  currentBossScene.position.set(1.4, 0, 0);
+
+  // Scale to 2.40m boss height
+  const rawBossBox = new THREE.Box3().setFromObject(currentBossScene);
+  const rawBossSize = new THREE.Vector3();
+  rawBossBox.getSize(rawBossSize);
+  const bossScaleFactor = 2.40 / (rawBossSize.y || 1);
+  currentBossScene.scale.set(bossScaleFactor, bossScaleFactor, bossScaleFactor);
+  scene.add(currentBossScene);
+
+  const bossBox = new THREE.Box3().setFromObject(currentBossScene);
+  const bossSize = new THREE.Vector3();
+  bossBox.getSize(bossSize);
+  diagnostics.boss.height = parseFloat(bossSize.y.toFixed(2));
+
+  let bBones = 0;
+  currentBossScene.traverse((obj) => {
+    const lower = obj.name.toLowerCase();
+    if (
+      lower.includes('icosphere') ||
+      lower.includes('cylinder') ||
+      lower.includes('hand_shape') ||
+      lower.includes('plane')
+    ) {
+      obj.visible = false;
     }
-
-    // Process Player Animations
-    playerMixer = new THREE.AnimationMixer(hunterScene);
-    diagnostics.player.clips = hunterGltf.animations.map((a) => a.name);
-
-    for (const clip of hunterGltf.animations) {
-      processInPlace(clip, 'Hips', 1.0);
-      const action = playerMixer.clipAction(clip);
-      playerActions.set(clip.name, action);
-    }
-
-    // Play default idle
-    const idleAction = playerActions.get('idle') || playerActions.get('HumanArmature|Idle_swordRight');
-    if (idleAction) {
-      idleAction.play();
-      currentAction = idleAction;
-      diagnostics.player.activeClip = idleAction.getClip().name;
-    }
-
-    // 3. Load Boss Model (titan.glb)
-    loadStatusEl.textContent = 'Loading titan.glb...';
-    const bossGltf = await loader.loadAsync('/assets/models/bosses/titan.glb');
-    const bossScene = bossGltf.scene;
-    bossScene.position.set(1.4, 0, 0);
-
-    // Measure raw bounds and scale to exactly 2.40m imposing boss height
-    const rawBossBox = new THREE.Box3().setFromObject(bossScene);
-    const rawBossSize = new THREE.Vector3();
-    rawBossBox.getSize(rawBossSize);
-    const bossScaleFactor = 2.40 / (rawBossSize.y || 1);
-    bossScene.scale.set(bossScaleFactor, bossScaleFactor, bossScaleFactor);
-    scene.add(bossScene);
-
-    const bossBox = new THREE.Box3().setFromObject(bossScene);
-    const bossSize = new THREE.Vector3();
-    bossBox.getSize(bossSize);
-    diagnostics.boss.height = parseFloat(bossSize.y.toFixed(2));
-
-    let bBones = 0;
-    const allBossNodes: string[] = [];
-    bossScene.traverse((obj) => {
-      allBossNodes.push(`${obj.type}:${obj.name}`);
-      // Hide helper artifacts (floor polygon and root axe from Blender)
-      if (obj.name === 'hand_shape' || obj.name === 'Cylinder') {
+    if (obj instanceof THREE.Mesh) {
+      if (lower.includes('icosphere') || lower.includes('cylinder') || lower.includes('hand_shape')) {
         obj.visible = false;
-      }
-      if (obj instanceof THREE.Mesh) {
+      } else {
         obj.castShadow = true;
         obj.receiveShadow = true;
       }
-      if (obj instanceof THREE.Bone || (obj as any).isBone) {
-        bBones++;
-        if ((obj.name === 'handR' || obj.name === 'hand.R') && !obj.name.includes('IK')) {
-          bossHandBone = obj;
-        }
+    }
+    if (obj instanceof THREE.Bone || (obj as any).isBone) {
+      bBones++;
+      if (
+        (obj.name === 'handR' ||
+          obj.name === 'hand.R' ||
+          obj.name === 'PalmR' ||
+          obj.name === 'Palm.R') &&
+        !obj.name.includes('IK')
+      ) {
+        if (!bossHandBone) bossHandBone = obj;
       }
+    }
+  });
+
+  diagnostics.boss.bonesCount = bBones;
+  diagnostics.boss.handBoneFound = !!bossHandBone;
+
+  // Build and attach Greatsword to boss hand bone
+  if (bossHandBone) {
+    const bossSwordGroup = new THREE.Group();
+    const gripGeo = new THREE.CylinderGeometry(0.04, 0.04, 0.6, 8);
+    const gripMat = new THREE.MeshStandardMaterial({ color: 0x332211, roughness: 0.7 });
+    const grip = new THREE.Mesh(gripGeo, gripMat);
+    grip.position.y = -0.3;
+    bossSwordGroup.add(grip);
+
+    const guardGeo = new THREE.BoxGeometry(0.7, 0.1, 0.12);
+    const guardMat = new THREE.MeshStandardMaterial({ color: 0x8c6d2c, roughness: 0.3, metalness: 0.8 });
+    const guard = new THREE.Mesh(guardGeo, guardMat);
+    bossSwordGroup.add(guard);
+
+    const bladeGeo = new THREE.BoxGeometry(0.2, 2.0, 0.04);
+    const bladeMat = new THREE.MeshStandardMaterial({
+      color: 0x222428,
+      emissive: 0xff4400,
+      emissiveIntensity: 0.6,
+      roughness: 0.3,
+      metalness: 0.9,
     });
-    console.log('All boss nodes:', allBossNodes);
-    diagnostics.boss.bonesCount = bBones;
-    diagnostics.boss.handBoneFound = !!bossHandBone;
+    const blade = new THREE.Mesh(bladeGeo, bladeMat);
+    blade.position.y = 1.0;
+    bossSwordGroup.add(blade);
 
-    // Attach Greatsword to boss hand bone
-    if (bossHandBone) {
-      const bossSwordGroup = new THREE.Group();
-      const gripGeo = new THREE.CylinderGeometry(0.04, 0.04, 0.6, 8);
-      const gripMat = new THREE.MeshStandardMaterial({ color: 0x332211, roughness: 0.7 });
-      const grip = new THREE.Mesh(gripGeo, gripMat);
-      grip.position.y = -0.3;
-      bossSwordGroup.add(grip);
+    // Collision hitbox parented directly to the sword mesh
+    const bladeHitbox = new THREE.Object3D();
+    bladeHitbox.name = 'BossSwordHitbox';
+    bladeHitbox.position.set(0, 0, 0);
+    blade.add(bladeHitbox);
 
-      const guardGeo = new THREE.BoxGeometry(0.7, 0.1, 0.12);
-      const guardMat = new THREE.MeshStandardMaterial({ color: 0x8c6d2c, roughness: 0.3, metalness: 0.8 });
-      const guard = new THREE.Mesh(guardGeo, guardMat);
-      bossSwordGroup.add(guard);
+    bossSwordGroup.traverse((o) => {
+      if (o instanceof THREE.Mesh) o.castShadow = true;
+    });
+    bossSwordGroup.position.set(0, 0, 0);
+    bossSwordGroup.rotation.set(-Math.PI * 0.4, 0, 0.4);
+    bossHandBone.add(bossSwordGroup);
+  }
 
-      const bladeGeo = new THREE.BoxGeometry(0.2, 2.0, 0.04);
-      const bladeMat = new THREE.MeshStandardMaterial({ color: 0x222428, emissive: 0xff4400, emissiveIntensity: 0.6, roughness: 0.3, metalness: 0.9 });
-      const blade = new THREE.Mesh(bladeGeo, bladeMat);
-      blade.position.y = 1.0;
-      bossSwordGroup.add(blade);
+  // Boss Animations
+  bossMixer = new THREE.AnimationMixer(currentBossScene);
+  bossRawClips = bossGltf.animations;
+  diagnostics.boss.clips = bossRawClips.map((a) => a.name);
 
-      bossSwordGroup.traverse((o) => { if (o instanceof THREE.Mesh) o.castShadow = true; });
-      bossSwordGroup.position.set(0, 0, 0);
-      bossSwordGroup.rotation.set(-Math.PI * 0.4, 0, 0.4);
-      bossHandBone.add(bossSwordGroup);
+  for (const clip of bossRawClips) {
+    stripRootMotion(clip, 'hips');
+    const action = bossMixer.clipAction(clip);
+    bossActions.set(clip.name, action);
+  }
+
+  // Populate Boss UI buttons
+  populateBossButtons();
+
+  // Play default idle
+  playBossAnimation('idle');
+
+  // Update Boss info line
+  bossInfoEl.innerHTML = `<strong>Boss (titan):</strong> Height ${diagnostics.boss.height}m | Bones: ${diagnostics.boss.bonesCount} | Clips: ${diagnostics.boss.clips.length}`;
+}
+
+// 5. Populate Buttons dynamically for all clips
+function populatePlayerButtons() {
+  if (!playerAnimButtonsEl) return;
+  playerAnimButtonsEl.innerHTML = '';
+
+  for (const clip of playerRawClips) {
+    const btn = document.createElement('button');
+    btn.className = 'btn-player';
+    btn.setAttribute('data-clip', clip.name);
+    btn.textContent = clip.name;
+    if (clip.name === diagnostics.player.activeClip) {
+      btn.classList.add('active');
     }
+    btn.onclick = () => playPlayerAnimation(clip.name);
+    playerAnimButtonsEl.appendChild(btn);
+  }
+}
 
-    // Boss Animations
-    bossMixer = new THREE.AnimationMixer(bossScene);
-    diagnostics.boss.clips = bossGltf.animations.map((a) => a.name);
+function populateBossButtons() {
+  if (!bossAnimButtonsEl) return;
+  bossAnimButtonsEl.innerHTML = '';
 
-    for (const clip of bossGltf.animations) {
-      processInPlace(clip, 'hips');
-      const action = bossMixer.clipAction(clip);
-      bossActions.set(clip.name, action);
+  for (const clip of bossRawClips) {
+    const btn = document.createElement('button');
+    btn.className = 'btn-boss';
+    btn.setAttribute('data-clip', clip.name);
+    btn.textContent = clip.name;
+    if (clip.name === diagnostics.boss.activeClip) {
+      btn.classList.add('active');
     }
+    btn.onclick = () => playBossAnimation(clip.name);
+    bossAnimButtonsEl.appendChild(btn);
+  }
+}
 
-    const bossIdleAction = bossActions.get('idle') || bossActions.get('standing');
-    if (bossIdleAction) {
-      bossIdleAction.play();
-      diagnostics.boss.activeClip = 'idle';
+// 6. Animation Playback Handlers
+function playPlayerAnimation(name: string) {
+  let targetAction = playerActions.get(name);
+  let resolvedClipName = name;
+
+  if (!targetAction) {
+    const foundClip = ModelLoader.findClip(playerRawClips, name);
+    if (foundClip) {
+      targetAction = playerActions.get(foundClip.name);
+      resolvedClipName = foundClip.name;
     }
+  }
 
-    // Update UI
+  if (!targetAction) {
+    console.warn(`[AssetTest] Player clip "${name}" not found.`);
+    return;
+  }
+
+  if (targetAction === currentPlayerAction && targetAction.isRunning()) {
+    targetAction.reset();
+    targetAction.play();
+    return;
+  }
+
+  targetAction.reset();
+
+  const isOneShot = ['attack_light', 'attack_heavy', 'dodge', 'death'].some(
+    (k) => resolvedClipName.toLowerCase().includes(k)
+  );
+
+  if (resolvedClipName.toLowerCase().includes('dodge')) {
+    targetAction.setLoop(THREE.LoopOnce, 1);
+    targetAction.clampWhenFinished = true;
+    targetAction.timeScale = targetAction.getClip().duration / 0.40; // Scales full dodge/roll to 0.40s window
+  } else if (resolvedClipName.toLowerCase().includes('death')) {
+    targetAction.setLoop(THREE.LoopOnce, 1);
+    targetAction.clampWhenFinished = true;
+    targetAction.timeScale = 1.0;
+  } else if (isOneShot) {
+    targetAction.setLoop(THREE.LoopOnce, 1);
+    targetAction.clampWhenFinished = true;
+    targetAction.timeScale = 1.0;
+  } else {
+    targetAction.setLoop(THREE.LoopRepeat, Infinity);
+    targetAction.clampWhenFinished = false;
+    targetAction.timeScale = 1.0;
+  }
+
+  if (currentPlayerAction) {
+    currentPlayerAction.crossFadeTo(targetAction, 0.18, true);
+  }
+  targetAction.play();
+  currentPlayerAction = targetAction;
+  diagnostics.player.activeClip = resolvedClipName;
+
+  if (playerActiveLabel) playerActiveLabel.textContent = resolvedClipName;
+
+  if (playerAnimButtonsEl) {
+    playerAnimButtonsEl.querySelectorAll<HTMLButtonElement>('button').forEach((b) => {
+      const clip = b.getAttribute('data-clip');
+      if (clip === resolvedClipName || clip === name) b.classList.add('active');
+      else b.classList.remove('active');
+    });
+  }
+}
+
+function playBossAnimation(name: string) {
+  let targetAction = bossActions.get(name);
+  let resolvedClipName = name;
+
+  if (!targetAction) {
+    const foundClip = ModelLoader.findClip(bossRawClips, name);
+    if (foundClip) {
+      targetAction = bossActions.get(foundClip.name);
+      resolvedClipName = foundClip.name;
+    }
+  }
+
+  if (!targetAction) {
+    console.warn(`[AssetTest] Boss clip "${name}" not found.`);
+    return;
+  }
+
+  if (targetAction === currentBossAction && targetAction.isRunning()) {
+    targetAction.reset();
+    targetAction.play();
+    return;
+  }
+
+  targetAction.reset();
+
+  const isLoop = ['idle', 'walking', 'walk'].includes(resolvedClipName.toLowerCase());
+
+  if (isLoop) {
+    targetAction.setLoop(THREE.LoopRepeat, Infinity);
+    targetAction.clampWhenFinished = false;
+  } else {
+    targetAction.setLoop(THREE.LoopOnce, 1);
+    targetAction.clampWhenFinished = true;
+  }
+
+  if (currentBossAction) {
+    currentBossAction.crossFadeTo(targetAction, 0.2, true);
+  }
+  targetAction.play();
+  currentBossAction = targetAction;
+  diagnostics.boss.activeClip = resolvedClipName;
+
+  if (bossActiveLabel) bossActiveLabel.textContent = resolvedClipName;
+
+  if (bossAnimButtonsEl) {
+    bossAnimButtonsEl.querySelectorAll<HTMLButtonElement>('button').forEach((b) => {
+      const clip = b.getAttribute('data-clip');
+      if (clip === resolvedClipName || clip === name) b.classList.add('active');
+      else b.classList.remove('active');
+    });
+  }
+}
+
+function setCamera(preset: 'both' | 'player' | 'boss' | 'reset') {
+  if (cameraButtonsEl) {
+    cameraButtonsEl.querySelectorAll('button').forEach((b) => b.classList.remove('active'));
+    cameraButtonsEl.querySelector(`button[data-cam="${preset}"]`)?.classList.add('active');
+  }
+  if (preset === 'player') {
+    camera.position.set(-1.4, 1.8, 3.2);
+    controls.target.set(-1.4, 1.0, 0);
+  } else if (preset === 'boss') {
+    camera.position.set(1.4, 2.2, 4.2);
+    controls.target.set(1.4, 1.3, 0);
+  } else {
+    camera.position.set(0, 2.5, 6.5);
+    controls.target.set(0, 1.2, 0);
+  }
+}
+
+// 7. Camera Presets & Speed Controls
+function setupUIControls() {
+  if (playerModelButtonsEl) {
+    playerModelButtonsEl.querySelectorAll<HTMLButtonElement>('button').forEach((btn) => {
+      btn.onclick = async () => {
+        const modelId = btn.getAttribute('data-model') as 'knight' | 'samurai';
+        if (!modelId || modelId === diagnostics.player.modelId) return;
+        playerModelButtonsEl.querySelectorAll('button').forEach((b) => b.classList.remove('active'));
+        btn.classList.add('active');
+        await loadPlayer(modelId);
+      };
+    });
+  }
+
+  if (cameraButtonsEl) {
+    cameraButtonsEl.querySelectorAll<HTMLButtonElement>('button').forEach((btn) => {
+      btn.onclick = () => {
+        const preset = btn.getAttribute('data-cam') as 'both' | 'player' | 'boss' | 'reset';
+        setCamera(preset);
+      };
+    });
+  }
+
+  if (speedButtonsEl) {
+    speedButtonsEl.querySelectorAll<HTMLButtonElement>('button').forEach((btn) => {
+      btn.onclick = () => {
+        const speed = parseFloat(btn.getAttribute('data-speed') || '1.0');
+        speedButtonsEl.querySelectorAll('button').forEach((b) => b.classList.remove('active'));
+        btn.classList.add('active');
+        playbackSpeed = speed;
+      };
+    });
+  }
+
+  const toggleBtn = document.querySelector<HTMLButtonElement>('#overlay-toggle');
+  const overlayEl = document.querySelector<HTMLElement>('#overlay');
+  if (toggleBtn && overlayEl) {
+    toggleBtn.onclick = () => {
+      const isCollapsed = overlayEl.classList.toggle('collapsed');
+      toggleBtn.textContent = isCollapsed ? 'Show' : 'Hide';
+    };
+  }
+
+  const captureBtn = document.querySelector<HTMLButtonElement>('#btn-capture-all');
+  const captureStatusEl = document.querySelector<HTMLElement>('#capture-status');
+  if (captureBtn) {
+    captureBtn.onclick = async () => {
+      captureBtn.disabled = true;
+      if (captureStatusEl) captureStatusEl.textContent = 'Capturing mid-frames...';
+      const shots = await captureAllAnimations();
+      const count = Object.keys(shots).length;
+      if (captureStatusEl) captureStatusEl.textContent = `✓ Captured ${count} clips!`;
+      captureBtn.disabled = false;
+    };
+  }
+}
+
+// 8. Visual Validation & Capture Utilities
+async function pauseAtMidFrame(category: 'player' | 'boss', clipName: string): Promise<{ duration: number; midTime: number }> {
+  if (category === 'player') {
+    playPlayerAnimation(clipName);
+    const action = playerActions.get(diagnostics.player.activeClip) || currentPlayerAction;
+    if (action) {
+      const clip = action.getClip();
+      const mid = clip.duration / 2;
+      action.time = mid;
+      action.paused = true;
+      if (playerMixer) playerMixer.update(0);
+      renderer.render(scene, camera);
+      return { duration: clip.duration, midTime: mid };
+    }
+  } else {
+    playBossAnimation(clipName);
+    const action = bossActions.get(diagnostics.boss.activeClip) || currentBossAction;
+    if (action) {
+      const clip = action.getClip();
+      const mid = clip.duration / 2;
+      action.time = mid;
+      action.paused = true;
+      if (bossMixer) bossMixer.update(0);
+      renderer.render(scene, camera);
+      return { duration: clip.duration, midTime: mid };
+    }
+  }
+  return { duration: 0, midTime: 0 };
+}
+
+function captureCanvas(): string {
+  renderer.render(scene, camera);
+  return canvas.toDataURL('image/png');
+}
+
+async function captureAllAnimations(): Promise<Record<string, string>> {
+  const result: Record<string, string> = {};
+  // Player clips
+  for (const clip of diagnostics.player.clips) {
+    await pauseAtMidFrame('player', clip);
+    result[`player_${clip}`] = captureCanvas();
+  }
+  // Boss clips
+  for (const clip of diagnostics.boss.clips) {
+    await pauseAtMidFrame('boss', clip);
+    result[`boss_${clip}`] = captureCanvas();
+  }
+  // Unpause & restore default idles
+  if (currentPlayerAction) currentPlayerAction.paused = false;
+  if (currentBossAction) currentBossAction.paused = false;
+  playPlayerAnimation('idle');
+  playBossAnimation('idle');
+  return result;
+}
+
+// 9. Main Asset Initialization
+async function initHarness() {
+  try {
+    setupUIControls();
+    await loadPlayer('knight');
+    await loadBoss();
+
     loadStatusEl.className = 'status-ok';
-    loadStatusEl.textContent = 'Assets Loaded & Verified Successfully';
-    playerInfoEl.textContent = `Player: Height ${diagnostics.player.height}m, Bones ${diagnostics.player.bonesCount}, Clips: ${diagnostics.player.clips.length}`;
-    bossInfoEl.textContent = `Boss: Height ${diagnostics.boss.height}m, Bones ${diagnostics.boss.bonesCount}, Clips: ${diagnostics.boss.clips.length}`;
-    weaponInfoEl.innerHTML = `Weapon: Socketed to <span class="status-ok">${playerHandBone ? 'mixamorigRightHand' : 'NONE'}</span>`;
-
-    // Create interactive animation buttons
-    const keyClips = [
-      'HumanArmature|Idle',
-      'HumanArmature|Idle_swordRight',
-      'HumanArmature|Walking',
-      'HumanArmature|Run',
-      'HumanArmature|Run_swordAttack',
-      'HumanArmature|swordAttackJump',
-      'HumanArmature|Roll_sword',
-      'HumanArmature|Death',
-    ];
-    keyClips.forEach((name) => {
-      if (playerActions.has(name)) {
-        const btn = document.createElement('button');
-        btn.textContent = name.replace('HumanArmature|', '');
-        if (name.includes('Idle_swordRight')) btn.classList.add('active');
-        btn.onclick = () => playPlayerAnimation(name);
-        animButtonsEl.appendChild(btn);
-      }
-    });
-
-    // Add boss attack button
-    const bossBtn = document.createElement('button');
-    bossBtn.textContent = 'Boss: attack';
-    bossBtn.style.borderColor = '#db2c2c';
-    bossBtn.onclick = () => playBossAnimation('attack');
-    animButtonsEl.appendChild(bossBtn);
-
+    loadStatusEl.textContent = 'All Assets Loaded & Ready';
     diagnostics.loaded = true;
   } catch (err) {
     diagnostics.error = err instanceof Error ? err.message : String(err);
@@ -332,42 +693,7 @@ async function loadAssets() {
   }
 }
 
-function playPlayerAnimation(name: string) {
-  const nextAction = playerActions.get(name);
-  if (!nextAction || nextAction === currentAction) return;
-
-  animButtonsEl.querySelectorAll('button').forEach((b) => {
-    if (b.textContent === name) b.classList.add('active');
-    else if (!b.textContent?.startsWith('Boss:')) b.classList.remove('active');
-  });
-
-  nextAction.reset();
-  if (['HumanArmature|Run_swordAttack', 'HumanArmature|swordAttackJump', 'HumanArmature|Roll', 'HumanArmature|Roll_sword', 'HumanArmature|Death'].includes(name)) {
-    nextAction.setLoop(THREE.LoopOnce, 1);
-    nextAction.clampWhenFinished = true;
-  } else {
-    nextAction.setLoop(THREE.LoopRepeat, Infinity);
-  }
-
-  if (currentAction) {
-    currentAction.crossFadeTo(nextAction, 0.18, true);
-  }
-  nextAction.play();
-  currentAction = nextAction;
-  diagnostics.player.activeClip = name;
-}
-
-function playBossAnimation(name: string) {
-  const nextAction = bossActions.get(name);
-  if (!nextAction) return;
-  nextAction.reset();
-  nextAction.setLoop(THREE.LoopOnce, 1);
-  nextAction.clampWhenFinished = false;
-  nextAction.play();
-  diagnostics.boss.activeClip = name;
-}
-
-// Window test hook
+// Global API Hook
 window.__ASSET_TEST__ = {
   diagnostics,
   playPlayerClip: playPlayerAnimation,
@@ -380,13 +706,27 @@ window.__ASSET_TEST__ = {
     axeObject.getWorldPosition(axeWorld);
     return handWorld.distanceTo(axeWorld);
   },
+  switchPlayerModel: async (modelId: string) => {
+    if (modelId === 'knight' || modelId === 'samurai') {
+      await loadPlayer(modelId);
+    }
+  },
+  setPlaybackSpeed: (speed: number) => {
+    playbackSpeed = speed;
+  },
+  setCamera,
+  pauseAtMidFrame,
+  captureCanvas,
+  captureAllAnimations,
 };
 
 // Render Loop
 const clock = new THREE.Clock();
 function animate() {
   requestAnimationFrame(animate);
-  const delta = clock.getDelta();
+  const delta = clock.getDelta() * playbackSpeed;
+
+  controls.update();
 
   if (playerMixer) playerMixer.update(delta);
   if (bossMixer) bossMixer.update(delta);
@@ -400,5 +740,5 @@ window.addEventListener('resize', () => {
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
-void loadAssets();
+void initHarness();
 animate();

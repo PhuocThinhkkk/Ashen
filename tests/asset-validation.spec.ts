@@ -96,4 +96,52 @@ test.describe('Milestone 3 Asset & Animation Validation Gate', () => {
     expect(consoleErrors).toEqual([]);
     expect(pageErrors).toEqual([]);
   });
+
+  test('provides interactive UI buttons for all player and boss animations', async ({ page }) => {
+    const consoleErrors: string[] = [];
+    const pageErrors: string[] = [];
+
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') consoleErrors.push(msg.text());
+    });
+    page.on('pageerror', (err) => pageErrors.push(err.message));
+
+    await page.goto('/asset-test.html');
+    await page.waitForFunction(() => window.__ASSET_TEST__?.diagnostics.loaded === true);
+
+    // 1. Verify and click every player animation button
+    const playerClips = ['idle', 'walk', 'run', 'dodge', 'attack_light', 'attack_heavy', 'death'];
+    for (const clip of playerClips) {
+      const btn = page.locator(`#player-anim-buttons button[data-clip="${clip}"]`);
+      await expect(btn).toBeVisible();
+      await btn.click();
+      await expect(btn).toHaveClass(/active/);
+      const activeClip = await page.evaluate(() => window.__ASSET_TEST__?.diagnostics.player.activeClip);
+      expect(activeClip).toBe(clip);
+    }
+
+    // 2. Verify and click every boss animation button
+    const bossClips = ['idle', 'walking', 'attack_heavy', 'special', 'hit', 'die'];
+    for (const clip of bossClips) {
+      const btn = page.locator(`#boss-anim-buttons button[data-clip="${clip}"]`);
+      await expect(btn).toBeVisible();
+      await btn.click();
+      await expect(btn).toHaveClass(/active/);
+      const activeClip = await page.evaluate(() => window.__ASSET_TEST__?.diagnostics.boss.activeClip);
+      expect(activeClip).toBe(clip);
+    }
+
+    // 3. Test switching player model to samurai and verifying its buttons work
+    const samuraiBtn = page.locator('button[data-model="samurai"]');
+    await expect(samuraiBtn).toBeVisible();
+    await samuraiBtn.click();
+    await page.waitForFunction(() => window.__ASSET_TEST__?.diagnostics.player.modelId === 'samurai');
+
+    const samuraiDodgeBtn = page.locator('#player-anim-buttons button[data-clip="dodge"]');
+    await samuraiDodgeBtn.click();
+    await expect(samuraiDodgeBtn).toHaveClass(/active/);
+
+    expect(consoleErrors).toEqual([]);
+    expect(pageErrors).toEqual([]);
+  });
 });

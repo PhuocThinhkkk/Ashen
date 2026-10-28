@@ -36,6 +36,8 @@ export class BossCharacter {
 
   // Weapon & Material
   public readonly greatswordGroup = new THREE.Group();
+  public bladeMesh: THREE.Mesh | null = null;
+  public readonly bladeHitbox = new THREE.Object3D();
   public readonly bladeMaterial: THREE.MeshStandardMaterial;
   public handBone: THREE.Object3D | null = null;
 
@@ -94,10 +96,15 @@ export class BossCharacter {
 
     // Heavy Blade
     const bladeGeo = new THREE.BoxGeometry(0.22, 2.2, 0.04);
-    const blade = new THREE.Mesh(bladeGeo, this.bladeMaterial);
-    blade.position.y = 1.15;
-    blade.castShadow = true;
-    this.greatswordGroup.add(blade);
+    this.bladeMesh = new THREE.Mesh(bladeGeo, this.bladeMaterial);
+    this.bladeMesh.position.y = 1.15;
+    this.bladeMesh.castShadow = true;
+    this.greatswordGroup.add(this.bladeMesh);
+
+    // Collision hitbox parented directly to the sword mesh
+    this.bladeHitbox.name = 'BossBladeHitbox';
+    this.bladeHitbox.position.set(0, 0, 0);
+    this.bladeMesh.add(this.bladeHitbox);
   }
 
   public async loadModel(modelId: string): Promise<void> {
@@ -143,19 +150,41 @@ export class BossCharacter {
     this.modelScene.rotation.y = Math.PI;
     this.modelScene.updateMatrixWorld(true);
 
-    // Hide helper meshes (hand_shape and Cylinder) and enable shadows
+    // Hide debug helper meshes (white hemispherical geometry, cylinders, helper shapes)
     this.modelScene.traverse((obj) => {
-      if (obj.name === 'hand_shape' || obj.name === 'Cylinder') {
+      const lower = obj.name.toLowerCase();
+      if (
+        lower.includes('icosphere') ||
+        lower.includes('cylinder') ||
+        lower.includes('hand_shape') ||
+        lower.includes('plane')
+      ) {
         obj.visible = false;
       }
       if (obj instanceof THREE.Mesh) {
-        obj.castShadow = true;
-        obj.receiveShadow = true;
+        if (
+          lower.includes('icosphere') ||
+          lower.includes('cylinder') ||
+          lower.includes('hand_shape') ||
+          lower.includes('plane')
+        ) {
+          obj.visible = false;
+        } else {
+          obj.castShadow = true;
+          obj.receiveShadow = true;
+        }
       }
     });
 
-    // 4. Locate target socket hand bone (specifically handR, not IK helper bones)
-    this.handBone = ModelLoader.findSocketBone(this.modelScene, ['handR', 'hand.R']);
+    // 4. Locate target socket hand bone (specifically hand.R, handR, PalmR, Palm.R)
+    this.handBone = ModelLoader.findSocketBone(this.modelScene, [
+      'hand.R',
+      'handR',
+      'Palm.R',
+      'PalmR',
+      'RightHand',
+      'mixamorigRightHand',
+    ]);
     if (!this.handBone) {
       console.warn(`[BossCharacter] Hand socket bone not found in model "${modelId}".`);
     }
@@ -167,6 +196,7 @@ export class BossCharacter {
       this.handBone.add(this.greatswordGroup);
       this.handBone.updateMatrixWorld(true);
       this.greatswordGroup.updateMatrixWorld(true);
+      this.bladeHitbox.updateMatrixWorld(true);
     }
 
     // 6. Setup Animation Mixer with standardized clips
@@ -229,6 +259,8 @@ export class BossCharacter {
     }
     if (this.handBone) {
       this.handBone.updateMatrixWorld(true);
+      this.greatswordGroup.updateMatrixWorld(true);
+      this.bladeHitbox.updateMatrixWorld(true);
     }
 
     if (this.state === 'dead') {
@@ -386,6 +418,11 @@ export class BossCharacter {
       this.telegraphGlow = 0;
       this.playAction('idle', 0.2);
     }
+  }
+
+  public getBladeHitboxWorldPosition(target: THREE.Vector3 = new THREE.Vector3()): THREE.Vector3 {
+    this.bladeHitbox.updateMatrixWorld(true);
+    return this.bladeHitbox.getWorldPosition(target);
   }
 
   public takeDamage(damage: number, poiseDamage: number): boolean {

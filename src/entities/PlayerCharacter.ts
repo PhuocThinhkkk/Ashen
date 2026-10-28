@@ -121,18 +121,32 @@ export class PlayerCharacter {
     this.modelScene.rotation.y = Math.PI;
     this.modelScene.updateMatrixWorld(true);
 
-    // Shadows
+    // Hide debug meshes & enable shadows
     this.modelScene.traverse((obj) => {
+      const lower = obj.name.toLowerCase();
+      if (
+        lower.includes('icosphere') ||
+        lower.includes('cylinder') ||
+        lower.includes('hand_shape') ||
+        lower.includes('plane')
+      ) {
+        obj.visible = false;
+      }
       if (obj instanceof THREE.Mesh) {
-        obj.castShadow = true;
-        obj.receiveShadow = true;
+        if (lower.includes('icosphere') || lower.includes('cylinder')) {
+          obj.visible = false;
+        } else {
+          obj.castShadow = true;
+          obj.receiveShadow = true;
+        }
       }
     });
 
     // 5. Locate PalmR socket bone dynamically
     this.handBone = ModelLoader.findSocketBone(this.modelScene, [
-      'PalmR',
       'Palm.R',
+      'PalmR',
+      'MiddleHand.R',
       'mixamorigRightHand',
       'RightHand',
     ]);
@@ -391,7 +405,10 @@ export class PlayerCharacter {
     }
 
     this.group.rotation.y = Math.atan2(-this.dodgeDirection.x, -this.dodgeDirection.z);
-    this.playAction('dodge', 0.08, THREE.LoopOnce, true, 2.5);
+    const dodgeClip = ModelLoader.findClip(this.rawClips, 'dodge');
+    const clipDuration = dodgeClip ? dodgeClip.duration : 1.29;
+    const dodgeTimeScale = clipDuration / this.dodgeConfig.duration;
+    this.playAction('dodge', 0.05, THREE.LoopOnce, true, dodgeTimeScale);
   }
 
   private updateDodge(delta: number): void {

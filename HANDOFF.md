@@ -97,7 +97,29 @@ In the new session, start Milestone 4 work:
 
 ---
 
-## 5. File & Directory Reference
+## 5. 3D Model & Animation Architecture Guide
+
+For comprehensive details on Blender compilation, Action Slots, skeleton archetypes, and debugging, see **[MODEL_PIPELINE.md](./MODEL_PIPELINE.md)**.
+
+### Fast Inspection & Compilation Commands
+```bash
+# Inspect all compiled models (fast Node script, reports triangles, bones, socket targets, clip names & durations):
+npm run inspect:model
+
+# Inspect raw FBX files (Blender headless script, reports archetype, actions, and debug artifacts):
+npm run inspect:fbx -- assets/raw/bosses/titan/base.fbx
+npm run inspect:fbx -- assets/raw/anims/boss_shared/Heavy_Smash.fbx
+
+# Rebuild all character models from FBX sources:
+npm run build:models:clean
+
+# Visual validation: capture all animations at mid-frame with Playwright:
+npm run capture:anims
+```
+
+---
+
+## 6. File & Directory Reference
 
 ```
 souls-browser/
@@ -135,7 +157,8 @@ souls-browser/
 ├── tests/
 │   ├── combat.spec.ts         # Playwright combat E2E tests
 │   ├── visual.spec.ts         # Visual canvas smoke test
-│   └── asset-validation.spec.ts # Milestone 3 isolated asset validation test
+│   ├── asset-validation.spec.ts # Milestone 3 isolated asset validation test
+│   └── animation-capture.spec.ts # Automated mid-frame animation capture test
 ├── index.html                 # Main game page
 ├── asset-test.html            # Isolated asset inspection harness
 ├── playwright.config.ts       # Test configuration (configured for Chrome)
@@ -144,7 +167,7 @@ souls-browser/
 
 ---
 
-## 6. How to Run & Verify
+## 7. How to Run & Verify
 
 ```bash
 # Start local development server (runs on http://127.0.0.1:5188)

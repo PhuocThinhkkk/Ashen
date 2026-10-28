@@ -342,6 +342,11 @@ export class Game {
       !this.boss.hasHitCurrentSwing &&
       this.player.state !== 'dead'
     ) {
+      // Precise blade collision registered directly via the weapon hitbox parented to sword mesh
+      const bladeHitboxPos = this.boss.getBladeHitboxWorldPosition();
+      const distToBlade = this.player.group.position.distanceTo(bladeHitboxPos);
+      const bladeHit = distToBlade <= (this.player.radius + 2.0);
+
       const hit = checkAttackHit(
         this.boss.group.position,
         this.boss.group.rotation.y,
@@ -351,8 +356,8 @@ export class Game {
         this.player.isInvulnerable, // Protected by dodge i-frames!
       );
 
-      if (hit.hit) {
-        const damageDealt = this.player.takeDamage(hit.damage, hit.isHeavy);
+      if ((bladeHit || hit.hit) && !this.player.isInvulnerable) {
+        const damageDealt = this.player.takeDamage(hit.damage || this.boss.currentAttack.damage, hit.isHeavy);
         this.boss.hasHitCurrentSwing = true;
 
         if (damageDealt) {

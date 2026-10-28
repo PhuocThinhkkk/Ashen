@@ -27,47 +27,26 @@ except ImportError:
     sys.exit(1)
 
 
-# Standard animation mapping dictionaries
-# Maps raw animation file stems into standardized game state names
-PLAYER_ANIM_MAP = {
-    "idle_01": "idle",
-    "idle": "idle",
-    "great_sword_slash": "attack_light",
-    "attack_light": "attack_light",
-    "sword_and_shield_slash": "attack_light",
-    "run_sword_attack": "attack_light",
-    "jump_attack": "attack_heavy",
-    "sword_attack_jump": "attack_heavy",
-    "attack_heavy": "attack_heavy",
-    "dive_roll": "dodge",
-    "roll": "dodge",
-    "dodge": "dodge",
-    "walking": "walk",
-    "walk": "walk",
-    "run": "run",
-    "running": "run",
-    "death": "death",
-    "die": "death",
+# Standard animation mapping priorities
+# Maps standardized game state names to list of candidate action/file name patterns in order of priority
+PLAYER_STANDARD_TARGETS = {
+    "idle": ["idle_swordright", "idle_01", "idle"],
+    "walk": ["walking", "walk"],
+    "run": ["run_swordright", "running", "run"],
+    "dodge": ["roll_sword", "roll", "dive_roll", "stand_to_roll", "dodge"],
+    "attack_light": ["run_sword_attack", "run_swordattack", "great_sword_slash", "attack_light", "slash"],
+    "attack_heavy": ["sword_attack_jump", "swordattackjump", "jump_attack", "attack_heavy"],
+    "death": ["death", "die"],
 }
 
-BOSS_ANIM_MAP = {
-    "boss_idle": "idle",
-    "idle": "idle",
-    "heavy_smash": "attack_heavy",
-    "attack": "attack_heavy",
-    "attack_heavy": "attack_heavy",
-    "roar": "special",
-    "taunt": "special",
-    "special": "special",
-    "walking": "walking",
-    "walk": "walking",
-    "hit_reaction": "hit",
-    "hit": "hit",
-    "die": "die",
-    "death": "die",
+BOSS_STANDARD_TARGETS = {
+    "idle": ["|idle", "boss_idle", "idle"],
+    "walking": ["|walking", "walking", "walk"],
+    "attack_heavy": ["|attack", "heavy_smash", "attack_heavy", "attack_downward"],
+    "special": ["|taunt", "roar", "special"],
+    "hit": ["|hit", "hit_reaction", "hit"],
+    "die": ["|die", "die", "death"],
 }
-
-COMBINED_MAP = {**PLAYER_ANIM_MAP, **BOSS_ANIM_MAP}
 
 
 def normalize_stem(stem: str) -> str:
@@ -82,25 +61,41 @@ def normalize_stem(stem: str) -> str:
     return s.strip("_").lower()
 
 
-def map_animation_name(raw_name: str, category: str = "auto") -> str:
+def find_best_action(actions, target_patterns):
     """
-    Maps raw animation filename to standard state name based on category.
-    Examples:
-        Idle_01 -> idle
-        Great_Sword_Slash -> attack_light
-        Dive_Roll -> dodge
-        Boss_Idle -> idle
-        Heavy_Smash -> attack_heavy
-        Roar -> special
+    Finds the action that best matches target patterns with length > 2 frames.
+    Avoids 1-frame placeholder/base poses.
     """
-    norm = normalize_stem(raw_name)
-    if category == "player" and norm in PLAYER_ANIM_MAP:
-        return PLAYER_ANIM_MAP[norm]
-    if category == "boss" and norm in BOSS_ANIM_MAP:
-        return BOSS_ANIM_MAP[norm]
-    if norm in COMBINED_MAP:
-        return COMBINED_MAP[norm]
-    return norm
+    # 1. Try patterns with length > 2 frames
+    for pat in target_patterns:
+        pat_clean = pat.lower().strip("|")
+        pat_alnum = re.sub(r"[^a-z0-9]", "", pat_clean)
+        for a in actions:
+            name_lower = a.name.lower()
+            length = a.frame_range[1] - a.frame_range[0]
+            if length <= 2:
+                continue
+            if pat.startswith("|") and name_lower.endswith(pat.lower()):
+                return a
+            norm_name = normalize_stem(a.name)
+            norm_alnum = re.sub(r"[^a-z0-9]", "", norm_name)
+            if pat_alnum and (pat_alnum == norm_alnum or norm_alnum.endswith(pat_alnum) or pat_alnum in norm_alnum):
+                return a
+
+    # 2. Relax length check if nothing found
+    for pat in target_patterns:
+        pat_clean = pat.lower().strip("|")
+        pat_alnum = re.sub(r"[^a-z0-9]", "", pat_clean)
+        for a in actions:
+            name_lower = a.name.lower()
+            if pat.startswith("|") and name_lower.endswith(pat.lower()):
+                return a
+            norm_name = normalize_stem(a.name)
+            norm_alnum = re.sub(r"[^a-z0-9]", "", norm_name)
+            if pat_alnum and (pat_alnum == norm_alnum or norm_alnum.endswith(pat_alnum) or pat_alnum in norm_alnum):
+                return a
+
+    return None
 
 
 def parse_args():
@@ -216,86 +211,120 @@ def main():
 
     print(f"[Blender Pipeline] Found main armature: '{main_armature.name}' (category: {category})")
 
+    # Remove debug helper meshes (white hemispherical geometry, cylinders, helper shapes)
+    for obj in list(bpy.data.objects):
+        if obj.type == "MESH":
+            low_name = obj.name.lower()
+            if (
+                "icosphere" in low_name
+                or "cylinder" in low_name
+                or "hand_shape" in low_name
+                or "plane" in low_name
+            ):
+                print(f"[Blender Pipeline] Removing debug mesh artifact: '{obj.name}'")
+                bpy.data.objects.remove(obj, do_unlink=True)
+
     if not main_armature.animation_data:
         main_armature.animation_data_create()
 
-    # Discover animation files in anims_dir
+    # Discover animation files in anims_dir and optional assets/animation-request/<category>
     anim_files = []
+    search_dirs = []
     if anims_dir and anims_dir.exists() and anims_dir.is_dir():
-        seen_paths = set()
+        search_dirs.append(anims_dir)
+
+    # Also check animation-request folder
+    req_dir = Path(__file__).resolve().parent.parent / "assets" / "animation-request" / category
+    if req_dir.exists() and req_dir.is_dir():
+        search_dirs.append(req_dir)
+
+    seen_paths = set()
+    for s_dir in search_dirs:
         for ext in ("*.fbx", "*.FBX", "*.glb", "*.gltf"):
-            for p in anims_dir.glob(ext):
+            for p in s_dir.glob(ext):
                 resolved = p.resolve()
                 if resolved not in seen_paths:
                     seen_paths.add(resolved)
                     anim_files.append(resolved)
-        anim_files.sort()
-    else:
-        print(f"[Blender Pipeline] Note: Anims directory '{anims_dir}' not found or empty.")
+    anim_files.sort()
 
-    merged_tracks = []
-    registered_names = set()
+    print(f"[Blender Pipeline] Found {len(anim_files)} animation sources across {len(search_dirs)} directories.")
+
+    all_imported_actions = []
+    existing_actions = set(bpy.data.actions)
+    existing_objects = set(bpy.context.scene.objects)
 
     for anim_path in anim_files:
-        standard_name = map_animation_name(anim_path.stem, category)
-        # Avoid duplicate track names
-        final_track_name = standard_name
-        counter = 1
-        while final_track_name in registered_names:
-            final_track_name = f"{standard_name}_{counter}"
-            counter += 1
-        registered_names.add(final_track_name)
-
-        print(f"[Blender Pipeline] Merging '{anim_path.name}' -> standard track '{final_track_name}'")
-
-        existing_actions = set(bpy.data.actions)
-        existing_objects = set(bpy.context.scene.objects)
-
-        if anim_path.suffix.lower() == ".fbx":
-            bpy.ops.import_scene.fbx(filepath=str(anim_path))
-        else:
-            bpy.ops.import_scene.gltf(filepath=str(anim_path))
-
-        new_actions = list(set(bpy.data.actions) - existing_actions)
-        new_objects = list(set(bpy.context.scene.objects) - existing_objects)
-
-        if not new_actions:
-            print(f"  Warning: No action generated from {anim_path.name}, skipping.")
-            for obj in new_objects:
-                bpy.data.objects.remove(obj, do_unlink=True)
+        try:
+            if anim_path.suffix.lower() == ".fbx":
+                bpy.ops.import_scene.fbx(filepath=str(anim_path))
+            else:
+                bpy.ops.import_scene.gltf(filepath=str(anim_path))
+        except Exception as e:
+            print(f"  Warning: Failed to import {anim_path.name}: {e}")
             continue
 
-        imported_action = new_actions[0]
-        imported_action.name = final_track_name
-        imported_action.use_fake_user = True
+        new_acts = list(set(bpy.data.actions) - existing_actions)
+        new_objs = list(set(bpy.context.scene.objects) - existing_objects)
 
-        # Attach NLA track and strip
+        for act in new_acts:
+            act.use_fake_user = True
+            all_imported_actions.append(act)
+            existing_actions.add(act)
+
+        for obj in new_objs:
+            try:
+                bpy.data.objects.remove(obj, do_unlink=True)
+            except Exception:
+                pass
+            existing_objects.discard(obj)
+
+    targets = (
+        PLAYER_STANDARD_TARGETS if category == "player" else BOSS_STANDARD_TARGETS
+    )
+
+    merged_tracks = []
+    assigned_actions = set()
+
+    for std_name, candidate_patterns in targets.items():
+        # Find best matching action from all imported actions
+        best_act = find_best_action(
+            [a for a in all_imported_actions if a not in assigned_actions],
+            candidate_patterns,
+        )
+        if not best_act:
+            # Fallback allowing reuse if needed
+            best_act = find_best_action(all_imported_actions, candidate_patterns)
+
+        if not best_act:
+            print(f"  Warning: No action found matching standard track '{std_name}' (patterns: {candidate_patterns})")
+            continue
+
+        assigned_actions.add(best_act)
+        best_act.name = std_name
+        best_act.use_fake_user = True
+
         track = main_armature.animation_data.nla_tracks.new()
-        track.name = final_track_name
+        track.name = std_name
 
         strip = track.strips.new(
-            final_track_name,
-            int(imported_action.frame_range[0]),
-            imported_action,
+            std_name,
+            int(best_act.frame_range[0]),
+            best_act,
         )
-        strip.action_frame_start = imported_action.frame_range[0]
-        strip.action_frame_end = imported_action.frame_range[1]
+        strip.action_frame_start = best_act.frame_range[0]
+        strip.action_frame_end = best_act.frame_range[1]
 
         # Action Slot compatibility for Blender 4.4 / 5.x
         if hasattr(strip, "action_slot") and strip.action_slot is None:
             if hasattr(strip, "action_suitable_slots") and strip.action_suitable_slots:
                 strip.action_slot = strip.action_suitable_slots[0]
-            elif hasattr(imported_action, "slots") and len(imported_action.slots) > 0:
-                strip.action_slot = imported_action.slots[0]
+            elif hasattr(best_act, "slots") and len(best_act.slots) > 0:
+                strip.action_slot = best_act.slots[0]
 
-        # Purge temporary imported objects
-        for obj in new_objects:
-            try:
-                bpy.data.objects.remove(obj, do_unlink=True)
-            except Exception:
-                pass
-
-        merged_tracks.append(final_track_name)
+        merged_tracks.append(std_name)
+        duration_s = (best_act.frame_range[1] - best_act.frame_range[0]) / 24.0
+        print(f"[Blender Pipeline] Standardized track '{std_name}' -> '{best_act.name}' ({best_act.frame_range[0]}..{best_act.frame_range[1]}, ~{duration_s:.2f}s)")
 
     print(f"[Blender Pipeline] Successfully embedded {len(merged_tracks)} standardized NLA tracks: {merged_tracks}")
 

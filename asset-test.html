@@ -4,8 +4,11 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" href="data:," />
-    <title>Milestone 3 Isolated Asset Validation Harness</title>
+    <title>Isolated Asset & Animation Validation Harness</title>
     <style>
+      *, *::before, *::after {
+        box-sizing: border-box;
+      }
       body, html {
         margin: 0;
         padding: 0;
@@ -14,7 +17,8 @@
         overflow: hidden;
         background: #0a0e16;
         color: #e5ded2;
-        font-family: monospace;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Courier New', monospace;
+        user-select: none;
       }
       #test-canvas {
         display: block;
@@ -23,55 +27,255 @@
       }
       #overlay {
         position: absolute;
-        top: 16px;
-        left: 16px;
-        background: rgba(10, 14, 22, 0.85);
+        top: 14px;
+        left: 14px;
+        background: rgba(10, 14, 22, 0.92);
         border: 1px solid #7a5e2a;
-        padding: 12px 16px;
-        border-radius: 4px;
-        font-size: 13px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.75), inset 0 0 16px rgba(122, 94, 42, 0.15);
+        padding: 14px 18px;
+        border-radius: 6px;
+        font-size: 12px;
         line-height: 1.5;
-        max-width: 480px;
+        max-width: 520px;
+        max-height: calc(100vh - 28px);
+        overflow-y: auto;
         pointer-events: auto;
+        backdrop-filter: blur(6px);
       }
-      .status-ok { color: #38d665; font-weight: bold; }
-      .status-wait { color: #ffaa33; }
-      .status-err { color: #db2c2c; font-weight: bold; }
-      .controls {
-        margin-top: 8px;
+      #overlay::-webkit-scrollbar {
+        width: 6px;
+      }
+      #overlay::-webkit-scrollbar-track {
+        background: rgba(10, 14, 22, 0.6);
+      }
+      #overlay::-webkit-scrollbar-thumb {
+        background: #7a5e2a;
+        border-radius: 3px;
+      }
+      .panel-header {
+        font-weight: 700;
+        color: #ffaa33;
+        font-size: 13px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        border-bottom: 1px solid rgba(122, 94, 42, 0.5);
+        padding-bottom: 6px;
+        margin-bottom: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      #overlay.collapsed .section,
+      #overlay.collapsed .diag-line,
+      #overlay.collapsed .hint {
+        display: none !important;
+      }
+      .panel-toggle-btn {
+        background: transparent;
+        border: 1px solid #7a5e2a;
+        color: #ffaa33;
+        padding: 2px 6px;
+        font-size: 10px;
+        cursor: pointer;
+        border-radius: 3px;
+      }
+      .status-ok { color: #38d665; font-weight: 600; }
+      .status-wait { color: #ffaa33; font-weight: 600; }
+      .status-err { color: #db2c2c; font-weight: 600; }
+      .diag-line {
+        margin: 3px 0;
+        color: #c0b8ac;
+        font-family: monospace;
+        font-size: 11.5px;
+      }
+      .diag-line strong {
+        color: #e5ded2;
+      }
+      .section {
+        margin-top: 12px;
+        padding-top: 10px;
+        border-top: 1px solid rgba(255, 255, 255, 0.08);
+      }
+      .section-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 6px;
+        font-size: 11.5px;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+      }
+      .section-header.player {
+        color: #d4af37;
+      }
+      .section-header.boss {
+        color: #ff5555;
+      }
+      .section-header.util {
+        color: #8bb2d6;
+      }
+      .active-badge {
+        font-size: 10px;
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-weight: normal;
+        font-family: monospace;
+        background: rgba(255, 255, 255, 0.08);
+        color: #e5ded2;
+        border: 1px solid rgba(255, 255, 255, 0.15);
+      }
+      .btn-group {
         display: flex;
         flex-wrap: wrap;
         gap: 6px;
       }
       button {
-        background: #182232;
-        border: 1px solid #b5954a;
+        background: #141c28;
+        border: 1px solid #7a5e2a;
         color: #e5ded2;
-        padding: 4px 8px;
-        font-family: inherit;
+        padding: 5px 10px;
+        font-family: monospace;
         font-size: 11px;
         cursor: pointer;
-        border-radius: 2px;
+        border-radius: 3px;
+        transition: background 0.15s ease, border-color 0.15s ease, transform 0.08s ease;
       }
       button:hover {
-        background: #28364e;
+        background: #233145;
+        border-color: #b5954a;
       }
-      button.active {
+      button:active {
+        transform: translateY(1px);
+      }
+      /* Player buttons */
+      button.btn-player {
+        border-color: #8c733b;
+      }
+      button.btn-player:hover {
+        border-color: #d4af37;
+        background: #273549;
+      }
+      button.btn-player.active {
         background: #b5954a;
         color: #0a0e16;
-        font-weight: bold;
+        border-color: #ffd700;
+        font-weight: 700;
+        box-shadow: 0 0 8px rgba(212, 175, 55, 0.4);
+      }
+      /* Boss buttons */
+      button.btn-boss {
+        border-color: #8b2b2b;
+        color: #f0c0c0;
+      }
+      button.btn-boss:hover {
+        border-color: #db2c2c;
+        background: #381a1a;
+      }
+      button.btn-boss.active {
+        background: #b82222;
+        color: #ffffff;
+        border-color: #ff6666;
+        font-weight: 700;
+        box-shadow: 0 0 8px rgba(219, 44, 44, 0.5);
+      }
+      /* Model selector & Util buttons */
+      button.btn-util {
+        border-color: #485c75;
+        font-size: 10.5px;
+        padding: 3px 8px;
+      }
+      button.btn-util.active {
+        background: #3b5575;
+        color: #ffffff;
+        border-color: #8bb2d6;
+        font-weight: 700;
+      }
+      .hint {
+        margin-top: 10px;
+        font-size: 10.5px;
+        color: #807667;
+        border-top: 1px dashed rgba(122, 94, 42, 0.3);
+        padding-top: 6px;
+        display: flex;
+        justify-content: space-between;
       }
     </style>
   </head>
   <body>
     <canvas id="test-canvas"></canvas>
     <div id="overlay">
-      <div style="font-weight: bold; color: #ffaa33; margin-bottom: 4px;">MILESTONE 3: ISOLATED ASSET VALIDATION</div>
-      <div id="load-status" class="status-wait">Loading GLB assets...</div>
-      <div id="player-info" style="margin-top: 6px;">Player: -</div>
-      <div id="boss-info">Boss: -</div>
-      <div id="weapon-info">Weapon Socket: -</div>
-      <div class="controls" id="anim-buttons"></div>
+      <div class="panel-header">
+        <span>Asset & Animation Validation</span>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span id="load-status" class="status-wait">Loading...</span>
+          <button id="overlay-toggle" class="panel-toggle-btn" title="Toggle Panel">Hide</button>
+        </div>
+      </div>
+
+      <div class="diag-line" id="player-info">Player: -</div>
+      <div class="diag-line" id="boss-info">Boss: -</div>
+      <div class="diag-line" id="weapon-info">Weapon Socket: -</div>
+
+      <!-- Player Section -->
+      <div class="section">
+        <div class="section-header player">
+          <span>Player Animations</span>
+          <span id="player-active-label" class="active-badge">idle</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
+          <span style="font-size: 11px; color: #a0988c;">Model:</span>
+          <div class="btn-group" id="player-model-buttons">
+            <button class="btn-util active" data-model="knight">Knight</button>
+            <button class="btn-util" data-model="samurai">Samurai</button>
+          </div>
+        </div>
+        <div class="btn-group" id="player-anim-buttons"></div>
+      </div>
+
+      <!-- Boss Section -->
+      <div class="section">
+        <div class="section-header boss">
+          <span>Boss Animations</span>
+          <span id="boss-active-label" class="active-badge">idle</span>
+        </div>
+        <div class="btn-group" id="boss-anim-buttons"></div>
+      </div>
+
+      <!-- Camera & Utility Section -->
+      <div class="section">
+        <div class="section-header util">
+          <span>Camera & Speed</span>
+        </div>
+        <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+          <div class="btn-group" id="camera-buttons">
+            <button class="btn-util active" data-cam="both">View Both</button>
+            <button class="btn-util" data-cam="player">Focus Player</button>
+            <button class="btn-util" data-cam="boss">Focus Boss</button>
+            <button class="btn-util" data-cam="reset">Reset</button>
+          </div>
+          <div class="btn-group" id="speed-buttons">
+            <button class="btn-util" data-speed="0.25">0.25x</button>
+            <button class="btn-util" data-speed="0.5">0.5x</button>
+            <button class="btn-util active" data-speed="1.0">1.0x</button>
+            <button class="btn-util" data-speed="1.5">1.5x</button>
+          </div>
+          <div class="btn-group">
+            <button id="btn-capture-all" class="btn-util" style="border-color: #ffaa33; color: #ffaa33; font-weight: 700;">📸 Capture Mid-Frames</button>
+            <span id="capture-status" style="font-size: 11px; color: #38d665; align-self: center;"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Hidden backward-compatible container -->
+      <div id="anim-buttons" style="display: none;"></div>
+
+      <div class="hint">
+        <span>Orbit: Left-drag</span>
+        <span>Pan: Right-drag</span>
+        <span>Zoom: Scroll</span>
+      </div>
     </div>
     <script type="module" src="/src/asset-test.ts"></script>
   </body>
