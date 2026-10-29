@@ -25,6 +25,10 @@ export class AudioSystem {
     this.unlocked = true;
   }
 
+  public attackSwing(heavy = false): void {
+    this.swordSwing(heavy);
+  }
+
   public swordSwing(heavy = false): void {
     if (!this.context || this.context.state !== 'running') return;
     const now = this.context.currentTime;
@@ -104,6 +108,76 @@ export class AudioSystem {
     ring.connect(ringGain).connect(this.context.destination);
     ring.start(now);
     ring.stop(now + 0.36);
+  }
+
+  public hitConfirm(isHeavy = false): void {
+    if (!this.context || this.context.state !== 'running') return;
+    const now = this.context.currentTime;
+
+    // Sharp metallic impact cut
+    const osc = this.context.createOscillator();
+    const gain = this.context.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(isHeavy ? 1800 : 2400, now);
+    osc.frequency.exponentialRampToValueAtTime(isHeavy ? 420 : 680, now + 0.12);
+
+    const filter = this.context.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(isHeavy ? 1200 : 1800, now);
+    filter.Q.setValueAtTime(2.8, now);
+
+    gain.gain.setValueAtTime(isHeavy ? 0.4 : 0.28, now);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.14);
+
+    osc.connect(filter).connect(gain).connect(this.context.destination);
+    osc.start(now);
+    osc.stop(now + 0.15);
+
+    // Punchy bottom body impact
+    this.hitImpact(isHeavy);
+  }
+
+  public damageTaken(isHeavy = false, isBoss = false): void {
+    if (!this.context || this.context.state !== 'running') return;
+    const now = this.context.currentTime;
+
+    // Flesh / armor impact crunch
+    const baseFreq = isBoss ? (isHeavy ? 80 : 120) : (isHeavy ? 130 : 170);
+    const osc = this.context.createOscillator();
+    const gain = this.context.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(baseFreq, now);
+    osc.frequency.exponentialRampToValueAtTime(30, now + (isHeavy ? 0.3 : 0.18));
+
+    gain.gain.setValueAtTime(isHeavy ? 0.45 : 0.3, now);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + (isHeavy ? 0.32 : 0.2));
+
+    osc.connect(gain).connect(this.context.destination);
+    osc.start(now);
+    osc.stop(now + (isHeavy ? 0.35 : 0.22));
+
+    // Low rumble noise burst for heavy damage
+    if (isHeavy) {
+      const bufferSize = Math.floor(this.context.sampleRate * 0.18);
+      const buffer = this.context.createBuffer(1, bufferSize, this.context.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        data[i] = (Math.random() * 2 - 1) * 0.7;
+      }
+      const noise = this.context.createBufferSource();
+      noise.buffer = buffer;
+      const noiseFilter = this.context.createBiquadFilter();
+      noiseFilter.type = 'lowpass';
+      noiseFilter.frequency.setValueAtTime(isBoss ? 280 : 450, now);
+      noiseFilter.frequency.exponentialRampToValueAtTime(60, now + 0.16);
+
+      const noiseGain = this.context.createGain();
+      noiseGain.gain.setValueAtTime(0.3, now);
+      noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+
+      noise.connect(noiseFilter).connect(noiseGain).connect(this.context.destination);
+      noise.start(now);
+    }
   }
 
   public bossTelegraph(): void {

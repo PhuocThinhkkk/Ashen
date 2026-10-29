@@ -62,8 +62,8 @@ scene.background = new THREE.Color(0x0a0e16);
 scene.fog = new THREE.Fog(0x0b101a, 16, 60);
 
 const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
-camera.position.set(0, 2.5, 6.5);
-camera.lookAt(0, 1.2, 0);
+camera.position.set(1.9, 1.9, 5.0);
+camera.lookAt(1.9, 1.1, 0);
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -76,7 +76,7 @@ renderer.shadowMap.type = THREE.PCFShadowMap;
 
 // OrbitControls
 const controls = new OrbitControls(camera, renderer.domElement);
-controls.target.set(0, 1.2, 0);
+controls.target.set(1.9, 1.1, 0);
 controls.enableDamping = true;
 controls.dampingFactor = 0.08;
 controls.maxDistance = 30;
@@ -153,7 +153,8 @@ function stripRootMotion(clip: THREE.AnimationClip, rootBoneName: string) {
 
 // 3. Load Player Model
 async function loadPlayer(modelId: 'knight' | 'samurai') {
-  diagnostics.player.modelId = modelId;
+  loadStatusEl.className = 'status-wait';
+  loadStatusEl.textContent = `Loading ${modelId}.glb...`;
 
   // Cleanup old player if present
   if (currentPlayerScene) {
@@ -175,12 +176,9 @@ async function loadPlayer(modelId: 'knight' | 'samurai') {
     currentPlayerScene = null;
   }
 
-  loadStatusEl.className = 'status-wait';
-  loadStatusEl.textContent = `Loading ${modelId}.glb...`;
-
   const playerGltf = await loader.loadAsync(`/assets/models/players/${modelId}.glb`);
   currentPlayerScene = playerGltf.scene;
-  currentPlayerScene.position.set(-1.4, 0, 0);
+  currentPlayerScene.position.set(0.9, 0, 0);
 
   // Measure raw bounds and scale to exactly 1.80m height
   const rawBox = new THREE.Box3().setFromObject(currentPlayerScene);
@@ -188,6 +186,7 @@ async function loadPlayer(modelId: 'knight' | 'samurai') {
   rawBox.getSize(rawSize);
   const scaleFactor = 1.80 / (rawSize.y || 1);
   currentPlayerScene.scale.set(scaleFactor, scaleFactor, scaleFactor);
+  currentPlayerScene.rotation.y = 0;
   currentPlayerScene.updateMatrixWorld(true);
 
   const playerBox = new THREE.Box3().setFromObject(currentPlayerScene);
@@ -247,8 +246,8 @@ async function loadPlayer(modelId: 'knight' | 'samurai') {
 
   if (playerHandBone && axeObject) {
     axeObject.position.set(0, 0, 0);
-    axeObject.rotation.set(0, 0, 0);
-    axeObject.scale.set(0.01, 0.01, 0.01);
+    axeObject.rotation.set(-Math.PI * 0.5, 0, 0);
+    axeObject.scale.set(32, 32, 32);
     playerHandBone.add(axeObject);
     diagnostics.player.weaponAttached = true;
   }
@@ -273,6 +272,7 @@ async function loadPlayer(modelId: 'knight' | 'samurai') {
   // Update Player info line
   playerInfoEl.innerHTML = `<strong>Player (${modelId}):</strong> Height ${diagnostics.player.height}m | Bones: ${diagnostics.player.bonesCount} | Clips: ${diagnostics.player.clips.length}`;
   weaponInfoEl.innerHTML = `<strong>Weapon:</strong> Socketed to <span class="status-ok">${playerHandBone ? playerHandBone.name : 'NONE'}</span>`;
+  diagnostics.player.modelId = modelId;
 }
 
 // 4. Load Boss Model (titan.glb)
@@ -280,7 +280,7 @@ async function loadBoss() {
   loadStatusEl.textContent = 'Loading titan.glb...';
   const bossGltf = await loader.loadAsync('/assets/models/bosses/titan.glb');
   currentBossScene = bossGltf.scene;
-  currentBossScene.position.set(1.4, 0, 0);
+  currentBossScene.position.set(2.8, 0, 0);
 
   // Scale to 2.40m boss height
   const rawBossBox = new THREE.Box3().setFromObject(currentBossScene);
@@ -288,6 +288,8 @@ async function loadBoss() {
   rawBossBox.getSize(rawBossSize);
   const bossScaleFactor = 2.40 / (rawBossSize.y || 1);
   currentBossScene.scale.set(bossScaleFactor, bossScaleFactor, bossScaleFactor);
+  currentBossScene.rotation.y = 0;
+  currentBossScene.updateMatrixWorld(true);
   scene.add(currentBossScene);
 
   const bossBox = new THREE.Box3().setFromObject(currentBossScene);
@@ -320,7 +322,9 @@ async function loadBoss() {
         (obj.name === 'handR' ||
           obj.name === 'hand.R' ||
           obj.name === 'PalmR' ||
-          obj.name === 'Palm.R') &&
+          obj.name === 'Palm.R' ||
+          obj.name === 'mixamorig:RightHand' ||
+          obj.name.toLowerCase().includes('righthand')) &&
         !obj.name.includes('IK')
       ) {
         if (!bossHandBone) bossHandBone = obj;
@@ -367,7 +371,8 @@ async function loadBoss() {
       if (o instanceof THREE.Mesh) o.castShadow = true;
     });
     bossSwordGroup.position.set(0, 0, 0);
-    bossSwordGroup.rotation.set(-Math.PI * 0.4, 0, 0.4);
+    bossSwordGroup.rotation.set(-Math.PI * 0.5, 0, 0);
+    bossSwordGroup.scale.set(100, 100, 100);
     bossHandBone.add(bossSwordGroup);
   }
 

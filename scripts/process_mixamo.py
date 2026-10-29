@@ -30,22 +30,34 @@ except ImportError:
 # Standard animation mapping priorities
 # Maps standardized game state names to list of candidate action/file name patterns in order of priority
 PLAYER_STANDARD_TARGETS = {
-    "idle": ["idle_swordright", "idle_01", "idle"],
-    "walk": ["walking", "walk"],
-    "run": ["run_swordright", "running", "run"],
-    "dodge": ["roll_sword", "roll", "dive_roll", "stand_to_roll", "dodge"],
-    "attack_light": ["run_sword_attack", "run_swordattack", "great_sword_slash", "attack_light", "slash"],
-    "attack_heavy": ["sword_attack_jump", "swordattackjump", "jump_attack", "attack_heavy"],
-    "death": ["death", "die"],
+    "idle": ["great_sword_idle", "idle"],
+    "walk": ["great_sword_walk_forward", "walk"],
+    "walk_backward": ["great_sword_walk_backward"],
+    "strafe_left": ["great_sword_strafe_left"],
+    "strafe_right": ["great_sword_strafe_right"],
+    "run": ["great_sword_run", "run"],
+    "dodge": ["stand_to_roll", "roll"],
+    "attack_light": ["great_sword_light_attack", "attack_light"],
+    "attack_heavy": ["standing_melee_attack_downward", "great_sword_light_attack"],
+    "hit": ["great_sword_impact", "impact", "hit"],
+    "death": ["great_sword_impact", "hit", "death", "die"],
 }
 
 BOSS_STANDARD_TARGETS = {
-    "idle": ["|idle", "boss_idle", "idle"],
-    "walking": ["|walking", "walking", "walk"],
-    "attack_heavy": ["|attack", "heavy_smash", "attack_heavy", "attack_downward"],
-    "special": ["|taunt", "roar", "special"],
-    "hit": ["|hit", "hit_reaction", "hit"],
-    "die": ["|die", "die", "death"],
+    "idle": ["great_sword_idle", "idle"],
+    "walking": ["great_sword_walk_forward", "walk"],
+    "walk": ["great_sword_walk_forward", "walk"],
+    "run": ["great_sword_run", "run"],
+    "attack_heavy": ["standing_melee_attack_downward", "attack_heavy"],
+    "attack_combo": ["standing_melee_combo_attack_ver_2", "combo_attack"],
+    "attack_jump": ["standing_melee_run_jump_attack", "jump_attack"],
+    "attack_360": ["standing_melee_attack_360_low_heavy_attack", "360_attack"],
+    "kick": ["great_sword_kick", "kick"],
+    "attack_light": ["great_sword_light_attack"],
+    "special": ["standing_melee_attack_360_low_heavy_attack", "attack_360", "special"],
+    "hit": ["great_sword_impact", "hit"],
+    "die": ["great_sword_impact", "hit", "die", "death"],
+    "death": ["great_sword_impact", "hit", "death", "die"],
 }
 
 
@@ -72,14 +84,22 @@ def find_best_action(actions, target_patterns):
         pat_alnum = re.sub(r"[^a-z0-9]", "", pat_clean)
         for a in actions:
             name_lower = a.name.lower()
+            stem_lower = a.get("source_stem", "").lower()
             length = a.frame_range[1] - a.frame_range[0]
             if length <= 2:
                 continue
-            if pat.startswith("|") and name_lower.endswith(pat.lower()):
+            if pat.startswith("|") and (name_lower.endswith(pat.lower()) or stem_lower.endswith(pat.lower())):
                 return a
             norm_name = normalize_stem(a.name)
+            norm_stem = normalize_stem(stem_lower) if stem_lower else ""
             norm_alnum = re.sub(r"[^a-z0-9]", "", norm_name)
-            if pat_alnum and (pat_alnum == norm_alnum or norm_alnum.endswith(pat_alnum) or pat_alnum in norm_alnum):
+            stem_alnum = re.sub(r"[^a-z0-9]", "", norm_stem)
+            if pat_alnum and (
+                pat_alnum == norm_alnum
+                or norm_alnum.endswith(pat_alnum)
+                or pat_alnum in norm_alnum
+                or (stem_alnum and (pat_alnum == stem_alnum or stem_alnum.endswith(pat_alnum) or pat_alnum in stem_alnum))
+            ):
                 return a
 
     # 2. Relax length check if nothing found
@@ -211,38 +231,54 @@ def main():
 
     print(f"[Blender Pipeline] Found main armature: '{main_armature.name}' (category: {category})")
 
-    # Remove debug helper meshes (white hemispherical geometry, cylinders, helper shapes)
+    # Locate primary character mesh
+    char_mesh = next((o for o in bpy.data.objects if o.type == "MESH" and o.name.startswith("Object")), None)
+    if not char_mesh:
+        char_mesh = next((o for o in bpy.data.objects if o.type == "MESH" and len(o.data.vertices) > 500), None)
+    if not char_mesh:
+        char_mesh = next((o for o in bpy.data.objects if o.type == "MESH"), None)
+
+    # Purge all extraneous helper geometry, camera/light, and empty locator nodes
     for obj in list(bpy.data.objects):
-        if obj.type == "MESH":
-            low_name = obj.name.lower()
-            if (
-                "icosphere" in low_name
-                or "cylinder" in low_name
-                or "hand_shape" in low_name
-                or "plane" in low_name
-            ):
-                print(f"[Blender Pipeline] Removing debug mesh artifact: '{obj.name}'")
-                bpy.data.objects.remove(obj, do_unlink=True)
+        if obj != main_armature and obj != char_mesh:
+            print(f"[Blender Pipeline] Purging non-character object: '{obj.name}' ({obj.type})")
+            bpy.data.objects.remove(obj, do_unlink=True)
+
+    # Reset emission on all materials so character doesn't blow out into a blinding white mesh
+    for mat in list(bpy.data.materials):
+        if mat and mat.node_tree:
+            for node in mat.node_tree.nodes:
+                if node.type == "BSDF_PRINCIPLED":
+                    if "Emission Strength" in node.inputs:
+                        node.inputs["Emission Strength"].default_value = 0.0
+                    if "Emission Color" in node.inputs:
+                        node.inputs["Emission Color"].default_value = (0, 0, 0, 1)
 
     if not main_armature.animation_data:
         main_armature.animation_data_create()
 
-    # Discover animation files in anims_dir and optional assets/animation-request/<category>
+    # Discover animation files strictly from animation-request (65-bone Mixamo standard)
     anim_files = []
     search_dirs = []
-    if anims_dir and anims_dir.exists() and anims_dir.is_dir():
-        search_dirs.append(anims_dir)
 
-    # Also check animation-request folder
-    req_dir = Path(__file__).resolve().parent.parent / "assets" / "animation-request" / category
-    if req_dir.exists() and req_dir.is_dir():
-        search_dirs.append(req_dir)
+    req_root = Path(__file__).resolve().parent.parent / "assets" / "animation-request"
+    if req_root.exists() and req_root.is_dir():
+        search_dirs.append(req_root)
+        req_player = req_root / "player"
+        if req_player.exists() and req_player.is_dir():
+            search_dirs.append(req_player)
+        req_boss = req_root / "boss"
+        if req_boss.exists() and req_boss.is_dir():
+            search_dirs.append(req_boss)
 
     seen_paths = set()
     for s_dir in search_dirs:
         for ext in ("*.fbx", "*.FBX", "*.glb", "*.gltf"):
             for p in s_dir.glob(ext):
                 resolved = p.resolve()
+                # Exclude T-pose base models and base meshes from animation sources
+                if "t-pose" in resolved.name.lower() or resolved.stem.lower() == "base":
+                    continue
                 if resolved not in seen_paths:
                     seen_paths.add(resolved)
                     anim_files.append(resolved)
@@ -269,6 +305,9 @@ def main():
 
         for act in new_acts:
             act.use_fake_user = True
+            act["source_stem"] = anim_path.stem
+            # Overwrite default Mixamo action name (e.g. 'Armature|mixamo.com|Layer0') with the source file stem
+            act.name = anim_path.stem
             all_imported_actions.append(act)
             existing_actions.add(act)
 
@@ -300,31 +339,34 @@ def main():
             print(f"  Warning: No action found matching standard track '{std_name}' (patterns: {candidate_patterns})")
             continue
 
-        assigned_actions.add(best_act)
-        best_act.name = std_name
-        best_act.use_fake_user = True
+        act_to_use = best_act
+        if best_act in assigned_actions:
+            act_to_use = best_act.copy()
+        assigned_actions.add(act_to_use)
+        act_to_use.name = std_name
+        act_to_use.use_fake_user = True
 
         track = main_armature.animation_data.nla_tracks.new()
         track.name = std_name
 
         strip = track.strips.new(
             std_name,
-            int(best_act.frame_range[0]),
-            best_act,
+            int(act_to_use.frame_range[0]),
+            act_to_use,
         )
-        strip.action_frame_start = best_act.frame_range[0]
-        strip.action_frame_end = best_act.frame_range[1]
+        strip.action_frame_start = act_to_use.frame_range[0]
+        strip.action_frame_end = act_to_use.frame_range[1]
 
         # Action Slot compatibility for Blender 4.4 / 5.x
         if hasattr(strip, "action_slot") and strip.action_slot is None:
             if hasattr(strip, "action_suitable_slots") and strip.action_suitable_slots:
                 strip.action_slot = strip.action_suitable_slots[0]
-            elif hasattr(best_act, "slots") and len(best_act.slots) > 0:
-                strip.action_slot = best_act.slots[0]
+            elif hasattr(act_to_use, "slots") and len(act_to_use.slots) > 0:
+                strip.action_slot = act_to_use.slots[0]
 
         merged_tracks.append(std_name)
-        duration_s = (best_act.frame_range[1] - best_act.frame_range[0]) / 24.0
-        print(f"[Blender Pipeline] Standardized track '{std_name}' -> '{best_act.name}' ({best_act.frame_range[0]}..{best_act.frame_range[1]}, ~{duration_s:.2f}s)")
+        duration_s = (act_to_use.frame_range[1] - act_to_use.frame_range[0]) / 24.0
+        print(f"[Blender Pipeline] Standardized track '{std_name}' -> '{act_to_use.name}' ({act_to_use.frame_range[0]}..{act_to_use.frame_range[1]}, ~{duration_s:.2f}s)")
 
     print(f"[Blender Pipeline] Successfully embedded {len(merged_tracks)} standardized NLA tracks: {merged_tracks}")
 
@@ -332,6 +374,11 @@ def main():
     for act in list(bpy.data.actions):
         if act.name not in merged_tracks:
             bpy.data.actions.remove(act)
+
+    # Purge any leftover objects so scene contains strictly the character armature and mesh
+    for obj in list(bpy.data.objects):
+        if obj != main_armature and obj != char_mesh:
+            bpy.data.objects.remove(obj, do_unlink=True)
 
     # Clear active action so glTF exporter evaluates NLA tracks cleanly
     if main_armature.animation_data:
@@ -341,15 +388,21 @@ def main():
     output_glb.parent.mkdir(parents=True, exist_ok=True)
 
     print(f"[Blender Pipeline] Exporting standardized GLB: {output_glb.name}...")
-    bpy.context.view_layer.objects.active = main_armature
+    bpy.ops.object.select_all(action="DESELECT")
     main_armature.select_set(True)
+    if char_mesh:
+        char_mesh.select_set(True)
+    bpy.context.view_layer.objects.active = main_armature
 
     bpy.ops.export_scene.gltf(
         filepath=str(output_glb),
         export_format="GLB",
+        use_selection=True,
         export_animations=True,
         export_nla_strips=True,
         export_def_bones=False,
+        export_cameras=False,
+        export_lights=False,
         export_optimize_animation_size=True,
     )
 

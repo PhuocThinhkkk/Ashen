@@ -10,6 +10,7 @@ export interface AttackDefinition {
   arcAngle: number;      // Swept angle in radians
   forwardImpulse: number;// Lunge distance during active frame
   isHeavy?: boolean;
+  animationClip?: string;// Target clip name to play
 }
 
 export interface DodgeDefinition {
@@ -81,41 +82,79 @@ export const PLAYER_DODGE: DodgeDefinition = {
 };
 
 export const BOSS_ATTACKS: Record<string, AttackDefinition> = {
-  sweep: {
-    name: 'Ashen Cleave',
-    startup: 0.85,  // Readable telegraph: boss raises huge blade
-    active: 0.24,   // Swift horizontal arc
-    recovery: 1.15, // Clear punish window!
-    damage: 28,
+  downward: {
+    name: 'Downward Cleave',
+    startup: 0.95,
+    active: 0.22,
+    recovery: 1.25,
+    damage: 46,
+    poiseDamage: 55,
+    staminaCost: 0,
+    range: 4.6,
+    arcAngle: Math.PI * 0.55,
+    forwardImpulse: 2.8,
+    isHeavy: true,
+    animationClip: 'attack_heavy',
+  },
+  combo: {
+    name: 'Relentless Flurry',
+    startup: 0.70,
+    active: 0.40,
+    recovery: 1.05,
+    damage: 32,
     poiseDamage: 35,
     staminaCost: 0,
     range: 4.2,
-    arcAngle: Math.PI * 0.95,
-    forwardImpulse: 1.8,
+    arcAngle: Math.PI * 0.85,
+    forwardImpulse: 3.5,
+    isHeavy: false,
+    animationClip: 'attack_combo',
   },
-  slam: {
-    name: 'Sundering Smite',
-    startup: 1.15,  // Dramatic overhead telegraph
-    active: 0.20,   // Ground crunch
-    recovery: 1.40, // Extended punish window!
-    damage: 44,
-    poiseDamage: 60,
+  jump: {
+    name: 'Leaping Wrath',
+    startup: 1.05,
+    active: 0.30,
+    recovery: 1.35,
+    damage: 52,
+    poiseDamage: 65,
     staminaCost: 0,
-    range: 4.8,
-    arcAngle: Math.PI * 0.5,
-    forwardImpulse: 3.0,
+    range: 6.0,
+    arcAngle: Math.PI * 0.65,
+    forwardImpulse: 7.0,
     isHeavy: true,
+    animationClip: 'attack_jump',
   },
-  rush: {
-    name: 'Ash Lunge',
-    startup: 0.70,  // Stance drop
-    active: 0.25,   // Rapid thrust
-    recovery: 1.05,
-    damage: 32,
+  spin360: {
+    name: 'Ashen Maelstrom',
+    startup: 0.85,
+    active: 0.38,
+    recovery: 1.15,
+    damage: 38,
+    poiseDamage: 45,
+    staminaCost: 0,
+    range: 5.0,
+    arcAngle: Math.PI * 2.0, // Full 360 degree spin
+    forwardImpulse: 1.2,
+    isHeavy: true,
+    animationClip: 'attack_360',
+  },
+  kick: {
+    name: 'Spartan Kick',
+    startup: 0.45,
+    active: 0.18,
+    recovery: 0.75,
+    damage: 24,
     poiseDamage: 40,
     staminaCost: 0,
-    range: 5.6,
-    arcAngle: Math.PI * 0.4,
-    forwardImpulse: 6.5,
+    range: 3.0,
+    arcAngle: Math.PI * 0.45,
+    forwardImpulse: 2.2,
+    isHeavy: false,
+    animationClip: 'kick',
   },
 };
+
+// Legacy compatibility aliases for existing tests and references
+BOSS_ATTACKS.slam = BOSS_ATTACKS.downward;
+BOSS_ATTACKS.sweep = BOSS_ATTACKS.spin360;
+BOSS_ATTACKS.rush = BOSS_ATTACKS.jump;

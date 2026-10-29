@@ -38,6 +38,7 @@ export const PATHS = {
   playersOut: path.join(ROOT_DIR, 'public', 'assets', 'models', 'players'),
   bossesOut: path.join(ROOT_DIR, 'public', 'assets', 'models', 'bosses'),
   compilerScript: path.join(ROOT_DIR, 'scripts', 'process_mixamo.py'),
+  animRequest: path.join(ROOT_DIR, 'assets', 'animation-request'),
 };
 
 /**
@@ -139,6 +140,21 @@ export function discoverEntities(categoryDir, sharedAnimsDir, outDir, category) 
           sourceFiles.push(path.join(sharedAnimsDir, a.name));
         }
       }
+    }
+
+    if (fs.existsSync(PATHS.animRequest)) {
+      const scanReqDir = (dir) => {
+        if (!fs.existsSync(dir)) return;
+        for (const item of fs.readdirSync(dir, { withFileTypes: true })) {
+          const fullPath = path.join(dir, item.name);
+          if (item.isFile() && (item.name.toLowerCase().endsWith('.fbx') || item.name.toLowerCase().endsWith('.glb'))) {
+            sourceFiles.push(fullPath);
+          } else if (item.isDirectory()) {
+            scanReqDir(fullPath);
+          }
+        }
+      };
+      scanReqDir(PATHS.animRequest);
     }
 
     entities.push({

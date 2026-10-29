@@ -109,7 +109,6 @@ export class BossCharacter {
 
   public async loadModel(modelId: string): Promise<void> {
     this.isLoaded = false;
-    this.currentModelId = modelId;
 
     // 1. Detach weapon from existing bone
     if (this.greatswordGroup.parent) {
@@ -145,8 +144,12 @@ export class BossCharacter {
     this.modelScene = bossGltf.scene;
     this.rawClips = bossGltf.animations;
 
-    // Scale to 1.15x (~2.46m height) and align forward orientation (-Z)
-    this.modelScene.scale.set(1.15, 1.15, 1.15);
+    // Scale to exactly 2.45m height and align forward orientation (-Z)
+    const rawBox = new THREE.Box3().setFromObject(this.modelScene);
+    const rawSize = new THREE.Vector3();
+    rawBox.getSize(rawSize);
+    const scaleFactor = 2.45 / (rawSize.y || 1);
+    this.modelScene.scale.set(scaleFactor, scaleFactor, scaleFactor);
     this.modelScene.rotation.y = Math.PI;
     this.modelScene.updateMatrixWorld(true);
 
@@ -176,14 +179,15 @@ export class BossCharacter {
       }
     });
 
-    // 4. Locate target socket hand bone (specifically hand.R, handR, PalmR, Palm.R)
+    // 4. Locate target socket hand bone (specifically mixamorig:RightHand, RightHand, PalmR)
     this.handBone = ModelLoader.findSocketBone(this.modelScene, [
+      'mixamorig:RightHand',
+      'mixamorigRightHand',
+      'RightHand',
       'hand.R',
       'handR',
       'Palm.R',
       'PalmR',
-      'RightHand',
-      'mixamorigRightHand',
     ]);
     if (!this.handBone) {
       console.warn(`[BossCharacter] Hand socket bone not found in model "${modelId}".`);
@@ -192,7 +196,8 @@ export class BossCharacter {
     // 5. Parent Greatsword directly to hand bone node with local rotation/position offsets
     if (this.handBone) {
       this.greatswordGroup.position.set(0, 0, 0);
-      this.greatswordGroup.rotation.set(-Math.PI * 0.4, 0, 0.4);
+      this.greatswordGroup.rotation.set(-Math.PI * 0.5, 0, 0);
+      this.greatswordGroup.scale.set(100, 100, 100);
       this.handBone.add(this.greatswordGroup);
       this.handBone.updateMatrixWorld(true);
       this.greatswordGroup.updateMatrixWorld(true);
@@ -203,12 +208,13 @@ export class BossCharacter {
     this.mixer = new THREE.AnimationMixer(this.modelScene);
 
     for (const clip of bossGltf.animations) {
-      ModelLoader.stripRootMotion(clip, 'hips');
+      ModelLoader.stripRootMotion(clip, ['hips', 'mixamorig:Hips', 'mixamorigHips', 'Body']);
       const action = this.mixer.clipAction(clip);
       this.actions.set(clip.name, action);
     }
 
     this.group.add(this.modelScene);
+    this.currentModelId = modelId;
     this.isLoaded = true;
 
     // Play initial idle animation
@@ -323,20 +329,40 @@ export class BossCharacter {
     this.playAction('idle', 0.2, THREE.LoopRepeat, false, 1.0);
 
     const dist = this.distanceTo(playerPos);
-    const idleLimit = this.isPhase2 ? 0.4 : 0.8;
+    const idleLimit = this.isPhase2 ? 0.35 : 0.75;
 
     if (this.stateTimer >= idleLimit) {
-      if (dist <= 3.8) {
-        this.chooseAttack(Math.random() > 0.5 ? BOSS_ATTACKS.sweep : BOSS_ATTACKS.slam);
-      } else if (dist <= 7.5) {
-        if (Math.random() > 0.4) {
+      if (dist <= 3.2) {
+        // Close range: quick kick, combo or downward slam
+        const roll = Math.random();
+        if (roll < 0.35) {
+          this.chooseAttack(BOSS_ATTACKS.kick);
+        } else if (roll < 0.70) {
+          this.chooseAttack(BOSS_ATTACKS.downward);
+        } else {
+          this.chooseAttack(BOSS_ATTACKS.combo);
+        }
+      } else if (dist <= 5.5) {
+        // Mid range: 360 spin, downward slam, or combo
+        const roll = Math.random();
+        if (this.isPhase2 && roll < 0.45) {
+          this.chooseAttack(BOSS_ATTACKS.spin360);
+        } else if (roll < 0.35) {
+          this.chooseAttack(BOSS_ATTACKS.combo);
+        } else if (roll < 0.70) {
+          this.chooseAttack(BOSS_ATTACKS.downward);
+        } else {
           this.state = 'approach';
           this.stateTimer = 0;
-        } else {
-          this.chooseAttack(BOSS_ATTACKS.rush);
         }
       } else {
-        this.chooseAttack(BOSS_ATTACKS.rush);
+        // Long range: leap attack or close distance
+        if (Math.random() < 0.65) {
+          this.chooseAttack(BOSS_ATTACKS.jump);
+        } else {
+          this.state = 'approach';
+          this.stateTimer = 0;
+        }
       }
     }
   }
@@ -358,8 +384,15 @@ export class BossCharacter {
 
     this.group.position.addScaledVector(fwd, speed * delta);
 
-    if (dist <= 3.6 || this.stateTimer >= 2.5) {
-      this.chooseAttack(Math.random() > 0.4 ? BOSS_ATTACKS.sweep : BOSS_ATTACKS.slam);
+    if (dist <= 3.8 || this.stateTimer >= 2.2) {
+      const roll = Math.random();
+      if (this.isPhase2 && roll < 0.4) {
+        this.chooseAttack(BOSS_ATTACKS.spin360);
+      } else if (roll < 0.5) {
+        this.chooseAttack(BOSS_ATTACKS.combo);
+      } else {
+        this.chooseAttack(BOSS_ATTACKS.downward);
+      }
     }
   }
 
@@ -372,9 +405,14 @@ export class BossCharacter {
 
     const speedMod = this.isPhase2 ? 1.15 : 1.0;
     const totalDuration = (attack.startup + attack.active + attack.recovery) / speedMod;
-    const attackTimeScale = 2.25 / totalDuration;
 
-    this.playAction('attack', 0.15, THREE.LoopOnce, true, attackTimeScale);
+    // Use specific clip defined in AttackDefinition (downward, combo, jump, 360, kick)
+    const clipName = attack.animationClip || 'attack_heavy';
+    const clip = ModelLoader.findClip(this.rawClips, clipName);
+    const clipDuration = clip ? clip.duration : 2.5;
+    const attackTimeScale = (clipDuration / totalDuration);
+
+    this.playAction(clipName, 0.12, THREE.LoopOnce, true, attackTimeScale);
   }
 
   private updateAttackFrames(delta: number, playerPos: THREE.Vector3): void {

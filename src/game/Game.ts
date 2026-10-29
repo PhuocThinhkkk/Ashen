@@ -9,6 +9,7 @@ import { AudioSystem } from '../systems/AudioSystem';
 import { DebugTools, type DebugTuning } from '../systems/DebugTools';
 import { Hud } from '../systems/Hud';
 import { SoulslikeCamera } from '../systems/SoulslikeCamera';
+import { VFXSystem } from '../systems/VFXSystem';
 import { Arena } from '../world/Arena';
 
 export const AVAILABLE_PLAYER_MODELS = [
@@ -32,6 +33,7 @@ export class Game {
   private readonly input: InputController;
   private readonly cameraRig: SoulslikeCamera;
   private readonly audio = new AudioSystem();
+  private readonly vfx: VFXSystem;
   private readonly hud: Hud;
   private readonly debugTools: DebugTools;
 
@@ -76,6 +78,7 @@ export class Game {
 
     this.input = new InputController(canvas);
     this.cameraRig = new SoulslikeCamera(this.camera);
+    this.vfx = new VFXSystem(this.scene);
 
     this.hud = new Hud({
       playerModels: AVAILABLE_PLAYER_MODELS,
@@ -142,6 +145,7 @@ export class Game {
     this.loop.stop();
     this.input.dispose();
     this.audio.dispose();
+    this.vfx.dispose();
     this.debugTools.dispose();
     this.arena.dispose();
     this.player.dispose();
@@ -264,7 +268,10 @@ export class Game {
     // 4. Combat Hit Resolution
     this.resolveCombatCollisions();
 
-    // 5. Audio State Transition Triggers
+    // 5. Update Visual Effects (Sparks & Hit Flashes)
+    this.vfx.update(delta);
+
+    // 6. Audio State Transition Triggers
     this.updateAudioTriggers();
 
     // 6. Update Camera
@@ -319,7 +326,15 @@ export class Game {
         const screenPos = this.projectToScreen(this.boss.group.position, 1.5);
         this.hud.spawnDamageNumber(hit.damage, screenPos.x, screenPos.y, false);
 
-        this.audio.hitImpact(hit.isHeavy);
+        // Combat VFX: Hit sparks and mesh flash
+        const hitPoint = hit.contactPoint || this.boss.group.position.clone().add(new THREE.Vector3(0, 1.4, 0));
+        const fwdAngle = this.player.group.rotation.y;
+        const hitDir = new THREE.Vector3(-Math.sin(fwdAngle), 0.25, -Math.cos(fwdAngle)).normalize();
+        this.vfx.spawnHitSparks(hitPoint, hitDir, hit.isHeavy);
+        this.vfx.triggerHitFlash(this.boss.group, hit.isHeavy, 0xffeedd, hit.isHeavy ? 0.14 : 0.09);
+
+        this.audio.hitConfirm(hit.isHeavy);
+        this.audio.damageTaken(hit.isHeavy, true);
         this.cameraRig.addShake(hit.isHeavy ? 0.32 : 0.16);
 
         if (hit.isHeavy) {
@@ -364,7 +379,15 @@ export class Game {
           const screenPos = this.projectToScreen(this.player.group.position, 1.2);
           this.hud.spawnDamageNumber(hit.damage, screenPos.x, screenPos.y, true);
 
-          this.audio.hitImpact(true);
+          // Combat VFX: Hit sparks and mesh flash on player
+          const hitPoint = hit.contactPoint || this.player.group.position.clone().add(new THREE.Vector3(0, 1.1, 0));
+          const fwdAngle = this.boss.group.rotation.y;
+          const hitDir = new THREE.Vector3(-Math.sin(fwdAngle), 0.25, -Math.cos(fwdAngle)).normalize();
+          this.vfx.spawnHitSparks(hitPoint, hitDir, true);
+          this.vfx.triggerHitFlash(this.player.group, true, 0xff2200, 0.16);
+
+          this.audio.hitConfirm(true);
+          this.audio.damageTaken(true, false);
           this.cameraRig.addShake(0.42);
           this.hitstopTimer = 0.06;
 
@@ -381,7 +404,7 @@ export class Game {
     if (this.player.state === 'dodge' && this.prevPlayerState !== 'dodge') {
       this.audio.dodgeWhoosh();
     } else if (this.player.state === 'attack' && this.prevPlayerState !== 'attack') {
-      this.audio.swordSwing(this.player.currentAttack?.isHeavy);
+      this.audio.attackSwing(this.player.currentAttack?.isHeavy);
     }
     this.prevPlayerState = this.player.state;
 
@@ -389,8 +412,8 @@ export class Game {
     if (this.boss.state === 'windup' && this.prevBossState !== 'windup') {
       this.audio.bossTelegraph();
     } else if (this.boss.state === 'active' && this.prevBossState !== 'active') {
-      this.audio.swordSwing(true);
-      if (this.boss.currentAttack?.name === 'Sundering Smite') {
+      this.audio.attackSwing(true);
+      if (this.boss.currentAttack?.isHeavy) {
         this.audio.bossSmash();
       }
     }

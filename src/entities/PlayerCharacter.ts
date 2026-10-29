@@ -65,7 +65,6 @@ export class PlayerCharacter {
 
   public async loadModel(modelId: string): Promise<void> {
     this.isLoaded = false;
-    this.currentModelId = modelId;
 
     // 1. Detach weapon from existing bone
     if (this.swordObject && this.swordObject.parent) {
@@ -142,23 +141,24 @@ export class PlayerCharacter {
       }
     });
 
-    // 5. Locate PalmR socket bone dynamically
+    // 5. Locate PalmR / RightHand socket bone dynamically
     this.handBone = ModelLoader.findSocketBone(this.modelScene, [
+      'mixamorig:RightHand',
+      'mixamorigRightHand',
+      'RightHand',
       'Palm.R',
       'PalmR',
       'MiddleHand.R',
-      'mixamorigRightHand',
-      'RightHand',
     ]);
     if (!this.handBone) {
       console.warn(`[PlayerCharacter] Hand socket bone not found in model "${modelId}".`);
     }
 
-    // 6. Parent weapon directly to socket bone
+    // 6. Parent weapon directly to socket bone (scaled to 1.4m broadsword proportion)
     if (this.handBone && this.swordObject) {
       this.swordObject.position.set(0, 0, 0);
-      this.swordObject.rotation.set(0, 0, 0);
-      this.swordObject.scale.set(0.01, 0.01, 0.01);
+      this.swordObject.rotation.set(-Math.PI * 0.5, 0, 0);
+      this.swordObject.scale.set(32, 32, 32);
       this.handBone.add(this.swordObject);
       this.handBone.updateMatrixWorld(true);
       this.swordObject.updateMatrixWorld(true);
@@ -174,6 +174,7 @@ export class PlayerCharacter {
     }
 
     this.group.add(this.modelScene);
+    this.currentModelId = modelId;
     this.isLoaded = true;
 
     // Play default standardized idle
@@ -517,8 +518,8 @@ export class PlayerCharacter {
       this.state = 'stagger';
       this.staggerTimer = isHeavy ? 0.45 : 0.25;
       this.currentAttack = null;
-      // Stagger fallback: rapid blend to idle flinch
-      this.playAction('idle', 0.05, THREE.LoopRepeat, false, 1.5);
+      // High-impact stagger reaction animation
+      this.playAction('hit', 0.05, THREE.LoopOnce, true, isHeavy ? 1.0 : 1.3);
     }
 
     return true;

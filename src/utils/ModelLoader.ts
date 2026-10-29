@@ -35,15 +35,22 @@ export class ModelLoader {
 
     // 2. Alias mapping table for smooth transition from legacy names
     const ALIAS_MAP: Record<string, string[]> = {
-      idle: ['idle', 'HumanArmature|Idle_swordRight', 'HumanArmature|Idle', 'Idle-loop', 'Boss_Idle'],
-      walk: ['walk', 'walking', 'HumanArmature|Walking', 'Walk-loop'],
-      walking: ['walking', 'walk', 'HumanArmature|Walking'],
-      run: ['run', 'HumanArmature|Run', 'Run-loop'],
-      dodge: ['dodge', 'HumanArmature|Roll_sword', 'HumanArmature|Roll', 'Roll', 'Dive_Roll'],
-      attack_light: ['attack_light', 'HumanArmature|Run_swordAttack', 'Attack1', 'Great_Sword_Slash'],
-      attack_heavy: ['attack_heavy', 'attack', 'HumanArmature|swordAttackJump', 'Attack2', 'Heavy_Smash'],
+      idle: ['idle', 'Great Sword Idle', 'HumanArmature|Idle_swordRight', 'HumanArmature|Idle', 'Idle-loop', 'Boss_Idle'],
+      walk: ['walk', 'walking', 'Great Sword Walk forward', 'HumanArmature|Walking', 'Walk-loop'],
+      walking: ['walking', 'walk', 'Great Sword Walk forward', 'HumanArmature|Walking'],
+      walk_backward: ['walk_backward', 'backward', 'Great Sword Walk backward'],
+      strafe_left: ['strafe_left', 'Great Sword Strafe Left'],
+      strafe_right: ['strafe_right', 'Great Sword Strafe right'],
+      run: ['run', 'Great Sword Run', 'HumanArmature|Run', 'Run-loop'],
+      dodge: ['dodge', 'Stand To Roll', 'stand_to_roll', 'HumanArmature|Roll_sword', 'HumanArmature|Roll', 'Roll', 'Dive_Roll'],
+      attack_light: ['attack_light', 'Great Sword Light Attack', 'HumanArmature|Run_swordAttack', 'Attack1', 'Great_Sword_Slash'],
+      attack_heavy: ['attack_heavy', 'attack', 'attack_downward', 'Standing Melee Attack Downward', 'HumanArmature|swordAttackJump', 'Attack2', 'Heavy_Smash'],
+      attack_combo: ['attack_combo', 'combo_attack', 'Standing Melee Combo Attack Ver. 2', 'standing_melee_combo_attack_ver_2'],
+      attack_jump: ['attack_jump', 'jump_attack', 'Standing Melee Run Jump Attack', 'standing_melee_run_jump_attack'],
+      attack_360: ['attack_360', '360_attack', 'Standing Melee Attack 360 Low heavy attack', 'standing_melee_attack_360_low_heavy_attack'],
+      kick: ['kick', 'Great Sword Kick', 'great_sword_kick'],
       special: ['special', 'taunt', 'Roar'],
-      hit: ['hit', 'Hit_Reaction', 'Hurt'],
+      hit: ['hit', 'Great Sword Impact', 'great_sword_impact', 'Hit_Reaction', 'Hurt'],
       death: ['death', 'die', 'HumanArmature|Death', 'Die'],
       die: ['die', 'death', 'HumanArmature|Death', 'Die'],
     };
@@ -170,7 +177,13 @@ export class ModelLoader {
     for (const track of clip.tracks) {
       if (track instanceof THREE.VectorKeyframeTrack && track.name.endsWith('.position')) {
         const boneName = track.name.split('.')[0].toLowerCase();
-        const isRoot = roots.some((r) => boneName === r || boneName.endsWith(`|${r}`));
+        const isRoot = roots.some(
+          (r) =>
+            boneName === r ||
+            boneName.endsWith(`|${r}`) ||
+            boneName.endsWith(`:${r}`) ||
+            boneName.includes(r),
+        );
         if (isRoot) {
           const v = track.values;
           const x0 = v[0];

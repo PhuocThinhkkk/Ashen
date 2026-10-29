@@ -15,12 +15,14 @@
     "inspect:fbx": "blender --background --python scripts/inspect-fbx.py --",
     "capture:anims": "playwright test tests/animation-capture.spec.ts",
     "build:model": "blender --background --python scripts/process_mixamo.py --",
+    "convert:unrigged": "blender --background --python convert_unrigged.py",
     "verify:visual": "playwright test tests/visual.spec.ts",
     "inspect:canvas": "node scripts/inspect-threejs-canvas.mjs"
   },
   "dependencies": {
     "lil-gui": "^0.21.0",
-    "three": "^0.184.0"
+    "three": "^0.184.0",
+    "three-nebula": "^13.3.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.60.0",
