@@ -17,7 +17,10 @@
     "build:model": "blender --background --python scripts/process_mixamo.py --",
     "convert:unrigged": "blender --background --python convert_unrigged.py",
     "verify:visual": "playwright test tests/visual.spec.ts",
-    "inspect:canvas": "node scripts/inspect-threejs-canvas.mjs"
+    "inspect:canvas": "node scripts/inspect-threejs-canvas.mjs",
+    "anim:extract": "blender --background --python scripts/extract_anim_data.py",
+    "anim:summary": "node scripts/generate_kinematic_summary.js",
+    "anim:pipeline": "npm run anim:extract && npm run anim:summary"
   },
   "dependencies": {
     "lil-gui": "^0.21.0",

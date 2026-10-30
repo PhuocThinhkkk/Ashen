@@ -6,3 +6,5 @@ artifacts/
 .DS_Store
 __pycache__/
 *.pyc
+local_anim_dumps/
+kinematic_summary.json
