@@ -74,22 +74,22 @@ export interface KinematicActionConfig {
 export const DODGE_CONFIG = {
   // Phase 1: Startup (Initial dive commit - vulnerable to hits)
   startupStartFrame: 1,
-  startupEndFrame: 25,       // E.g. Change to 30 to test 1 to 30
-  startupDuration: 0.15,     // Real-time duration in seconds (~0.15s)
+  startupEndFrame: 32,      
+  startupDuration: 0.2,    
 
   // Phase 2: Active I-Frames (Core invulnerability window - attacks pass through)
-  iframeStartFrame: 25,      // E.g. Change to 31 to test 31 to 90
-  iframeEndFrame: 100,       // E.g. Change to 90
-  iframeDuration: 0.43,      // Real-time duration in seconds (~0.43s)
+  iframeStartFrame: 33,    
+  iframeEndFrame: 90,      
+  iframeDuration: 0.5,  
 
   // Phase 3: Recovery (Landing and standing back up - vulnerable, input locked)
-  recoveryStartFrame: 100,   // E.g. Change to 91 to test 91 to 143
-  recoveryEndFrame: 143,     // Total clip keyframes in Stand To Roll.fbx (143)
-  recoveryDuration: 0.27,    // Real-time duration in seconds (~0.27s)
+  recoveryStartFrame: 91,  
+  recoveryEndFrame: 120,   
+  recoveryDuration: 0.3,    
 
   // Physical Traversal & Resource Tuning
-  totalDistanceMeters: 2.35, // Compact FromSoftware roll distance (~2.35m)
-  staminaCost: 20,           // Stamina consumed
+  totalDistanceMeters: 2.35,
+  staminaCost: 20,     
 };
 
 export const KINEMATIC_ACTIONS: Record<string, KinematicActionConfig> = {
