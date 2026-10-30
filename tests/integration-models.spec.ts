@@ -65,7 +65,13 @@ test.describe('Milestone 3 Main Game Model & Animation Integration', () => {
 
     await page.keyboard.up('ShiftLeft');
     await page.keyboard.up('KeyW');
-    await page.waitForTimeout(200);
+    await page.waitForFunction(
+      () => {
+        const diag = window.__THREE_GAME_DIAGNOSTICS__;
+        return diag && diag.player.state === 'idle';
+      },
+      { timeout: 4000 },
+    );
 
     const postMoveDiag = await page.evaluate(() => window.__THREE_GAME_DIAGNOSTICS__);
     expect(postMoveDiag?.player.state).toBe('idle');

@@ -40,7 +40,7 @@ A single-boss combat experience inspired by Elden Ring's combat feel, running lo
    - Standardized on `T-Pose-The-forgotten-knight.fbx` (65-bone Mixamo rig) as the shared base mesh for both Player (`knight.glb`, `samurai.glb`) and Boss (`titan.glb`).
    - Completely retired legacy incompatible skeletons (80-bone Titan rig and 42/66-bone HumanArmature).
 2. **Standardized Animation Pipeline:**
-   - `scripts/process_mixamo.py` compiles 15 source clips from `assets/animation-request/`:
+   - `scripts/process_mixamo.py` compiles 15 source clips from `assets/raw/anims/` (shared, player, boss):
      - Player: `idle`, `walk`, `run`, `walk_backward`, `strafe_left`, `strafe_right`, `dodge`, `attack_light`, `attack_heavy`, `hit`, `death`.
      - Boss: `idle`, `walking`, `walk`, `run`, `attack_heavy` (Downward Cleave), `attack_combo` (Relentless Flurry), `attack_jump` (Leaping Wrath), `attack_360` (Ashen Maelstrom), `kick` (Spartan Kick), `special`, `hit`, `die`.
    - Strips X/Z translation on `mixamorig:Hips` root motion tracks while preserving vertical animation.

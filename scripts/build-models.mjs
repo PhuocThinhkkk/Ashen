@@ -32,13 +32,14 @@ export const PATHS = {
   raw: path.join(ROOT_DIR, 'assets', 'raw'),
   playersRaw: path.join(ROOT_DIR, 'assets', 'raw', 'players'),
   bossesRaw: path.join(ROOT_DIR, 'assets', 'raw', 'bosses'),
-  playerSharedAnims: path.join(ROOT_DIR, 'assets', 'raw', 'anims', 'player_shared'),
-  bossSharedAnims: path.join(ROOT_DIR, 'assets', 'raw', 'anims', 'boss_shared'),
+  animsRaw: path.join(ROOT_DIR, 'assets', 'raw', 'anims'),
+  sharedAnims: path.join(ROOT_DIR, 'assets', 'raw', 'anims', 'shared'),
+  playerAnims: path.join(ROOT_DIR, 'assets', 'raw', 'anims', 'player'),
+  bossAnims: path.join(ROOT_DIR, 'assets', 'raw', 'anims', 'boss'),
   modelsOut: path.join(ROOT_DIR, 'public', 'assets', 'models'),
   playersOut: path.join(ROOT_DIR, 'public', 'assets', 'models', 'players'),
   bossesOut: path.join(ROOT_DIR, 'public', 'assets', 'models', 'bosses'),
   compilerScript: path.join(ROOT_DIR, 'scripts', 'process_mixamo.py'),
-  animRequest: path.join(ROOT_DIR, 'assets', 'animation-request'),
 };
 
 /**
@@ -91,7 +92,7 @@ export function resolveBlenderPath() {
 /**
  * Discovers character entities in a category directory (players or bosses).
  */
-export function discoverEntities(categoryDir, sharedAnimsDir, outDir, category) {
+export function discoverEntities(categoryDir, animDirs, outDir, category) {
   if (!fs.existsSync(categoryDir)) {
     fs.mkdirSync(categoryDir, { recursive: true });
     return [];
@@ -99,6 +100,7 @@ export function discoverEntities(categoryDir, sharedAnimsDir, outDir, category) 
 
   const entries = fs.readdirSync(categoryDir, { withFileTypes: true });
   const entities = [];
+  const animDirList = Array.isArray(animDirs) ? animDirs : [animDirs];
 
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
@@ -133,28 +135,15 @@ export function discoverEntities(categoryDir, sharedAnimsDir, outDir, category) 
     // Collect source files for timestamp check
     const sourceFiles = [baseFbx];
 
-    if (fs.existsSync(sharedAnimsDir)) {
-      const animFiles = fs.readdirSync(sharedAnimsDir, { withFileTypes: true });
-      for (const a of animFiles) {
-        if (a.isFile() && (a.name.toLowerCase().endsWith('.fbx') || a.name.toLowerCase().endsWith('.glb'))) {
-          sourceFiles.push(path.join(sharedAnimsDir, a.name));
-        }
-      }
-    }
-
-    if (fs.existsSync(PATHS.animRequest)) {
-      const scanReqDir = (dir) => {
-        if (!fs.existsSync(dir)) return;
-        for (const item of fs.readdirSync(dir, { withFileTypes: true })) {
-          const fullPath = path.join(dir, item.name);
-          if (item.isFile() && (item.name.toLowerCase().endsWith('.fbx') || item.name.toLowerCase().endsWith('.glb'))) {
-            sourceFiles.push(fullPath);
-          } else if (item.isDirectory()) {
-            scanReqDir(fullPath);
+    for (const aDir of animDirList) {
+      if (fs.existsSync(aDir)) {
+        const animFiles = fs.readdirSync(aDir, { withFileTypes: true });
+        for (const a of animFiles) {
+          if (a.isFile() && (a.name.toLowerCase().endsWith('.fbx') || a.name.toLowerCase().endsWith('.glb'))) {
+            sourceFiles.push(path.join(aDir, a.name));
           }
         }
-      };
-      scanReqDir(PATHS.animRequest);
+      }
     }
 
     entities.push({
@@ -163,7 +152,7 @@ export function discoverEntities(categoryDir, sharedAnimsDir, outDir, category) 
       dir: entityDir,
       baseFbx,
       baseFileName,
-      animsDir: sharedAnimsDir,
+      animsDir: PATHS.animsRaw,
       targetGlb,
       sourceFiles,
     });
@@ -297,11 +286,23 @@ export function buildAll(options = {}) {
   // Ensure directories exist
   fs.mkdirSync(PATHS.playersOut, { recursive: true });
   fs.mkdirSync(PATHS.bossesOut, { recursive: true });
-  fs.mkdirSync(PATHS.playerSharedAnims, { recursive: true });
-  fs.mkdirSync(PATHS.bossSharedAnims, { recursive: true });
+  fs.mkdirSync(PATHS.animsRaw, { recursive: true });
+  fs.mkdirSync(PATHS.sharedAnims, { recursive: true });
+  fs.mkdirSync(PATHS.playerAnims, { recursive: true });
+  fs.mkdirSync(PATHS.bossAnims, { recursive: true });
 
-  const players = discoverEntities(PATHS.playersRaw, PATHS.playerSharedAnims, PATHS.playersOut, 'player');
-  const bosses = discoverEntities(PATHS.bossesRaw, PATHS.bossSharedAnims, PATHS.bossesOut, 'boss');
+  const players = discoverEntities(
+    PATHS.playersRaw,
+    [PATHS.sharedAnims, PATHS.playerAnims],
+    PATHS.playersOut,
+    'player',
+  );
+  const bosses = discoverEntities(
+    PATHS.bossesRaw,
+    [PATHS.sharedAnims, PATHS.bossAnims],
+    PATHS.bossesOut,
+    'boss',
+  );
   const all = [...players, ...bosses];
 
   if (all.length === 0) {

@@ -294,8 +294,8 @@ def main():
     if custom_dir:
         candidate_dirs.append(custom_dir)
     candidate_dirs.extend([
-        root_dir / "assets" / "request-animatons",
-        root_dir / "assets" / "animation-request",
+        root_dir / "assets" / "raw",
+        root_dir / "assets" / "raw" / "anims",
     ])
 
     search_dir = None

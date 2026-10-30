@@ -257,19 +257,28 @@ def main():
     if not main_armature.animation_data:
         main_armature.animation_data_create()
 
-    # Discover animation files strictly from animation-request (65-bone Mixamo standard)
+    # Discover animation files from assets/raw/anims/ (single source of truth)
     anim_files = []
     search_dirs = []
 
-    req_root = Path(__file__).resolve().parent.parent / "assets" / "animation-request"
-    if req_root.exists() and req_root.is_dir():
-        search_dirs.append(req_root)
-        req_player = req_root / "player"
+    raw_anims = Path(__file__).resolve().parent.parent / "assets" / "raw" / "anims"
+    if raw_anims.exists() and raw_anims.is_dir():
+        search_dirs.append(raw_anims)
+        shared_dir = raw_anims / "shared"
+        if shared_dir.exists() and shared_dir.is_dir():
+            search_dirs.append(shared_dir)
+        cat_dir = raw_anims / category
+        if cat_dir.exists() and cat_dir.is_dir():
+            search_dirs.append(cat_dir)
+        req_player = raw_anims / "player"
         if req_player.exists() and req_player.is_dir():
             search_dirs.append(req_player)
-        req_boss = req_root / "boss"
+        req_boss = raw_anims / "boss"
         if req_boss.exists() and req_boss.is_dir():
             search_dirs.append(req_boss)
+
+    if anims_dir and anims_dir.exists() and anims_dir.is_dir():
+        search_dirs.append(anims_dir)
 
     seen_paths = set()
     for s_dir in search_dirs:

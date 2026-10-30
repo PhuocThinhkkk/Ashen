@@ -356,8 +356,8 @@ export class BossCharacter {
           this.stateTimer = 0;
         }
       } else {
-        // Long range: leap attack or close distance
-        if (Math.random() < 0.65) {
+        // Long range (>5.5m): approach target, occasional leap
+        if (Math.random() < 0.3) {
           this.chooseAttack(BOSS_ATTACKS.jump);
         } else {
           this.state = 'approach';

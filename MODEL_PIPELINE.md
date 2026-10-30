@@ -18,8 +18,8 @@ npm run inspect:model -- public/assets/models/players/knight.glb
 
 # 3. Inspect RAW FBX or GLTF files (Headless Blender script: reports skeleton archetype, bone count, socket targets, embedded actions, and debug artifacts)
 npm run inspect:fbx -- assets/raw/bosses/titan/base.fbx
-npm run inspect:fbx -- assets/raw/anims/boss_shared/Heavy_Smash.fbx
-npm run inspect:fbx -- assets/animation-request/player/Stand\ To\ Roll.fbx
+npm run inspect:fbx -- assets/raw/anims/shared/Great\ Sword\ Idle.fbx
+npm run inspect:fbx -- assets/raw/anims/player/Stand\ To\ Roll.fbx
 
 # 4. Rebuild all models incrementally (skips unchanged files)
 npm run build:models
@@ -36,15 +36,15 @@ npx playwright test tests/asset-validation.spec.ts
 
 ---
 
-## 2. Directory Map
+## 2. Directory Map (Single Source of Truth: `assets/raw/`)
 
 | Path | Purpose | Format |
 |---|---|---|
 | `assets/raw/players/<player_id>/base.fbx` | Base character mesh & t-pose armature | FBX (ASCII/Binary) |
 | `assets/raw/bosses/<boss_id>/base.fbx` | Base boss mesh & t-pose armature | FBX (ASCII/Binary) |
-| `assets/raw/anims/player_shared/` | Shared animations for players (`Death.fbx`, `Walk.fbx`, etc.) | FBX |
-| `assets/raw/anims/boss_shared/` | Shared animations for bosses (`Heavy_Smash.fbx`, `Boss_Idle.fbx`, etc.) | FBX |
-| `assets/animation-request/<category>/` | User requested / downloaded animation clips from Mixamo | FBX |
+| `assets/raw/anims/shared/` | Shared animations (`Great Sword Idle.fbx`, `Great Sword Run.fbx`, etc.) | FBX |
+| `assets/raw/anims/player/` | Player animations (`Stand To Roll.fbx`, `Great Sword Impact.fbx`) | FBX |
+| `assets/raw/anims/boss/` | Boss animations (`Downward.fbx`, `Combo.fbx`, `Jump.fbx`, `360.fbx`, `Kick.fbx`) | FBX |
 | `public/assets/models/players/<id>.glb` | Compiled, standardized, game-ready player GLBs | Binary glTF (GLB) |
 | `public/assets/models/bosses/<id>.glb` | Compiled, standardized, game-ready boss GLBs | Binary glTF (GLB) |
 | `public/assets/weapons/*.glb` | Standalone socketed weapons (`Sword.glb`) | Binary glTF (GLB) |
