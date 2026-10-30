@@ -50,6 +50,9 @@ interface ThreeGameTestHooks {
   setBossModel?(modelId: string): Promise<{ bossModel: string }>;
   getPlayerWeaponDistanceToHand?(): number;
   getBossWeaponDistanceToHand?(): number;
+  toggleHitboxDebug?(visible?: boolean): boolean;
+  isHitboxDebugVisible?(): boolean;
+  triggerBossAttack?(attackKey: string): void;
 }
 
 interface Window {

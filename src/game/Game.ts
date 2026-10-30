@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { BOSS_ATTACKS } from '../combat/FrameCombat';
 import { checkAttackHit } from '../combat/HitDetection';
 import { type CombatInputs, InputController } from '../core/InputController';
 import { Loop } from '../core/Loop';
@@ -119,9 +120,23 @@ export class Game {
     this.buildScene();
     this.resetRun();
 
+    // Hotkey 'H' toggles visual hitbox debugging in real-time
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'KeyH' && !e.repeat) {
+        this.toggleHitboxDebug();
+      }
+    });
+
     resizeRenderer(this.renderer, this.camera, this.tuning.maxDpr);
     this.installTestHooks();
     this.publishDiagnostics();
+  }
+
+  public toggleHitboxDebug(visible?: boolean): boolean {
+    const next = visible !== undefined ? visible : !this.player.hitboxDebugger.isVisible;
+    this.player.toggleHitboxDebug(next);
+    this.boss.toggleHitboxDebug(next);
+    return next;
   }
 
   public async setPlayerModel(modelId: string): Promise<void> {
@@ -517,6 +532,14 @@ export class Game {
         this.boss.handBone.getWorldPosition(handWorld);
         this.boss.greatswordGroup.getWorldPosition(swordWorld);
         return handWorld.distanceTo(swordWorld);
+      },
+      toggleHitboxDebug: (visible?: boolean) => this.toggleHitboxDebug(visible),
+      isHitboxDebugVisible: () => this.player.hitboxDebugger.isVisible,
+      triggerBossAttack: (attackKey: string) => {
+        const atk = BOSS_ATTACKS[attackKey];
+        if (atk) {
+          (this.boss as any).chooseAttack(atk);
+        }
       },
     };
   }

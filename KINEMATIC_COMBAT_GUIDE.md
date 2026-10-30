@@ -138,7 +138,47 @@ const hitboxPos = attacker.getHitboxWorldPosition();
 
 ---
 
-## 5. Three-Nebula Particle VFX Triggers
+## 5. FromSoftware-Calibrated Dodge Roll System
+
+The dodge roll follows precise Souls combat design timings decoupled from raw display FPS:
+
+```
+[0.00s ─── Startup (0.15s) ─── 0.15s ─── Active I-Frames (0.43s) ─── 0.58s ─── Recovery (0.27s) ─── 0.85s]
+  Vulnerable: Quick Dive          Invulnerable: Reddish Flash          Vulnerable: Feet Landing
+  Micro-advance: 1.4 m/s          Sinusoidal Traversal (~2.1m)         Decay to neutral stance
+```
+
+### 1. Phase Breakdown
+- **Startup / Delay (Duration: `~0.15 seconds`):**
+  Initial wind-up dive from button press. In Mixamo's `Stand To Roll.fbx`, playback starts at `time = 0.20s` to eliminate sluggish hesitation. Fully vulnerable to incoming attacks.
+- **The Invulnerable Roll (Duration: `~0.43 seconds`, `0.15s` to `0.58s`):**
+  Core invincibility window. Attacks pass through cleanly without damage. Character mesh visualizes active i-frames with a subtle reddish emissive flash (`0xff4433`, intensity `0.65`). Velocity follows a half-sine impulse curve (`peakSpeed = 7.8 m/s`) covering `~2.13 meters`. Total roll distance is calibrated to **`~2.35 meters`** (compact and grounded).
+- **The End / Recovery (Duration: `~0.27 seconds`, `0.58s` to `0.85s`):**
+  Character recovers feet. Vulnerable again. Reddish flash clears immediately. Cannot chain rolls or attacks until recovery completes.
+
+---
+
+## 6. Visual Hitbox Debugger (`src/combat/HitboxVisualDebugger.ts`)
+
+- **EdgesGeometry Architecture:** Built using `THREE.BoxGeometry`, `THREE.EdgesGeometry`, and `THREE.LineSegments` with a semi-transparent fill mesh (`depthTest: false`). Renders 12 crisp bounding edges without diagonal wireframe triangulation.
+- **Automatic Bone Socketing:** Attached directly as a child of the armature bone (`mixamorig:RightHand` or `mixamorig:LeftFoot`), automatically inheriting skeletal rotation and position without manual matrix math.
+- **Phase-Accurate Color Tints:**
+  - **Inactive / Windup / Recovery:** Semi-transparent green wireframe (`#00ff88`).
+  - **Active Impact Window:** Glowing solid red (`#ff2222`, line opacity `1.0`, fill opacity `0.45`).
+- **Toggle Hotkey:** Press `H` in the main game or sandbox viewer to toggle hitboxes in real time.
+
+---
+
+## 7. Sandbox Asset Viewer Mode (`/asset-test.html`)
+
+An isolated inspection and testing harness:
+- **Dual Camera Mode:** `[ 🧭 Orbit Camera ]` for 360° orbital inspection and `[ 🏃 Walk Test Mode ]` for direct `WASD` navigation on a meter-marked floor grid.
+- **Frame Scrubber:** Single-frame step forward (`]`) and backward (`[`), play/pause (`Space`), and speed scaling (`0.25x` to `1.5x`).
+- **Live Telemetry Banner:** Real-time HUD readout displaying active clip, current frame vs. total frames, kinematic phase (`Windup`, `Airborne`, `Impact`, `Recovery`), and damage active state.
+
+---
+
+## 8. Three-Nebula Particle VFX Triggers
 
 `VFXSystem.ts` integrates the `three-nebula` engine (`^13.3.0`) for high-fidelity particle effects:
 

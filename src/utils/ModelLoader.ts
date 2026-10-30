@@ -167,7 +167,12 @@ export class ModelLoader {
   }
 
   /**
-   * Strips horizontal (X/Z) translation from root motion tracks in an AnimationClip.
+   * Strips horizontal translation from root motion tracks in an AnimationClip
+   * so animations play strictly in-place at the character controller origin.
+   * In the Mixamo skeleton hierarchy:
+   *  - X is lateral displacement
+   *  - Y is horizontal forward/backward displacement
+   *  - Z is vertical jumping/ducking height
    */
   public static stripRootMotion(
     clip: THREE.AnimationClip,
@@ -175,7 +180,7 @@ export class ModelLoader {
   ): void {
     const roots = (Array.isArray(rootBones) ? rootBones : [rootBones]).map((r) => r.toLowerCase());
     for (const track of clip.tracks) {
-      if (track instanceof THREE.VectorKeyframeTrack && track.name.endsWith('.position')) {
+      if (track instanceof THREE.VectorKeyframeTrack && track.name.toLowerCase().includes('position')) {
         const boneName = track.name.split('.')[0].toLowerCase();
         const isRoot = roots.some(
           (r) =>
@@ -187,10 +192,11 @@ export class ModelLoader {
         if (isRoot) {
           const v = track.values;
           const x0 = v[0];
-          const z0 = v[2];
+          const y0 = v[1];
           for (let i = 0; i < v.length; i += 3) {
-            v[i] = x0;
-            v[i + 2] = z0;
+            v[i] = x0;      // Lock lateral X
+            v[i + 1] = y0;  // Lock forward/backward horizontal translation Y
+            // v[i + 2] is Z (vertical height) - preserved for natural hips jumping/bobbing
           }
         }
       }

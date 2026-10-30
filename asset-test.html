@@ -268,13 +268,33 @@
         </div>
       </div>
 
+      <!-- Hitbox Debugger & Frame Scrubber Section -->
+      <div class="section">
+        <div class="section-header util">
+          <span>Hitbox Debugger & Frame Controls</span>
+          <span id="hitbox-status-badge" class="active-badge" style="color: #00ff88; border-color: #00ff88;">HITBOX: OFF</span>
+        </div>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px;">
+          <button id="btn-toggle-hitbox" class="btn-util" style="border-color: #ff3333; color: #ff8888; font-weight: 700;">⚔️ Toggle Hitbox Wireframe (Key: H)</button>
+          <button id="btn-mode-toggle" class="btn-util">🚶 Mode: Orbit (Click to Walk)</button>
+        </div>
+        <div style="display: flex; gap: 6px; flex-wrap: wrap; align-items: center;">
+          <button id="btn-step-prev" class="btn-util" title="Step Back 1 Frame (Key: [)">◀ -1 Frame</button>
+          <button id="btn-play-pause" class="btn-util" title="Play/Pause (Space)">⏸ Pause</button>
+          <button id="btn-step-next" class="btn-util" title="Step Forward 1 Frame (Key: ])">+1 Frame ▶</button>
+          <span id="frame-telemetry" style="font-family: monospace; font-size: 11px; color: #ffaa33; margin-left: 6px;">Frame: -- / -- | Phase: --</span>
+        </div>
+      </div>
+
       <!-- Hidden backward-compatible container -->
       <div id="anim-buttons" style="display: none;"></div>
 
       <div class="hint">
         <span>Orbit: Left-drag</span>
-        <span>Pan: Right-drag</span>
-        <span>Zoom: Scroll</span>
+        <span>H: Hitbox Wireframe</span>
+        <span>Space: Pause</span>
+        <span>[/]: Step Frame</span>
+        <span>WASD: Walk (in Walk Mode)</span>
       </div>
     </div>
     <script type="module" src="/src/asset-test.ts"></script>

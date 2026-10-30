@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { HitboxVisualDebugger } from './combat/HitboxVisualDebugger';
+import { getKinematicAction } from './combat/KinematicData';
 import { ModelLoader } from './utils/ModelLoader';
 
 export interface AssetTestDiagnostics {
@@ -38,6 +40,12 @@ declare global {
       pauseAtMidFrame: (category: 'player' | 'boss', clipName: string) => Promise<{ duration: number; midTime: number }>;
       captureCanvas: () => string;
       captureAllAnimations: () => Promise<Record<string, string>>;
+      toggleHitbox?: (visible?: boolean) => boolean;
+      isHitboxVisible?: () => boolean;
+      stepFrame?: (frames: number) => void;
+      togglePause?: () => boolean;
+      setMode?: (mode: 'orbit' | 'walk') => void;
+      getHitboxDebugState?: () => { playerActive: boolean; bossActive: boolean };
     };
   }
 }
@@ -105,6 +113,30 @@ const floor = new THREE.Mesh(floorGeo, floorMat);
 floor.position.y = -0.25;
 floor.receiveShadow = true;
 scene.add(floor);
+
+// Floor Grid
+const gridHelper = new THREE.GridHelper(30, 30, 0x7a5e2a, 0x1f2736);
+gridHelper.position.y = 0.01;
+scene.add(gridHelper);
+
+// Hitbox Visual Debuggers
+const playerHitboxDebugger = new HitboxVisualDebugger({
+  size: new THREE.Vector3(0.28, 1.4, 0.28),
+  offset: new THREE.Vector3(0, 0.7, 0),
+});
+const bossHitboxDebugger = new HitboxVisualDebugger({
+  size: new THREE.Vector3(0.45, 2.4, 0.45),
+  offset: new THREE.Vector3(0, 1.2, 0),
+});
+const bossFootHitboxDebugger = new HitboxVisualDebugger({
+  size: new THREE.Vector3(0.35, 0.4, 0.5),
+  offset: new THREE.Vector3(0, 0.1, 0),
+});
+let bossLeftFootBone: THREE.Object3D | null = null;
+let isHitboxVisible = false;
+let isPaused = false;
+let isWalkMode = false;
+const keysPressed: Record<string, boolean> = {};
 
 // 2. State & Loaders
 const loader = new GLTFLoader();
@@ -249,6 +281,7 @@ async function loadPlayer(modelId: 'knight' | 'samurai') {
     axeObject.rotation.set(-Math.PI * 0.5, 0, 0);
     axeObject.scale.set(32, 32, 32);
     playerHandBone.add(axeObject);
+    playerHitboxDebugger.attachToBone(playerHandBone);
     diagnostics.player.weaponAttached = true;
   }
 
@@ -329,6 +362,12 @@ async function loadBoss() {
       ) {
         if (!bossHandBone) bossHandBone = obj;
       }
+      if (
+        (obj.name === 'mixamorig:LeftFoot' || obj.name.toLowerCase().includes('leftfoot')) &&
+        !obj.name.includes('IK')
+      ) {
+        if (!bossLeftFootBone) bossLeftFootBone = obj;
+      }
     }
   });
 
@@ -374,6 +413,12 @@ async function loadBoss() {
     bossSwordGroup.rotation.set(-Math.PI * 0.5, 0, 0);
     bossSwordGroup.scale.set(100, 100, 100);
     bossHandBone.add(bossSwordGroup);
+
+    bossHitboxDebugger.attachToBone(bossHandBone);
+  }
+
+  if (bossLeftFootBone) {
+    bossFootHitboxDebugger.attachToBone(bossLeftFootBone);
   }
 
   // Boss Animations
@@ -623,6 +668,199 @@ function setupUIControls() {
       captureBtn.disabled = false;
     };
   }
+
+  // Hitbox & Frame Scrubber Controls
+  const hitboxToggleBtn = document.querySelector<HTMLButtonElement>('#btn-toggle-hitbox');
+  if (hitboxToggleBtn) {
+    hitboxToggleBtn.onclick = () => toggleHitboxDebug();
+  }
+
+  const modeToggleBtn = document.querySelector<HTMLButtonElement>('#btn-mode-toggle');
+  if (modeToggleBtn) {
+    modeToggleBtn.onclick = () => {
+      isWalkMode = !isWalkMode;
+      modeToggleBtn.textContent = isWalkMode
+        ? '🏃 Mode: Walk (Click to Orbit)'
+        : '🚶 Mode: Orbit (Click to Walk)';
+      modeToggleBtn.classList.toggle('active', isWalkMode);
+    };
+  }
+
+  const stepPrevBtn = document.querySelector<HTMLButtonElement>('#btn-step-prev');
+  if (stepPrevBtn) {
+    stepPrevBtn.onclick = () => stepFrame(-1);
+  }
+
+  const playPauseBtn = document.querySelector<HTMLButtonElement>('#btn-play-pause');
+  if (playPauseBtn) {
+    playPauseBtn.onclick = () => togglePause();
+  }
+
+  const stepNextBtn = document.querySelector<HTMLButtonElement>('#btn-step-next');
+  if (stepNextBtn) {
+    stepNextBtn.onclick = () => stepFrame(1);
+  }
+
+  // Keyboard Navigation & Shortcuts
+  window.addEventListener('keydown', (e) => {
+    keysPressed[e.code] = true;
+    if (e.code === 'KeyH' && !e.repeat) {
+      toggleHitboxDebug();
+    } else if (e.code === 'Space' && !e.repeat) {
+      if (isWalkMode) {
+        playPlayerAnimation('dodge');
+      } else {
+        togglePause();
+      }
+    } else if (e.code === 'BracketLeft' && !e.repeat) {
+      stepFrame(-1);
+    } else if (e.code === 'BracketRight' && !e.repeat) {
+      stepFrame(1);
+    } else if (e.code === 'KeyJ' && isWalkMode && !e.repeat) {
+      playPlayerAnimation('attack_light');
+    } else if (e.code === 'KeyK' && isWalkMode && !e.repeat) {
+      playPlayerAnimation('attack_heavy');
+    }
+  });
+
+  window.addEventListener('keyup', (e) => {
+    keysPressed[e.code] = false;
+  });
+}
+
+function toggleHitboxDebug(visible?: boolean): boolean {
+  isHitboxVisible = visible !== undefined ? visible : !isHitboxVisible;
+  playerHitboxDebugger.setVisible(isHitboxVisible);
+  bossHitboxDebugger.setVisible(isHitboxVisible);
+  bossFootHitboxDebugger.setVisible(isHitboxVisible);
+
+  const badge = document.querySelector<HTMLElement>('#hitbox-status-badge');
+  if (badge) {
+    badge.textContent = isHitboxVisible ? 'HITBOX: ON' : 'HITBOX: OFF';
+    badge.style.color = isHitboxVisible ? '#ff4444' : '#00ff88';
+    badge.style.borderColor = isHitboxVisible ? '#ff4444' : '#00ff88';
+  }
+  return isHitboxVisible;
+}
+
+function togglePause(): boolean {
+  isPaused = !isPaused;
+  const btn = document.querySelector<HTMLButtonElement>('#btn-play-pause');
+  if (btn) {
+    btn.textContent = isPaused ? '▶ Play' : '⏸ Pause';
+  }
+  return isPaused;
+}
+
+function stepFrame(framesCount: number): void {
+  isPaused = true;
+  const btn = document.querySelector<HTMLButtonElement>('#btn-play-pause');
+  if (btn) btn.textContent = '▶ Play';
+
+  const deltaSeconds = framesCount * (1 / 60);
+  if (playerMixer) playerMixer.update(deltaSeconds);
+  if (bossMixer) bossMixer.update(deltaSeconds);
+  updateFrameTelemetry();
+  renderer.render(scene, camera);
+}
+
+function updateFrameTelemetry(): { playerActive: boolean; bossActive: boolean } {
+  let playerImpact = false;
+  let bossImpact = false;
+  let telemetryText = '';
+
+  if (currentPlayerAction) {
+    const clipName = diagnostics.player.activeClip;
+    const cfg = getKinematicAction(clipName);
+    const duration = currentPlayerAction.getClip().duration;
+    const totalFrames = cfg ? cfg.totalFrames : Math.round(duration * 60);
+    const timeNorm = ((currentPlayerAction.time % duration) + duration) % duration;
+    const frame = Math.min(totalFrames, Math.floor(timeNorm * 60) + 1);
+
+    let phase = 'Idle';
+    if (cfg) {
+      for (const p of cfg.phases) {
+        if (frame >= p.startFrame && frame <= p.endFrame) {
+          phase = p.type;
+          break;
+        }
+      }
+      if (cfg.hitbox && frame >= cfg.hitbox.activeStartFrame && frame <= cfg.hitbox.activeEndFrame) {
+        playerImpact = true;
+      }
+    }
+    telemetryText = `Player: [${clipName}] F:${frame}/${totalFrames} [${phase}]`;
+  }
+
+  if (currentBossAction) {
+    const clipName = diagnostics.boss.activeClip;
+    const cfg = getKinematicAction(clipName);
+    const duration = currentBossAction.getClip().duration;
+    const totalFrames = cfg ? cfg.totalFrames : Math.round(duration * 60);
+    const timeNorm = ((currentBossAction.time % duration) + duration) % duration;
+    const frame = Math.min(totalFrames, Math.floor(timeNorm * 60) + 1);
+
+    let phase = 'Idle';
+    if (cfg) {
+      for (const p of cfg.phases) {
+        if (frame >= p.startFrame && frame <= p.endFrame) {
+          phase = p.type;
+          break;
+        }
+      }
+      if (cfg.hitbox && frame >= cfg.hitbox.activeStartFrame && frame <= cfg.hitbox.activeEndFrame) {
+        bossImpact = true;
+      }
+    }
+    telemetryText += ` | Boss: [${clipName}] F:${frame}/${totalFrames} [${phase}]`;
+  }
+
+  // Update visual debuggers: Turns RED when Impact is active, GREEN when inactive!
+  playerHitboxDebugger.update(playerImpact);
+  const isKick = diagnostics.boss.activeClip.toLowerCase().includes('kick');
+  bossHitboxDebugger.update(!isKick && bossImpact);
+  bossFootHitboxDebugger.update(isKick && bossImpact);
+
+  const telemetryEl = document.querySelector<HTMLElement>('#frame-telemetry');
+  if (telemetryEl && telemetryText) {
+    telemetryEl.textContent = telemetryText;
+  }
+
+  return { playerActive: playerImpact, bossActive: bossImpact };
+}
+
+function updateWalkMode(delta: number): void {
+  if (!isWalkMode || !currentPlayerScene) return;
+
+  const moveX = (keysPressed['KeyD'] ? 1 : 0) - (keysPressed['KeyA'] ? 1 : 0);
+  const moveZ = (keysPressed['KeyS'] ? 1 : 0) - (keysPressed['KeyW'] ? 1 : 0);
+
+  if (moveX !== 0 || moveZ !== 0) {
+    const moveDir = new THREE.Vector3(moveX, 0, moveZ).normalize();
+    const speed = keysPressed['ShiftLeft'] ? 6.5 : 3.8;
+    currentPlayerScene.position.addScaledVector(moveDir, speed * delta);
+    currentPlayerScene.rotation.y = Math.atan2(-moveDir.x, -moveDir.z);
+
+    if (
+      !diagnostics.player.activeClip.includes('attack') &&
+      !diagnostics.player.activeClip.includes('dodge')
+    ) {
+      const walkClip = keysPressed['ShiftLeft'] ? 'run' : 'walk';
+      if (diagnostics.player.activeClip !== walkClip) {
+        playPlayerAnimation(walkClip);
+      }
+    }
+
+    controls.target.copy(currentPlayerScene.position).add(new THREE.Vector3(0, 1.1, 0));
+  } else {
+    if (
+      !diagnostics.player.activeClip.includes('attack') &&
+      !diagnostics.player.activeClip.includes('dodge') &&
+      diagnostics.player.activeClip !== 'idle'
+    ) {
+      playPlayerAnimation('idle');
+    }
+  }
 }
 
 // 8. Visual Validation & Capture Utilities
@@ -723,6 +961,21 @@ window.__ASSET_TEST__ = {
   pauseAtMidFrame,
   captureCanvas,
   captureAllAnimations,
+  toggleHitbox: toggleHitboxDebug,
+  isHitboxVisible: () => isHitboxVisible,
+  stepFrame,
+  togglePause,
+  setMode: (mode: 'orbit' | 'walk') => {
+    isWalkMode = mode === 'walk';
+    const modeToggleBtn = document.querySelector<HTMLButtonElement>('#btn-mode-toggle');
+    if (modeToggleBtn) {
+      modeToggleBtn.textContent = isWalkMode
+        ? '🏃 Mode: Walk (Click to Orbit)'
+        : '🚶 Mode: Orbit (Click to Walk)';
+      modeToggleBtn.classList.toggle('active', isWalkMode);
+    }
+  },
+  getHitboxDebugState: updateFrameTelemetry,
 };
 
 // Render Loop
@@ -731,10 +984,14 @@ function animate() {
   requestAnimationFrame(animate);
   const delta = clock.getDelta() * playbackSpeed;
 
-  controls.update();
+  if (!isPaused) {
+    if (playerMixer) playerMixer.update(delta);
+    if (bossMixer) bossMixer.update(delta);
+  }
 
-  if (playerMixer) playerMixer.update(delta);
-  if (bossMixer) bossMixer.update(delta);
+  updateWalkMode(delta);
+  updateFrameTelemetry();
+  controls.update();
 
   renderer.render(scene, camera);
 }

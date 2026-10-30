@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { type AttackDefinition, BOSS_ATTACKS } from '../combat/FrameCombat';
+import { HitboxVisualDebugger } from '../combat/HitboxVisualDebugger';
 import { KinematicCombatController } from '../combat/KinematicCombatController';
 import type { AudioSystem } from '../systems/AudioSystem';
 import type { VFXSystem } from '../systems/VFXSystem';
@@ -51,6 +52,14 @@ export class BossCharacter {
   public kinematicController: KinematicCombatController | null = null;
   public currentActionName = '';
   public currentModelId = 'titan';
+  public readonly swordHitboxDebugger = new HitboxVisualDebugger({
+    size: new THREE.Vector3(0.45, 2.4, 0.45),
+    offset: new THREE.Vector3(0, 1.2, 0),
+  });
+  public readonly footHitboxDebugger = new HitboxVisualDebugger({
+    size: new THREE.Vector3(0.35, 0.4, 0.5),
+    offset: new THREE.Vector3(0, 0.1, 0),
+  });
   private vfxSystem: VFXSystem | null = null;
   private audioSystem: AudioSystem | null = null;
   private readonly actions = new Map<string, THREE.AnimationAction>();
@@ -205,6 +214,7 @@ export class BossCharacter {
       this.greatswordGroup.rotation.set(-Math.PI * 0.5, 0, 0);
       this.greatswordGroup.scale.set(100, 100, 100);
       this.handBone.add(this.greatswordGroup);
+      this.swordHitboxDebugger.attachToBone(this.handBone);
       this.handBone.updateMatrixWorld(true);
       this.greatswordGroup.updateMatrixWorld(true);
       this.bladeHitbox.updateMatrixWorld(true);
@@ -217,6 +227,10 @@ export class BossCharacter {
     this.kinematicController = new KinematicCombatController(this.mixer);
     this.kinematicController.bindArmature(this.modelScene);
     this.updateKinematicCallbacks();
+
+    if (this.kinematicController.leftFootBone) {
+      this.footHitboxDebugger.attachToBone(this.kinematicController.leftFootBone);
+    }
 
     for (const clip of bossGltf.animations) {
       this.kinematicController.stripRootMotion(clip);
@@ -256,6 +270,18 @@ export class BossCharacter {
       return this.kinematicController.isAttacking;
     }
     return this.state === 'active';
+  }
+
+  public toggleHitboxDebug(visible?: boolean): boolean {
+    if (visible !== undefined) {
+      this.swordHitboxDebugger.setVisible(visible);
+      this.footHitboxDebugger.setVisible(visible);
+      return visible;
+    }
+    const next = !this.swordHitboxDebugger.isVisible;
+    this.swordHitboxDebugger.setVisible(next);
+    this.footHitboxDebugger.setVisible(next);
+    return next;
   }
 
   public playAction(
@@ -322,6 +348,11 @@ export class BossCharacter {
       this.greatswordGroup.updateMatrixWorld(true);
       this.bladeHitbox.updateMatrixWorld(true);
     }
+
+    const isKick = this.currentAttack?.animationClip === 'kick';
+    const isAttacking = this.isHitboxActive();
+    this.swordHitboxDebugger.update(!isKick && isAttacking);
+    this.footHitboxDebugger.update(isKick && isAttacking);
 
     if (this.state === 'dead') {
       if (this.currentActionName !== 'die') {
@@ -498,8 +529,10 @@ export class BossCharacter {
         -Math.cos(this.group.rotation.y)
       ).normalize();
 
-      const impulse = (this.currentAttack.forwardImpulse / active) * delta;
-      this.group.position.addScaledVector(fwd, impulse);
+      if (this.currentAttack.animationClip !== 'attack_jump') {
+        const impulse = (this.currentAttack.forwardImpulse / active) * delta;
+        this.group.position.addScaledVector(fwd, impulse);
+      }
     } else if (this.attackTimer < startup + active + recovery) {
       this.state = 'recovery';
       this.telegraphGlow = Math.max(0, 1.0 - (this.attackTimer - startup - active) / (recovery * 0.5));
@@ -618,6 +651,8 @@ export class BossCharacter {
   }
 
   public dispose(): void {
+    this.swordHitboxDebugger.dispose();
+    this.footHitboxDebugger.dispose();
     if (this.mixer) {
       this.mixer.stopAllAction();
     }

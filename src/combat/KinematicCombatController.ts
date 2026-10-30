@@ -222,8 +222,14 @@ export class KinematicCombatController {
         const airbornePhase = cfg.phases.find((p) => p.type === 'Airborne');
         if (airbornePhase && this.currentFrame >= airbornePhase.startFrame && this.currentFrame <= airbornePhase.endFrame) {
           const airborneDuration = (airbornePhase.endFrame - airbornePhase.startFrame + 1) / 60;
-          // Forward displacement along character's local -Z
-          const forwardSpeed = Math.abs(cfg.rootMotion.deltaY) / airborneDuration;
+          const avgSpeed = Math.abs(cfg.rootMotion.deltaY) / airborneDuration; // ~9.32 m/s
+          const phaseProgress =
+            (this.currentFrame - airbornePhase.startFrame) /
+            Math.max(1, airbornePhase.endFrame - airbornePhase.startFrame);
+          // Half-sine impulse curve (starts at 0, peaks at mid-jump, returns to 0 on landing)
+          const impulseFactor = Math.sin(phaseProgress * Math.PI) * (Math.PI / 2);
+          const forwardSpeed = avgSpeed * impulseFactor;
+
           const forward = new THREE.Vector3(
             -Math.sin(characterFacingRotationY),
             0,

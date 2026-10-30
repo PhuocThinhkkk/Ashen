@@ -7,6 +7,7 @@ import {
   PLAYER_DODGE,
 } from '../combat/FrameCombat';
 import { KinematicCombatController } from '../combat/KinematicCombatController';
+import { HitboxVisualDebugger } from '../combat/HitboxVisualDebugger';
 import type { CombatInputs } from '../core/InputController';
 import type { AudioSystem } from '../systems/AudioSystem';
 import type { VFXSystem } from '../systems/VFXSystem';
@@ -53,6 +54,10 @@ export class PlayerCharacter {
   public handBone: THREE.Object3D | null = null;
   public swordObject: THREE.Object3D | null = null;
   public currentModelId = 'knight';
+  public readonly hitboxDebugger = new HitboxVisualDebugger({
+    size: new THREE.Vector3(0.28, 1.4, 0.28),
+    offset: new THREE.Vector3(0, 0.7, 0),
+  });
   private vfxSystem: VFXSystem | null = null;
   private audioSystem: AudioSystem | null = null;
   private readonly loader = new GLTFLoader();
@@ -166,6 +171,7 @@ export class PlayerCharacter {
       this.swordObject.rotation.set(-Math.PI * 0.5, 0, 0);
       this.swordObject.scale.set(32, 32, 32);
       this.handBone.add(this.swordObject);
+      this.hitboxDebugger.attachToBone(this.handBone);
       this.handBone.updateMatrixWorld(true);
       this.swordObject.updateMatrixWorld(true);
     }
@@ -227,6 +233,14 @@ export class PlayerCharacter {
       return target;
     }
     return target.copy(this.group.position).add(new THREE.Vector3(0, 1.0, 0));
+  }
+
+  public toggleHitboxDebug(visible?: boolean): boolean {
+    if (visible !== undefined) {
+      this.hitboxDebugger.setVisible(visible);
+      return visible;
+    }
+    return this.hitboxDebugger.toggle();
   }
 
   public playAction(
@@ -294,6 +308,7 @@ export class PlayerCharacter {
     if (this.handBone) {
       this.handBone.updateMatrixWorld(true);
     }
+    this.hitboxDebugger.update(this.isHitboxActive());
 
     if (this.state === 'dead') {
       if (this.currentActionName !== 'death') {
@@ -313,7 +328,7 @@ export class PlayerCharacter {
     // 2. Handle Current State
     switch (this.state) {
       case 'dodge':
-        this.updateDodge(delta);
+        this.updateDodge(delta, inputs);
         break;
       case 'attack':
         this.updateAttack(delta, inputs, lockedTargetPos);
@@ -467,29 +482,79 @@ export class PlayerCharacter {
     }
 
     this.group.rotation.y = Math.atan2(-this.dodgeDirection.x, -this.dodgeDirection.z);
-    const dodgeClip = ModelLoader.findClip(this.rawClips, 'dodge');
-    const clipDuration = dodgeClip ? dodgeClip.duration : 1.29;
-    const dodgeTimeScale = clipDuration / this.dodgeConfig.duration;
-    this.playAction('dodge', 0.05, THREE.LoopOnce, true, dodgeTimeScale);
+    // Fast-start roll: skip hesitation frames and calibrate animation to 0.85s total
+    const action = this.playAction('dodge', 0.04, THREE.LoopOnce, true, 2.5);
+    if (action) {
+      action.time = 0.20; // Skip slow initial pause at start of raw Mixamo clip
+    }
   }
 
-  private updateDodge(delta: number): void {
+  private setDodgeIFrameVisual(active: boolean): void {
+    if (!this.modelScene) return;
+    const flashColor = new THREE.Color(0xff4433);
+    this.modelScene.traverse((obj) => {
+      if (
+        obj.name.toLowerCase().includes('sword') ||
+        obj.name.toLowerCase().includes('hitbox')
+      ) {
+        return;
+      }
+      if (obj instanceof THREE.Mesh && obj.material) {
+        const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+        for (const mat of mats) {
+          if (mat instanceof THREE.MeshStandardMaterial) {
+            if (active) {
+              mat.emissive.copy(flashColor);
+              mat.emissiveIntensity = 0.65;
+            } else {
+              mat.emissive.setHex(0x000000);
+              mat.emissiveIntensity = 0;
+            }
+          }
+        }
+      }
+    });
+  }
+
+  private updateDodge(delta: number, _inputs: CombatInputs): void {
     this.dodgeTimer += delta;
 
-    this.isInvulnerable =
-      (this.kinematicController?.currentPhase === 'Airborne') ||
-      (this.dodgeTimer >= this.dodgeConfig.invulnerableStart &&
-        this.dodgeTimer <= this.dodgeConfig.invulnerableEnd);
+    const STARTUP_TIME = 0.15; // 4 to 5 internal frames (~0.15s startup)
+    const IFRAME_DURATION = 0.43; // 13 frames (~0.43s active i-frames)
+    const RECOVERY_DURATION = 0.27; // 8 frames (~0.27s recovery)
+    const TOTAL_DURATION = 0.85; // 0.15 + 0.43 + 0.27 = 0.85s
+    const IFRAME_END = STARTUP_TIME + IFRAME_DURATION; // 0.58s
 
-    const progress = this.dodgeTimer / this.dodgeConfig.duration;
-    const speedCurve = Math.cos(progress * Math.PI * 0.5);
-    const speed = this.dodgeConfig.speed * speedCurve;
+    if (this.dodgeTimer < STARTUP_TIME) {
+      // 1. Startup / Delay (~0.15s): Fully vulnerable, initial quick dive
+      this.isInvulnerable = false;
+      this.setDodgeIFrameVisual(false);
+      const startupSpeed = 1.4;
+      this.group.position.addScaledVector(this.dodgeDirection, startupSpeed * delta);
+    } else if (this.dodgeTimer < IFRAME_END) {
+      // 2. The Invulnerable Roll (Active I-Frames, ~0.43s):
+      // Enemy attacks pass cleanly through, subtle reddish flash visualizer
+      this.isInvulnerable = true;
+      this.setDodgeIFrameVisual(true);
 
-    this.group.position.addScaledVector(this.dodgeDirection, speed * delta);
+      const progress = (this.dodgeTimer - STARTUP_TIME) / IFRAME_DURATION;
+      const speedCurve = Math.sin(progress * Math.PI);
+      const traversalSpeed = 7.8 * speedCurve; // Tuned for ~2.35m total roll distance
+      this.group.position.addScaledVector(this.dodgeDirection, traversalSpeed * delta);
+    } else if (this.dodgeTimer < TOTAL_DURATION) {
+      // 3. The End (Recovery, ~0.27s):
+      // Character lands and recovers feet, fully vulnerable again, cannot chain roll yet
+      this.isInvulnerable = false;
+      this.setDodgeIFrameVisual(false);
 
-    if (this.dodgeTimer >= this.dodgeConfig.duration) {
+      const recoveryProgress = (this.dodgeTimer - IFRAME_END) / RECOVERY_DURATION;
+      const decaySpeed = (1.0 - recoveryProgress) * 0.8;
+      this.group.position.addScaledVector(this.dodgeDirection, decaySpeed * delta);
+    } else {
+      // 4. Roll Complete
       this.state = 'idle';
       this.isInvulnerable = false;
+      this.setDodgeIFrameVisual(false);
       this.playAction('idle', 0.15);
     }
   }
@@ -571,6 +636,7 @@ export class PlayerCharacter {
 
     if (this.hp <= 0) {
       this.state = 'dead';
+      this.setDodgeIFrameVisual(false);
       this.velocity.set(0, 0, 0);
       this.playAction('death', 0.1, THREE.LoopOnce, true, 1.0);
       return true;
@@ -578,6 +644,7 @@ export class PlayerCharacter {
 
     if (isHeavy || this.state !== 'attack') {
       this.state = 'stagger';
+      this.setDodgeIFrameVisual(false);
       this.staggerTimer = isHeavy ? 0.45 : 0.25;
       this.currentAttack = null;
       // High-impact stagger reaction animation
@@ -605,6 +672,7 @@ export class PlayerCharacter {
     this.comboStep = 0;
     this.comboQueued = false;
     this.isInvulnerable = false;
+    this.setDodgeIFrameVisual(false);
     this.dodgeTimer = 0;
     this.staggerTimer = 0;
 
@@ -617,6 +685,8 @@ export class PlayerCharacter {
   }
 
   public dispose(): void {
+    this.setDodgeIFrameVisual(false);
+    this.hitboxDebugger.dispose();
     if (this.mixer) {
       this.mixer.stopAllAction();
     }
