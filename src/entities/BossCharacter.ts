@@ -5,6 +5,11 @@ import { KinematicCombatController } from '../combat/KinematicCombatController';
 import type { AudioSystem } from '../systems/AudioSystem';
 import type { VFXSystem } from '../systems/VFXSystem';
 import { ModelLoader } from '../utils/ModelLoader';
+import {
+  DEFAULT_BOSS_WEAPON_SOCKET,
+  loadSocketConfig,
+  applyWeaponSocketTransform,
+} from '../combat/WeaponSocketConfig';
 
 export type BossState =
   | 'idle'
@@ -210,9 +215,8 @@ export class BossCharacter {
 
     // 5. Parent Greatsword directly to hand bone node with local rotation/position offsets
     if (this.handBone) {
-      this.greatswordGroup.position.set(0, 0, 0);
-      this.greatswordGroup.rotation.set(-Math.PI * 0.5, 0, 0);
-      this.greatswordGroup.scale.set(100, 100, 100);
+      const socketCfg = loadSocketConfig('boss', DEFAULT_BOSS_WEAPON_SOCKET);
+      applyWeaponSocketTransform(this.greatswordGroup, socketCfg);
       this.handBone.add(this.greatswordGroup);
       this.swordHitboxDebugger.attachToBone(this.handBone);
       this.handBone.updateMatrixWorld(true);

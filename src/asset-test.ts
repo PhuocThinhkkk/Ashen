@@ -1,9 +1,18 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import GUI from 'lil-gui';
 import { HitboxVisualDebugger } from './combat/HitboxVisualDebugger';
 import { getKinematicAction } from './combat/KinematicData';
 import { ModelLoader } from './utils/ModelLoader';
+import {
+  DEFAULT_PLAYER_WEAPON_SOCKET,
+  DEFAULT_BOSS_WEAPON_SOCKET,
+  loadSocketConfig,
+  saveSocketConfig,
+  applyWeaponSocketTransform,
+  type WeaponSocketTransform,
+} from './combat/WeaponSocketConfig';
 
 export interface AssetTestDiagnostics {
   loaded: boolean;
@@ -154,7 +163,11 @@ let currentBossAction: THREE.AnimationAction | null = null;
 let playerHandBone: THREE.Object3D | null = null;
 let axeObject: THREE.Object3D | null = null;
 let bossHandBone: THREE.Object3D | null = null;
+let bossSwordGroup: THREE.Group | null = null;
 let playbackSpeed = 1.0;
+
+const playerSocket: WeaponSocketTransform = loadSocketConfig('player', DEFAULT_PLAYER_WEAPON_SOCKET);
+const bossSocket: WeaponSocketTransform = loadSocketConfig('boss', DEFAULT_BOSS_WEAPON_SOCKET);
 
 const diagnostics: AssetTestDiagnostics = {
   loaded: false,
@@ -277,9 +290,7 @@ async function loadPlayer(modelId: 'knight' | 'samurai') {
   }
 
   if (playerHandBone && axeObject) {
-    axeObject.position.set(0, 0, 0);
-    axeObject.rotation.set(-Math.PI * 0.5, 0, 0);
-    axeObject.scale.set(32, 32, 32);
+    applyWeaponSocketTransform(axeObject, playerSocket);
     playerHandBone.add(axeObject);
     playerHitboxDebugger.attachToBone(playerHandBone);
     diagnostics.player.weaponAttached = true;
@@ -376,7 +387,7 @@ async function loadBoss() {
 
   // Build and attach Greatsword to boss hand bone
   if (bossHandBone) {
-    const bossSwordGroup = new THREE.Group();
+    bossSwordGroup = new THREE.Group();
     const gripGeo = new THREE.CylinderGeometry(0.04, 0.04, 0.6, 8);
     const gripMat = new THREE.MeshStandardMaterial({ color: 0x332211, roughness: 0.7 });
     const grip = new THREE.Mesh(gripGeo, gripMat);
@@ -409,9 +420,7 @@ async function loadBoss() {
     bossSwordGroup.traverse((o) => {
       if (o instanceof THREE.Mesh) o.castShadow = true;
     });
-    bossSwordGroup.position.set(0, 0, 0);
-    bossSwordGroup.rotation.set(-Math.PI * 0.5, 0, 0);
-    bossSwordGroup.scale.set(100, 100, 100);
+    applyWeaponSocketTransform(bossSwordGroup, bossSocket);
     bossHandBone.add(bossSwordGroup);
 
     bossHitboxDebugger.attachToBone(bossHandBone);
@@ -918,12 +927,227 @@ async function captureAllAnimations(): Promise<Record<string, string>> {
   return result;
 }
 
+function generateConfigExportCode(): string {
+  return `export const DEFAULT_PLAYER_WEAPON_SOCKET: WeaponSocketTransform = {
+  posX: ${Number(playerSocket.posX.toFixed(2))},
+  posY: ${Number(playerSocket.posY.toFixed(2))},
+  posZ: ${Number(playerSocket.posZ.toFixed(2))},
+  rotX: ${Number(playerSocket.rotX.toFixed(1))},
+  rotY: ${Number(playerSocket.rotY.toFixed(1))},
+  rotZ: ${Number(playerSocket.rotZ.toFixed(1))},
+  scale: ${playerSocket.scale},
+};
+
+export const DEFAULT_BOSS_WEAPON_SOCKET: WeaponSocketTransform = {
+  posX: ${Number(bossSocket.posX.toFixed(2))},
+  posY: ${Number(bossSocket.posY.toFixed(2))},
+  posZ: ${Number(bossSocket.posZ.toFixed(2))},
+  rotX: ${Number(bossSocket.rotX.toFixed(1))},
+  rotY: ${Number(bossSocket.rotY.toFixed(1))},
+  rotZ: ${Number(bossSocket.rotZ.toFixed(1))},
+  scale: ${bossSocket.scale},
+};`;
+}
+
+function printAndSaveConfig(): string {
+  saveSocketConfig('player', playerSocket);
+  saveSocketConfig('boss', bossSocket);
+  const code = generateConfigExportCode();
+
+  console.log('%c======================================================', 'color: #38d665; font-weight: bold;');
+  console.log('%c⚔️ CURRENT WEAPON SOCKET CONFIG (WeaponSocketConfig.ts)', 'color: #ffaa33; font-weight: bold;');
+  console.log('%c======================================================', 'color: #38d665; font-weight: bold;');
+  console.log(code);
+  console.log('%c======================================================', 'color: #38d665; font-weight: bold;');
+
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(code).catch(() => {});
+  }
+
+  const codeBox = document.querySelector<HTMLElement>('#socket-code-container');
+  const codeOutput = document.querySelector<HTMLElement>('#socket-code-output');
+  const saveStatus = document.querySelector<HTMLElement>('#socket-save-status');
+
+  if (codeBox && codeOutput) {
+    codeOutput.textContent = code;
+    codeBox.style.display = 'block';
+  }
+  if (saveStatus) {
+    saveStatus.textContent = 'SAVED & PRINTED!';
+    saveStatus.style.color = '#38d665';
+    saveStatus.style.borderColor = '#38d665';
+    setTimeout(() => {
+      saveStatus.textContent = 'SYNCED';
+    }, 2500);
+  }
+
+  return code;
+}
+
+// 8.5 Weapon Socket Real-Time Tuning GUI & Overlay Buttons
+function setupWeaponTuningGUI(): void {
+  const gui = new GUI({ title: '⚔️ Weapon Socket Tuning' });
+  gui.domElement.style.position = 'fixed';
+  gui.domElement.style.top = '14px';
+  gui.domElement.style.right = '14px';
+  gui.domElement.style.zIndex = '1000';
+
+  const syncGUI = () => {
+    gui.controllersRecursive().forEach((c) => c.updateDisplay());
+  };
+
+  // Knight Player Folder
+  const playerFolder = gui.addFolder('Knight Sword Socket');
+  playerFolder.add(playerSocket, 'posX', -30, 30, 0.1).name('Pos X').onChange(() => {
+    if (axeObject) applyWeaponSocketTransform(axeObject, playerSocket);
+    saveSocketConfig('player', playerSocket);
+  });
+  playerFolder.add(playerSocket, 'posY', -30, 50, 0.1).name('Pos Y (Palm)').onChange(() => {
+    if (axeObject) applyWeaponSocketTransform(axeObject, playerSocket);
+    saveSocketConfig('player', playerSocket);
+  });
+  playerFolder.add(playerSocket, 'posZ', -30, 30, 0.1).name('Pos Z').onChange(() => {
+    if (axeObject) applyWeaponSocketTransform(axeObject, playerSocket);
+    saveSocketConfig('player', playerSocket);
+  });
+  playerFolder.add(playerSocket, 'rotX', -180, 180, 1).name('Rot X°').onChange(() => {
+    if (axeObject) applyWeaponSocketTransform(axeObject, playerSocket);
+    saveSocketConfig('player', playerSocket);
+  });
+  playerFolder.add(playerSocket, 'rotY', -180, 180, 1).name('Rot Y°').onChange(() => {
+    if (axeObject) applyWeaponSocketTransform(axeObject, playerSocket);
+    saveSocketConfig('player', playerSocket);
+  });
+  playerFolder.add(playerSocket, 'rotZ', -180, 180, 1).name('Rot Z°').onChange(() => {
+    if (axeObject) applyWeaponSocketTransform(axeObject, playerSocket);
+    saveSocketConfig('player', playerSocket);
+  });
+  playerFolder.add(playerSocket, 'scale', 5, 80, 1).name('Scale').onChange(() => {
+    if (axeObject) applyWeaponSocketTransform(axeObject, playerSocket);
+    saveSocketConfig('player', playerSocket);
+  });
+  playerFolder.open();
+
+  // Titan Boss Folder
+  const bossFolder = gui.addFolder('Titan Greatsword Socket');
+  bossFolder.add(bossSocket, 'posX', -50, 50, 0.5).name('Pos X').onChange(() => {
+    if (bossSwordGroup) applyWeaponSocketTransform(bossSwordGroup, bossSocket);
+    saveSocketConfig('boss', bossSocket);
+  });
+  bossFolder.add(bossSocket, 'posY', -50, 80, 0.5).name('Pos Y (Palm)').onChange(() => {
+    if (bossSwordGroup) applyWeaponSocketTransform(bossSwordGroup, bossSocket);
+    saveSocketConfig('boss', bossSocket);
+  });
+  bossFolder.add(bossSocket, 'posZ', -50, 50, 0.5).name('Pos Z').onChange(() => {
+    if (bossSwordGroup) applyWeaponSocketTransform(bossSwordGroup, bossSocket);
+    saveSocketConfig('boss', bossSocket);
+  });
+  bossFolder.add(bossSocket, 'rotX', -180, 180, 1).name('Rot X°').onChange(() => {
+    if (bossSwordGroup) applyWeaponSocketTransform(bossSwordGroup, bossSocket);
+    saveSocketConfig('boss', bossSocket);
+  });
+  bossFolder.add(bossSocket, 'rotY', -180, 180, 1).name('Rot Y°').onChange(() => {
+    if (bossSwordGroup) applyWeaponSocketTransform(bossSwordGroup, bossSocket);
+    saveSocketConfig('boss', bossSocket);
+  });
+  bossFolder.add(bossSocket, 'rotZ', -180, 180, 1).name('Rot Z°').onChange(() => {
+    if (bossSwordGroup) applyWeaponSocketTransform(bossSwordGroup, bossSocket);
+    saveSocketConfig('boss', bossSocket);
+  });
+  bossFolder.add(bossSocket, 'scale', 20, 200, 1).name('Scale').onChange(() => {
+    if (bossSwordGroup) applyWeaponSocketTransform(bossSwordGroup, bossSocket);
+    saveSocketConfig('boss', bossSocket);
+  });
+  bossFolder.open();
+
+  // Global Actions in GUI
+  gui.add({ saveAndPrint: printAndSaveConfig }, 'saveAndPrint').name('💾 Save & Print Config');
+  gui.add({
+    resetDefaults: () => {
+      Object.assign(playerSocket, DEFAULT_PLAYER_WEAPON_SOCKET);
+      Object.assign(bossSocket, DEFAULT_BOSS_WEAPON_SOCKET);
+      saveSocketConfig('player', playerSocket);
+      saveSocketConfig('boss', bossSocket);
+      if (axeObject) applyWeaponSocketTransform(axeObject, playerSocket);
+      if (bossSwordGroup) applyWeaponSocketTransform(bossSwordGroup, bossSocket);
+      syncGUI();
+    }
+  }, 'resetDefaults').name('↺ Reset Defaults');
+
+  // --- Wire up HTML overlay buttons on asset page ---
+  const btnPresetKnight2H = document.querySelector<HTMLButtonElement>('#btn-preset-knight-2h');
+  btnPresetKnight2H?.addEventListener('click', () => {
+    playerSocket.posX = 1.8;
+    playerSocket.posY = 12.0;
+    playerSocket.posZ = -0.5;
+    playerSocket.rotX = 85.0;
+    playerSocket.rotY = 5.0;
+    playerSocket.rotZ = -10.0;
+    if (axeObject) applyWeaponSocketTransform(axeObject, playerSocket);
+    saveSocketConfig('player', playerSocket);
+    syncGUI();
+  });
+
+  const btnPresetBoss2H = document.querySelector<HTMLButtonElement>('#btn-preset-boss-2h');
+  btnPresetBoss2H?.addEventListener('click', () => {
+    bossSocket.posX = 2.5;
+    bossSocket.posY = 16.0;
+    bossSocket.posZ = -1.0;
+    bossSocket.rotX = 85.0;
+    bossSocket.rotY = 5.0;
+    bossSocket.rotZ = -10.0;
+    if (bossSwordGroup) applyWeaponSocketTransform(bossSwordGroup, bossSocket);
+    saveSocketConfig('boss', bossSocket);
+    syncGUI();
+  });
+
+  const btnFlipPlayer = document.querySelector<HTMLButtonElement>('#btn-flip-player-blade');
+  btnFlipPlayer?.addEventListener('click', () => {
+    playerSocket.rotX = playerSocket.rotX > 0 ? playerSocket.rotX - 180 : playerSocket.rotX + 180;
+    if (axeObject) applyWeaponSocketTransform(axeObject, playerSocket);
+    saveSocketConfig('player', playerSocket);
+    syncGUI();
+  });
+
+  const btnFlipBoss = document.querySelector<HTMLButtonElement>('#btn-flip-boss-blade');
+  btnFlipBoss?.addEventListener('click', () => {
+    bossSocket.rotX = bossSocket.rotX > 0 ? bossSocket.rotX - 180 : bossSocket.rotX + 180;
+    if (bossSwordGroup) applyWeaponSocketTransform(bossSwordGroup, bossSocket);
+    saveSocketConfig('boss', bossSocket);
+    syncGUI();
+  });
+
+  const btnSavePrint = document.querySelector<HTMLButtonElement>('#btn-save-print-config');
+  btnSavePrint?.addEventListener('click', printAndSaveConfig);
+
+  const btnCopyTs = document.querySelector<HTMLButtonElement>('#btn-copy-config-ts');
+  btnCopyTs?.addEventListener('click', printAndSaveConfig);
+
+  const btnReset = document.querySelector<HTMLButtonElement>('#btn-reset-socket-config');
+  btnReset?.addEventListener('click', () => {
+    Object.assign(playerSocket, DEFAULT_PLAYER_WEAPON_SOCKET);
+    Object.assign(bossSocket, DEFAULT_BOSS_WEAPON_SOCKET);
+    saveSocketConfig('player', playerSocket);
+    saveSocketConfig('boss', bossSocket);
+    if (axeObject) applyWeaponSocketTransform(axeObject, playerSocket);
+    if (bossSwordGroup) applyWeaponSocketTransform(bossSwordGroup, bossSocket);
+    syncGUI();
+  });
+
+  const btnCloseCode = document.querySelector<HTMLButtonElement>('#btn-close-code-box');
+  btnCloseCode?.addEventListener('click', () => {
+    const codeBox = document.querySelector<HTMLElement>('#socket-code-container');
+    if (codeBox) codeBox.style.display = 'none';
+  });
+}
+
 // 9. Main Asset Initialization
 async function initHarness() {
   try {
     setupUIControls();
     await loadPlayer('knight');
     await loadBoss();
+    setupWeaponTuningGUI();
 
     loadStatusEl.className = 'status-ok';
     loadStatusEl.textContent = 'All Assets Loaded & Ready';

@@ -13,6 +13,11 @@ import type { CombatInputs } from '../core/InputController';
 import type { AudioSystem } from '../systems/AudioSystem';
 import type { VFXSystem } from '../systems/VFXSystem';
 import { ModelLoader } from '../utils/ModelLoader';
+import {
+  DEFAULT_PLAYER_WEAPON_SOCKET,
+  loadSocketConfig,
+  applyWeaponSocketTransform,
+} from '../combat/WeaponSocketConfig';
 
 export type PlayerState = 'idle' | 'moving' | 'dodge' | 'attack' | 'stagger' | 'dead';
 
@@ -168,9 +173,8 @@ export class PlayerCharacter {
 
     // 6. Parent weapon directly to socket bone (scaled to 1.4m broadsword proportion)
     if (this.handBone && this.swordObject) {
-      this.swordObject.position.set(0, 0, 0);
-      this.swordObject.rotation.set(-Math.PI * 0.5, 0, 0);
-      this.swordObject.scale.set(32, 32, 32);
+      const socketCfg = loadSocketConfig('player', DEFAULT_PLAYER_WEAPON_SOCKET);
+      applyWeaponSocketTransform(this.swordObject, socketCfg);
       this.handBone.add(this.swordObject);
       this.hitboxDebugger.attachToBone(this.handBone);
       this.handBone.updateMatrixWorld(true);

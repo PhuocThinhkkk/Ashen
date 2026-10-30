@@ -268,6 +268,41 @@
         </div>
       </div>
 
+      <!-- Weapon Socket Alignment & Config Export Section -->
+      <div class="section">
+        <div class="section-header" style="color: #ffaa33;">
+          <span>⚔️ Weapon Socket Tuning & Export</span>
+          <span id="socket-save-status" class="active-badge" style="color: #38d665; border-color: #38d665;">READY</span>
+        </div>
+        <div style="margin-bottom: 8px;">
+          <div style="font-size: 11px; color: #a0988c; margin-bottom: 4px;">Quick Grip Presets:</div>
+          <div class="btn-group">
+            <button id="btn-preset-knight-2h" class="btn-player" style="border-color: #d4af37; font-weight: 700;">⚔️ Knight 2H Grip</button>
+            <button id="btn-preset-boss-2h" class="btn-boss" style="border-color: #ff5555; font-weight: 700;">👹 Titan 2H Grip</button>
+            <button id="btn-flip-player-blade" class="btn-util">🔄 Flip Knight</button>
+            <button id="btn-flip-boss-blade" class="btn-util">🔄 Flip Titan</button>
+          </div>
+        </div>
+
+        <div style="margin-bottom: 6px;">
+          <div style="font-size: 11px; color: #a0988c; margin-bottom: 4px;">Save & Export Code:</div>
+          <div class="btn-group">
+            <button id="btn-save-print-config" style="background: #1c3824; border-color: #38d665; color: #38d665; font-weight: 700;">💾 Save & Print Config to Console</button>
+            <button id="btn-copy-config-ts" class="btn-util">📋 Copy TypeScript Code</button>
+            <button id="btn-reset-socket-config" class="btn-util" style="border-color: #777;">↺ Reset</button>
+          </div>
+        </div>
+
+        <!-- Live Code Box -->
+        <div id="socket-code-container" style="margin-top: 8px; display: none;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+            <span style="font-size: 11px; color: #ffaa33; font-weight: 600;">Export for WeaponSocketConfig.ts:</span>
+            <button id="btn-close-code-box" style="padding: 1px 6px; font-size: 10px;">Close ✖</button>
+          </div>
+          <pre id="socket-code-output" style="background: #06090e; border: 1px solid #7a5e2a; padding: 8px; border-radius: 4px; font-size: 11px; color: #38d665; max-height: 180px; overflow-y: auto; user-select: all; margin: 0;"></pre>
+        </div>
+      </div>
+
       <!-- Hitbox Debugger & Frame Scrubber Section -->
       <div class="section">
         <div class="section-header util">
