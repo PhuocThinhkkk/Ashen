@@ -1,5 +1,20 @@
 import * as THREE from 'three';
-import System, { SpriteRenderer } from 'three-nebula';
+import System, {
+  SpriteRenderer,
+  Emitter,
+  Rate,
+  Span,
+  Position,
+  PointZone,
+  Mass,
+  Radius,
+  Life,
+  RadialVelocity,
+  Vector3D,
+  Alpha,
+  Scale,
+  Body,
+} from 'three-nebula';
 
 interface SparkParticle {
   pos: THREE.Vector3;
@@ -160,14 +175,17 @@ interface FlashingRecord {
 export class VFXSystem {
   private scene: THREE.Scene;
   private sparkTexture: THREE.Texture;
+  private dustTexture: THREE.Texture;
   private sparkPool: SparkBurst[] = [];
   private flashingMaterials = new Map<THREE.MeshStandardMaterial, FlashingRecord>();
   private nebulaSystem: System | null = null;
   private nebulaRenderer: SpriteRenderer | null = null;
+  private activeEmitters: Array<{ emitter: Emitter; timer: number }> = [];
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
     this.sparkTexture = this.createSparkTexture();
+    this.dustTexture = this.createDustTexture();
 
     // Pool of 8 spark bursts
     for (let i = 0; i < 8; i++) {
@@ -181,6 +199,129 @@ export class VFXSystem {
       this.nebulaSystem.addRenderer(this.nebulaRenderer);
     } catch (e) {
       console.warn('[VFXSystem] Optional Three-Nebula system init note:', e);
+    }
+  }
+
+  /**
+   * Spawns ground dust kick-up particles at feet bones transitioning from Airborne to Impact/Recovery.
+   */
+  public spawnFootDustKickup(position: THREE.Vector3, count = 10): void {
+    if (!this.nebulaSystem) return;
+    try {
+      const dustSprite = new THREE.Sprite(
+        new THREE.SpriteMaterial({
+          map: this.dustTexture,
+          color: 0xcbb799,
+          transparent: true,
+          depthWrite: false,
+        }),
+      );
+      const emitter = new Emitter();
+      emitter
+        .setRate(new Rate(new Span(count, count + 4), 0.01))
+        .addInitializers([
+          new Body(dustSprite),
+          new Position(new PointZone(position.x, Math.max(0.04, position.y), position.z)),
+          new Mass(1),
+          new Radius(0.18),
+          new Life(0.35),
+          new RadialVelocity(new Span(1.2, 2.8), new Vector3D(0, 1, 0), 55),
+        ])
+        .addBehaviours([
+          new Alpha(0.65, 0),
+          new Scale(0.18, 0.85),
+        ])
+        .emit(1, 0.35);
+
+      this.nebulaSystem.addEmitter(emitter);
+      this.activeEmitters.push({ emitter, timer: 0.45 });
+    } catch (err) {
+      console.warn('[VFXSystem] spawnFootDustKickup error:', err);
+    }
+  }
+
+  /**
+   * Spawns peak velocity sparks at weapon/hand bone.
+   */
+  public spawnPeakVelocitySparks(origin: THREE.Vector3, count = 25, isHeavy = false): void {
+    if (this.nebulaSystem) {
+      try {
+        const sparkSprite = new THREE.Sprite(
+          new THREE.SpriteMaterial({
+            map: this.sparkTexture,
+            color: isHeavy ? 0xff4400 : 0xffaa22,
+            blending: THREE.AdditiveBlending,
+            transparent: true,
+            depthWrite: false,
+          }),
+        );
+        const emitter = new Emitter();
+        emitter
+          .setRate(new Rate(new Span(count, count + 6), 0.01))
+          .addInitializers([
+            new Body(sparkSprite),
+            new Position(new PointZone(origin.x, origin.y, origin.z)),
+            new Mass(1),
+            new Radius(0.1),
+            new Life(isHeavy ? 0.32 : 0.22),
+            new RadialVelocity(new Span(isHeavy ? 4.5 : 3.0, isHeavy ? 8.5 : 6.0), new Vector3D(0, 1, 0), 160),
+          ])
+          .addBehaviours([
+            new Alpha(1.0, 0),
+            new Scale(isHeavy ? 0.32 : 0.2, 0.04),
+          ])
+          .emit(1, isHeavy ? 0.32 : 0.22);
+
+        this.nebulaSystem.addEmitter(emitter);
+        this.activeEmitters.push({ emitter, timer: isHeavy ? 0.42 : 0.32 });
+      } catch (err) {
+        console.warn('[VFXSystem] spawnPeakVelocitySparks error:', err);
+      }
+    }
+
+    // Also emit pooled spark burst for maximum responsive visual pop
+    this.spawnHitSparks(origin, new THREE.Vector3(0, 0.6, 0).normalize(), isHeavy);
+  }
+
+  /**
+   * Spawns weapon trail emitter parented to bone/hand position.
+   */
+  public spawnWeaponTrail(bone: THREE.Object3D, duration = 0.15): void {
+    if (!this.nebulaSystem) return;
+    try {
+      const worldPos = new THREE.Vector3();
+      bone.getWorldPosition(worldPos);
+
+      const trailSprite = new THREE.Sprite(
+        new THREE.SpriteMaterial({
+          map: this.sparkTexture,
+          color: 0xffeebb,
+          blending: THREE.AdditiveBlending,
+          transparent: true,
+          depthWrite: false,
+        }),
+      );
+      const emitter = new Emitter();
+      emitter
+        .setRate(new Rate(new Span(8, 12), 0.01))
+        .addInitializers([
+          new Body(trailSprite),
+          new Position(new PointZone(worldPos.x, worldPos.y, worldPos.z)),
+          new Mass(1),
+          new Radius(0.12),
+          new Life(duration),
+          new RadialVelocity(new Span(0.5, 1.5), new Vector3D(0, 1, 0), 90),
+        ])
+        .addBehaviours([
+          new Alpha(0.85, 0),
+          new Scale(0.25, 0.02),
+        ])
+        .emit(1, duration);
+
+      this.nebulaSystem.addEmitter(emitter);
+      this.activeEmitters.push({ emitter, timer: duration + 0.1 });
+    } catch (err) {
+      console.warn('[VFXSystem] spawnWeaponTrail error:', err);
     }
   }
 
@@ -268,7 +409,24 @@ export class VFXSystem {
       }
     }
 
-    // 3. Update Nebula System
+    // 3. Update Active Nebula Emitters
+    for (let i = this.activeEmitters.length - 1; i >= 0; i--) {
+      const item = this.activeEmitters[i];
+      item.timer -= delta;
+      if (item.timer <= 0) {
+        if (this.nebulaSystem) {
+          try {
+            this.nebulaSystem.removeEmitter(item.emitter);
+            item.emitter.destroy();
+          } catch {
+            // Safe catch
+          }
+        }
+        this.activeEmitters.splice(i, 1);
+      }
+    }
+
+    // 4. Update Nebula System
     if (this.nebulaSystem) {
       try {
         this.nebulaSystem.update(delta);
@@ -304,17 +462,55 @@ export class VFXSystem {
     return texture;
   }
 
+  /**
+   * Generates a procedural soft circular smoke/dust texture in memory.
+   */
+  private createDustTexture(): THREE.Texture {
+    const size = 64;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d')!;
+
+    const grad = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+    grad.addColorStop(0, 'rgba(216, 202, 168, 0.8)');
+    grad.addColorStop(0.35, 'rgba(180, 165, 135, 0.45)');
+    grad.addColorStop(0.7, 'rgba(120, 110, 90, 0.15)');
+    grad.addColorStop(1, 'rgba(60, 55, 45, 0)');
+
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, size, size);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.generateMipmaps = false;
+    texture.minFilter = THREE.LinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    return texture;
+  }
+
   public dispose(): void {
     for (const burst of this.sparkPool) {
       burst.dispose();
     }
     this.sparkPool = [];
     this.sparkTexture.dispose();
+    this.dustTexture.dispose();
     for (const [mat, record] of this.flashingMaterials.entries()) {
       mat.emissive.copy(record.origEmissive);
       mat.emissiveIntensity = record.origIntensity;
     }
     this.flashingMaterials.clear();
+    for (const item of this.activeEmitters) {
+      if (this.nebulaSystem) {
+        try {
+          this.nebulaSystem.removeEmitter(item.emitter);
+          item.emitter.destroy();
+        } catch {
+          // Safe catch
+        }
+      }
+    }
+    this.activeEmitters = [];
     this.nebulaSystem?.destroy();
   }
 }

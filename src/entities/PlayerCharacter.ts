@@ -6,7 +6,10 @@ import {
   PLAYER_ATTACKS,
   PLAYER_DODGE,
 } from '../combat/FrameCombat';
+import { KinematicCombatController } from '../combat/KinematicCombatController';
 import type { CombatInputs } from '../core/InputController';
+import type { AudioSystem } from '../systems/AudioSystem';
+import type { VFXSystem } from '../systems/VFXSystem';
 import { ModelLoader } from '../utils/ModelLoader';
 
 export type PlayerState = 'idle' | 'moving' | 'dodge' | 'attack' | 'stagger' | 'dead';
@@ -45,10 +48,13 @@ export class PlayerCharacter {
   public isLoaded = false;
   public loadPromise: Promise<void>;
   public mixer: THREE.AnimationMixer | null = null;
+  public kinematicController: KinematicCombatController | null = null;
   public currentActionName = '';
   public handBone: THREE.Object3D | null = null;
   public swordObject: THREE.Object3D | null = null;
   public currentModelId = 'knight';
+  private vfxSystem: VFXSystem | null = null;
+  private audioSystem: AudioSystem | null = null;
   private readonly loader = new GLTFLoader();
   private readonly actions = new Map<string, THREE.AnimationAction>();
   private currentAction: THREE.AnimationAction | null = null;
@@ -167,8 +173,13 @@ export class PlayerCharacter {
     // 7. Setup AnimationMixer with standardized clip names
     this.mixer = new THREE.AnimationMixer(this.modelScene);
 
+    // 8. Setup Kinematic Combat Controller & bind armature
+    this.kinematicController = new KinematicCombatController(this.mixer);
+    this.kinematicController.bindArmature(this.modelScene);
+    this.updateKinematicCallbacks();
+
     for (const clip of gltf.animations) {
-      ModelLoader.stripRootMotion(clip, ['Hips', 'Body', 'mixamorigHips']);
+      this.kinematicController.stripRootMotion(clip);
       const action = this.mixer.clipAction(clip);
       this.actions.set(clip.name, action);
     }
@@ -179,6 +190,43 @@ export class PlayerCharacter {
 
     // Play default standardized idle
     this.playAction('idle', 0.1);
+  }
+
+  public setVfxAndAudio(vfx: VFXSystem, audio: AudioSystem): void {
+    this.vfxSystem = vfx;
+    this.audioSystem = audio;
+    this.updateKinematicCallbacks();
+  }
+
+  private updateKinematicCallbacks(): void {
+    if (!this.kinematicController) return;
+    this.kinematicController.setCallbacks({
+      onFootDust: (pos, count) => this.vfxSystem?.spawnFootDustKickup(pos, count),
+      onPeakSparks: (pos, count, isHeavy) => this.vfxSystem?.spawnPeakVelocitySparks(pos, count, isHeavy),
+      onWeaponTrail: (bone, duration) => this.vfxSystem?.spawnWeaponTrail(bone, duration),
+      onPeakSwoosh: (freq, duration, isHeavy) => this.audioSystem?.playPeakSwoosh(freq, duration, isHeavy),
+      onPeakImpact: (isHeavy) => this.audioSystem?.hitImpact(isHeavy),
+      onFootstep: (heavy) => this.audioSystem?.playFootstep(heavy),
+      onLandingThud: (heavy) => this.audioSystem?.playLandingThud(heavy),
+    });
+  }
+
+  public isHitboxActive(): boolean {
+    if (this.kinematicController && this.state === 'attack') {
+      return this.kinematicController.isAttacking;
+    }
+    return this.attackPhase === 'active';
+  }
+
+  public getHitboxWorldPosition(target: THREE.Vector3 = new THREE.Vector3()): THREE.Vector3 {
+    if (this.kinematicController && this.kinematicController.activeHitboxBone) {
+      return this.kinematicController.getHitboxWorldPosition(target);
+    }
+    if (this.swordObject) {
+      this.swordObject.getWorldPosition(target);
+      return target;
+    }
+    return target.copy(this.group.position).add(new THREE.Vector3(0, 1.0, 0));
   }
 
   public playAction(
@@ -202,15 +250,25 @@ export class PlayerCharacter {
       return action;
     }
 
-    action.reset();
-    action.setLoop(loop, loop === THREE.LoopRepeat ? Infinity : 1);
-    action.clampWhenFinished = clampWhenFinished;
-    action.timeScale = timeScale;
+    if (this.kinematicController) {
+      this.kinematicController.playAction(name, action, {
+        fadeDuration,
+        loop,
+        clampWhenFinished,
+        timeScale,
+      });
+    } else {
+      action.reset();
+      action.setLoop(loop, loop === THREE.LoopRepeat ? Infinity : 1);
+      action.clampWhenFinished = clampWhenFinished;
+      action.timeScale = timeScale;
 
-    if (this.currentAction) {
-      this.currentAction.crossFadeTo(action, fadeDuration, true);
+      if (this.currentAction) {
+        this.currentAction.crossFadeTo(action, fadeDuration, true);
+      }
+      action.play();
     }
-    action.play();
+
     this.currentAction = action;
     this.currentActionName = name;
     return action;
@@ -226,6 +284,9 @@ export class PlayerCharacter {
   ): void {
     if (this.mixer) {
       this.mixer.update(delta);
+    }
+    if (this.kinematicController) {
+      this.kinematicController.update(delta, this.group.rotation.y);
     }
     if (this.modelScene) {
       this.modelScene.updateMatrixWorld(true);
@@ -416,8 +477,9 @@ export class PlayerCharacter {
     this.dodgeTimer += delta;
 
     this.isInvulnerable =
-      this.dodgeTimer >= this.dodgeConfig.invulnerableStart &&
-      this.dodgeTimer <= this.dodgeConfig.invulnerableEnd;
+      (this.kinematicController?.currentPhase === 'Airborne') ||
+      (this.dodgeTimer >= this.dodgeConfig.invulnerableStart &&
+        this.dodgeTimer <= this.dodgeConfig.invulnerableEnd);
 
     const progress = this.dodgeTimer / this.dodgeConfig.duration;
     const speedCurve = Math.cos(progress * Math.PI * 0.5);

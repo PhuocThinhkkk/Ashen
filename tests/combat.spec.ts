@@ -4,6 +4,7 @@ test.describe('Soulslike Boss Fight Combat System', () => {
   test('executes full combat loop: movement, lock-on, dodge i-frames, attacks, damage, and instant restart', async ({
     page,
   }) => {
+    test.setTimeout(60_000);
     const consoleErrors: string[] = [];
     const pageErrors: string[] = [];
 

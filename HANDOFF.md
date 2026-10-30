@@ -55,6 +55,24 @@ A single-boss combat experience inspired by Elden Ring's combat feel, running lo
    - Added `attackSwing()`, `hitConfirm()`, and `damageTaken()` to `AudioSystem.ts`.
    - Integrated `VFXSystem.ts` with additive high-velocity hit spark particle bursts and responsive character mesh hit flashes.
 
+### Milestone 5: Kinematic Combat Animation Pipeline & Precision Controller (Complete & Verified)
+1. **Kinematic Data Contract (`src/combat/KinematicData.ts`):**
+   - Implemented full kinematic schema for all 14 actions from `kinematic_summary.json`.
+   - Defined precise frame boundaries for `Windup`, `Airborne`, `Impact`, and `Recovery` phases.
+   - Calibrated Recovery-to-Windup crossfade durations (0.15s to 0.40s).
+2. **Kinematic Combat Controller (`src/combat/KinematicCombatController.ts`):**
+   - Enforces strict in-place root motion suppression while extracting forward displacement for `Standing Melee Run Jump Attack` (`delta_y = -5.9m`).
+   - Bone-socketed hitbox tracking dynamically targeting `mixamorig:RightHand` for sword attacks and `mixamorig:LeftFoot` for Spartan Kick.
+   - Toggles `isAttacking` strictly within active Impact frame windows.
+3. **Three-Nebula Particle System Integration (`src/systems/VFXSystem.ts`):**
+   - Procedural foot dust kick-up particles triggered on landing transitions from Airborne to Ground/Impact.
+   - High-energy peak velocity spark bursts and weapon trails emitted on peak velocity frames.
+4. **Synthetic Web Audio API Hooks (`src/systems/AudioSystem.ts`):**
+   - Dynamic oscillator swooshes and impact thuds synchronized with peak velocity frames.
+   - Footstep and landing thump audio synchronized with foot plant frames.
+5. **Guides & Documentation:**
+   - Complete developer guide in **[KINEMATIC_COMBAT_GUIDE.md](./KINEMATIC_COMBAT_GUIDE.md)** and technical blueprint in **[COMBAT_ANIMATION_BLUEPRINT.md](./COMBAT_ANIMATION_BLUEPRINT.md)**.
+
 ---
 
 ## 3. Sketchfab to Mixamo Conversion Tool Guide

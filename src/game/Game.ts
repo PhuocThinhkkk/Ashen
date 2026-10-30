@@ -80,6 +80,9 @@ export class Game {
     this.cameraRig = new SoulslikeCamera(this.camera);
     this.vfx = new VFXSystem(this.scene);
 
+    this.player.setVfxAndAudio(this.vfx, this.audio);
+    this.boss.setVfxAndAudio(this.vfx, this.audio);
+
     this.hud = new Hud({
       playerModels: AVAILABLE_PLAYER_MODELS,
       currentPlayerModel: this.player.modelId,
@@ -123,6 +126,7 @@ export class Game {
 
   public async setPlayerModel(modelId: string): Promise<void> {
     await this.player.loadModel(modelId);
+    this.player.setVfxAndAudio(this.vfx, this.audio);
     this.hud.syncModels(this.player.modelId, this.boss.modelId);
     this.debugTools.syncModels(this.player.modelId, this.boss.modelId);
     this.render();
@@ -131,6 +135,7 @@ export class Game {
 
   public async setBossModel(modelId: string): Promise<void> {
     await this.boss.loadModel(modelId);
+    this.boss.setVfxAndAudio(this.vfx, this.audio);
     this.hud.syncModels(this.player.modelId, this.boss.modelId);
     this.debugTools.syncModels(this.player.modelId, this.boss.modelId);
     this.render();
@@ -302,9 +307,10 @@ export class Game {
 
   private resolveCombatCollisions(): void {
     // A. Player Attack Hits Boss
+    const playerHitboxActive = this.player.isHitboxActive();
     if (
       this.player.state === 'attack' &&
-      this.player.attackPhase === 'active' &&
+      (this.player.attackPhase === 'active' || playerHitboxActive) &&
       this.player.currentAttack &&
       !this.player.hasHitCurrentSwing &&
       this.boss.state !== 'dead'
@@ -327,7 +333,7 @@ export class Game {
         this.hud.spawnDamageNumber(hit.damage, screenPos.x, screenPos.y, false);
 
         // Combat VFX: Hit sparks and mesh flash
-        const hitPoint = hit.contactPoint || this.boss.group.position.clone().add(new THREE.Vector3(0, 1.4, 0));
+        const hitPoint = hit.contactPoint || this.player.getHitboxWorldPosition();
         const fwdAngle = this.player.group.rotation.y;
         const hitDir = new THREE.Vector3(-Math.sin(fwdAngle), 0.25, -Math.cos(fwdAngle)).normalize();
         this.vfx.spawnHitSparks(hitPoint, hitDir, hit.isHeavy);
@@ -351,8 +357,9 @@ export class Game {
     }
 
     // B. Boss Attack Hits Player
+    const bossHitboxActive = this.boss.isHitboxActive();
     if (
-      (this.boss.state === 'active') &&
+      (this.boss.state === 'active' || bossHitboxActive) &&
       this.boss.currentAttack &&
       !this.boss.hasHitCurrentSwing &&
       this.player.state !== 'dead'

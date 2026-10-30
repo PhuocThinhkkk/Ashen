@@ -289,6 +289,76 @@ export class AudioSystem {
     });
   }
 
+  /**
+   * Placeholder synthetic swoosh synchronized with attack peak velocity frame.
+   */
+  public playPeakSwoosh(frequency = 380, duration = 0.16, isHeavy = false): void {
+    if (!this.context || this.context.state !== 'running') return;
+    const now = this.context.currentTime;
+
+    const osc = this.context.createOscillator();
+    const gain = this.context.createGain();
+    osc.type = isHeavy ? 'sawtooth' : 'triangle';
+    osc.frequency.setValueAtTime(frequency, now);
+    osc.frequency.exponentialRampToValueAtTime(Math.max(60, frequency * 0.28), now + duration);
+
+    const filter = this.context.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(frequency * 0.8, now);
+    filter.Q.setValueAtTime(isHeavy ? 2.5 : 3.5, now);
+
+    const peakGain = isHeavy ? 0.32 : 0.22;
+    gain.gain.setValueAtTime(0.001, now);
+    gain.gain.linearRampToValueAtTime(peakGain, now + duration * 0.2);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+
+    osc.connect(filter).connect(gain).connect(this.context.destination);
+    osc.start(now);
+    osc.stop(now + duration + 0.05);
+  }
+
+  /**
+   * Placeholder synthetic footstep audio synchronized with heavy footstep frames.
+   */
+  public playFootstep(heavy = false): void {
+    if (!this.context || this.context.state !== 'running') return;
+    const now = this.context.currentTime;
+
+    const osc = this.context.createOscillator();
+    const gain = this.context.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(heavy ? 95 : 140, now);
+    osc.frequency.exponentialRampToValueAtTime(35, now + 0.06);
+
+    gain.gain.setValueAtTime(heavy ? 0.22 : 0.12, now);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + (heavy ? 0.08 : 0.05));
+
+    osc.connect(gain).connect(this.context.destination);
+    osc.start(now);
+    osc.stop(now + 0.09);
+  }
+
+  /**
+   * Placeholder landing thump synchronized with transitioning from Airborne to Ground/Impact.
+   */
+  public playLandingThud(heavy = false): void {
+    if (!this.context || this.context.state !== 'running') return;
+    const now = this.context.currentTime;
+
+    const osc = this.context.createOscillator();
+    const gain = this.context.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(heavy ? 120 : 160, now);
+    osc.frequency.exponentialRampToValueAtTime(25, now + (heavy ? 0.22 : 0.14));
+
+    gain.gain.setValueAtTime(heavy ? 0.45 : 0.25, now);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + (heavy ? 0.24 : 0.15));
+
+    osc.connect(gain).connect(this.context.destination);
+    osc.start(now);
+    osc.stop(now + 0.26);
+  }
+
   public dispose(): void {
     void this.context?.close();
     this.context = null;

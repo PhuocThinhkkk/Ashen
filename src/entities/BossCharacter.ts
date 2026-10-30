@@ -1,5 +1,8 @@
 import * as THREE from 'three';
 import { type AttackDefinition, BOSS_ATTACKS } from '../combat/FrameCombat';
+import { KinematicCombatController } from '../combat/KinematicCombatController';
+import type { AudioSystem } from '../systems/AudioSystem';
+import type { VFXSystem } from '../systems/VFXSystem';
 import { ModelLoader } from '../utils/ModelLoader';
 
 export type BossState =
@@ -45,8 +48,11 @@ export class BossCharacter {
   public isLoaded = false;
   public loadPromise: Promise<void>;
   public mixer: THREE.AnimationMixer | null = null;
+  public kinematicController: KinematicCombatController | null = null;
   public currentActionName = '';
   public currentModelId = 'titan';
+  private vfxSystem: VFXSystem | null = null;
+  private audioSystem: AudioSystem | null = null;
   private readonly actions = new Map<string, THREE.AnimationAction>();
   private currentAction: THREE.AnimationAction | null = null;
   private modelScene: THREE.Group | null = null;
@@ -207,8 +213,13 @@ export class BossCharacter {
     // 6. Setup Animation Mixer with standardized clips
     this.mixer = new THREE.AnimationMixer(this.modelScene);
 
+    // 7. Setup Kinematic Combat Controller & bind armature
+    this.kinematicController = new KinematicCombatController(this.mixer);
+    this.kinematicController.bindArmature(this.modelScene);
+    this.updateKinematicCallbacks();
+
     for (const clip of bossGltf.animations) {
-      ModelLoader.stripRootMotion(clip, ['hips', 'mixamorig:Hips', 'mixamorigHips', 'Body']);
+      this.kinematicController.stripRootMotion(clip);
       const action = this.mixer.clipAction(clip);
       this.actions.set(clip.name, action);
     }
@@ -219,6 +230,32 @@ export class BossCharacter {
 
     // Play initial idle animation
     this.playAction('idle', 0.1);
+  }
+
+  public setVfxAndAudio(vfx: VFXSystem, audio: AudioSystem): void {
+    this.vfxSystem = vfx;
+    this.audioSystem = audio;
+    this.updateKinematicCallbacks();
+  }
+
+  private updateKinematicCallbacks(): void {
+    if (!this.kinematicController) return;
+    this.kinematicController.setCallbacks({
+      onFootDust: (pos, count) => this.vfxSystem?.spawnFootDustKickup(pos, count),
+      onPeakSparks: (pos, count, isHeavy) => this.vfxSystem?.spawnPeakVelocitySparks(pos, count, isHeavy),
+      onWeaponTrail: (bone, duration) => this.vfxSystem?.spawnWeaponTrail(bone, duration),
+      onPeakSwoosh: (freq, duration, isHeavy) => this.audioSystem?.playPeakSwoosh(freq, duration, isHeavy),
+      onPeakImpact: (isHeavy) => this.audioSystem?.hitImpact(isHeavy),
+      onFootstep: (heavy) => this.audioSystem?.playFootstep(heavy),
+      onLandingThud: (heavy) => this.audioSystem?.playLandingThud(heavy),
+    });
+  }
+
+  public isHitboxActive(): boolean {
+    if (this.kinematicController && (this.state === 'active' || this.state === 'windup' || this.state === 'recovery')) {
+      return this.kinematicController.isAttacking;
+    }
+    return this.state === 'active';
   }
 
   public playAction(
@@ -242,15 +279,25 @@ export class BossCharacter {
       return action;
     }
 
-    action.reset();
-    action.setLoop(loop, loop === THREE.LoopRepeat ? Infinity : 1);
-    action.clampWhenFinished = clampWhenFinished;
-    action.timeScale = timeScale;
+    if (this.kinematicController) {
+      this.kinematicController.playAction(name, action, {
+        fadeDuration,
+        loop,
+        clampWhenFinished,
+        timeScale,
+      });
+    } else {
+      action.reset();
+      action.setLoop(loop, loop === THREE.LoopRepeat ? Infinity : 1);
+      action.clampWhenFinished = clampWhenFinished;
+      action.timeScale = timeScale;
 
-    if (this.currentAction) {
-      this.currentAction.crossFadeTo(action, fadeDuration, true);
+      if (this.currentAction) {
+        this.currentAction.crossFadeTo(action, fadeDuration, true);
+      }
+      action.play();
     }
-    action.play();
+
     this.currentAction = action;
     this.currentActionName = name;
     return action;
@@ -259,6 +306,13 @@ export class BossCharacter {
   public update(delta: number, elapsed: number, playerPos: THREE.Vector3, arenaRadius: number): void {
     if (this.mixer) {
       this.mixer.update(delta);
+    }
+    if (this.kinematicController) {
+      this.kinematicController.update(delta, this.group.rotation.y);
+      const rootMotionDelta = this.kinematicController.consumeRootMotionDelta();
+      if (rootMotionDelta.lengthSq() > 0) {
+        this.group.position.add(rootMotionDelta);
+      }
     }
     if (this.modelScene) {
       this.modelScene.updateMatrixWorld(true);
@@ -459,6 +513,9 @@ export class BossCharacter {
   }
 
   public getBladeHitboxWorldPosition(target: THREE.Vector3 = new THREE.Vector3()): THREE.Vector3 {
+    if (this.kinematicController && this.kinematicController.activeHitboxBone && this.currentAttack?.animationClip === 'kick') {
+      return this.kinematicController.getHitboxWorldPosition(target);
+    }
     this.bladeHitbox.updateMatrixWorld(true);
     return this.bladeHitbox.getWorldPosition(target);
   }
