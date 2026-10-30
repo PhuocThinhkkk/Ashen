@@ -482,10 +482,21 @@ export class PlayerCharacter {
     }
 
     this.group.rotation.y = Math.atan2(-this.dodgeDirection.x, -this.dodgeDirection.z);
-    // Fast-start roll: skip hesitation frames and calibrate animation to 0.85s total
-    const action = this.playAction('dodge', 0.04, THREE.LoopOnce, true, 2.5);
+    const action = this.playAction('dodge', 0.04, THREE.LoopOnce, true, 1.0);
     if (action) {
-      action.time = 0.20; // Skip slow initial pause at start of raw Mixamo clip
+      action.time = 0;
+      action.paused = true;
+    }
+  }
+
+  private setDodgeAnimTime(targetTime: number): void {
+    let action = this.actions.get('dodge');
+    if (!action) {
+      const clip = ModelLoader.findClip(this.rawClips, 'dodge');
+      if (clip) action = this.actions.get(clip.name);
+    }
+    if (action) {
+      action.time = targetTime;
     }
   }
 
@@ -519,42 +530,53 @@ export class PlayerCharacter {
   private updateDodge(delta: number, _inputs: CombatInputs): void {
     this.dodgeTimer += delta;
 
-    const STARTUP_TIME = 0.15; // 4 to 5 internal frames (~0.15s startup)
-    const IFRAME_DURATION = 0.43; // 13 frames (~0.43s active i-frames)
-    const RECOVERY_DURATION = 0.27; // 8 frames (~0.27s recovery)
+    const STARTUP_TIME = 0.15; // 0.15s startup (frames 1 to 25)
+    const IFRAME_DURATION = 0.43; // 0.43s active i-frames (frames 25 to 100)
+    const RECOVERY_DURATION = 0.27; // 0.27s recovery (frames 100 to 143)
     const TOTAL_DURATION = 0.85; // 0.15 + 0.43 + 0.27 = 0.85s
     const IFRAME_END = STARTUP_TIME + IFRAME_DURATION; // 0.58s
 
     if (this.dodgeTimer < STARTUP_TIME) {
-      // 1. Startup / Delay (~0.15s): Fully vulnerable, initial quick dive
+      // 1. Startup / Delay (0.00s to 0.15s) -> Frames 1 to 25:
+      // Fully vulnerable, initial quick dive
       this.isInvulnerable = false;
       this.setDodgeIFrameVisual(false);
+
+      const progress = Math.min(1.0, this.dodgeTimer / STARTUP_TIME);
+      this.setDodgeAnimTime(progress * (25 / 60));
+
       const startupSpeed = 1.4;
       this.group.position.addScaledVector(this.dodgeDirection, startupSpeed * delta);
     } else if (this.dodgeTimer < IFRAME_END) {
-      // 2. The Invulnerable Roll (Active I-Frames, ~0.43s):
-      // Enemy attacks pass cleanly through, subtle reddish flash visualizer
+      // 2. The Invulnerable Roll (0.15s to 0.58s) -> Frames 25 to 100:
+      // Active invulnerability window (0.43s), reddish emissive flash visualizer
       this.isInvulnerable = true;
       this.setDodgeIFrameVisual(true);
 
-      const progress = (this.dodgeTimer - STARTUP_TIME) / IFRAME_DURATION;
+      const progress = Math.min(1.0, (this.dodgeTimer - STARTUP_TIME) / IFRAME_DURATION);
+      this.setDodgeAnimTime((25 / 60) + progress * ((100 - 25) / 60));
+
       const speedCurve = Math.sin(progress * Math.PI);
       const traversalSpeed = 7.8 * speedCurve; // Tuned for ~2.35m total roll distance
       this.group.position.addScaledVector(this.dodgeDirection, traversalSpeed * delta);
     } else if (this.dodgeTimer < TOTAL_DURATION) {
-      // 3. The End (Recovery, ~0.27s):
+      // 3. The End (Recovery: 0.58s to 0.85s) -> Frames 100 to 143:
       // Character lands and recovers feet, fully vulnerable again, cannot chain roll yet
       this.isInvulnerable = false;
       this.setDodgeIFrameVisual(false);
 
-      const recoveryProgress = (this.dodgeTimer - IFRAME_END) / RECOVERY_DURATION;
-      const decaySpeed = (1.0 - recoveryProgress) * 0.8;
+      const progress = Math.min(1.0, (this.dodgeTimer - IFRAME_END) / RECOVERY_DURATION);
+      this.setDodgeAnimTime((100 / 60) + progress * ((143 - 100) / 60));
+
+      const decaySpeed = (1.0 - progress) * 0.8;
       this.group.position.addScaledVector(this.dodgeDirection, decaySpeed * delta);
     } else {
       // 4. Roll Complete
       this.state = 'idle';
       this.isInvulnerable = false;
       this.setDodgeIFrameVisual(false);
+      const action = this.actions.get('dodge');
+      if (action) action.paused = false;
       this.playAction('idle', 0.15);
     }
   }
@@ -637,6 +659,8 @@ export class PlayerCharacter {
     if (this.hp <= 0) {
       this.state = 'dead';
       this.setDodgeIFrameVisual(false);
+      const dodgeAct = this.actions.get('dodge');
+      if (dodgeAct) dodgeAct.paused = false;
       this.velocity.set(0, 0, 0);
       this.playAction('death', 0.1, THREE.LoopOnce, true, 1.0);
       return true;
@@ -645,6 +669,8 @@ export class PlayerCharacter {
     if (isHeavy || this.state !== 'attack') {
       this.state = 'stagger';
       this.setDodgeIFrameVisual(false);
+      const dodgeAct = this.actions.get('dodge');
+      if (dodgeAct) dodgeAct.paused = false;
       this.staggerTimer = isHeavy ? 0.45 : 0.25;
       this.currentAttack = null;
       // High-impact stagger reaction animation
@@ -673,6 +699,8 @@ export class PlayerCharacter {
     this.comboQueued = false;
     this.isInvulnerable = false;
     this.setDodgeIFrameVisual(false);
+    const dodgeAct = this.actions.get('dodge');
+    if (dodgeAct) dodgeAct.paused = false;
     this.dodgeTimer = 0;
     this.staggerTimer = 0;
 
@@ -686,6 +714,8 @@ export class PlayerCharacter {
 
   public dispose(): void {
     this.setDodgeIFrameVisual(false);
+    const dodgeAct = this.actions.get('dodge');
+    if (dodgeAct) dodgeAct.paused = false;
     this.hitboxDebugger.dispose();
     if (this.mixer) {
       this.mixer.stopAllAction();

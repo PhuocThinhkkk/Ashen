@@ -290,25 +290,29 @@ export const KINEMATIC_ACTIONS: Record<string, KinematicActionConfig> = {
     actionName: 'Armature|mixamo.com|Layer0',
     totalFrames: 143,
     fps: 60,
-    duration: 143 / 60,
+    duration: 0.85,
     rootMotion: { type: 'In-Place', deltaY: 0, deltaX: 0 },
     phases: [
-      { type: 'Windup', startFrame: 1, endFrame: 38 },
-      { type: 'Airborne', startFrame: 39, endFrame: 105 },
-      { type: 'Recovery', startFrame: 106, endFrame: 143 },
+      { type: 'Windup', startFrame: 1, endFrame: 24 }, // Startup (~0.15s)
+      { type: 'Airborne', startFrame: 25, endFrame: 100 }, // Invulnerable Roll (~0.43s)
+      { type: 'Recovery', startFrame: 101, endFrame: 143 }, // Recovery (~0.27s)
     ],
     crossfadeDurationOut: 0.20,
     vfx: {
       landingDustFrames: [
-        { frame: 39, bones: ['mixamorig:Hips'] }, // dive start dust
-        { frame: 106, bones: ['mixamorig:LeftFoot', 'mixamorig:RightFoot'] }, // landing standup dust
+        { frame: 25, bones: ['mixamorig:Hips'] }, // dive start dust
+        { frame: 100, bones: ['mixamorig:LeftFoot', 'mixamorig:RightFoot'] }, // landing standup dust
+        { frame: 106, bones: ['mixamorig:LeftFoot'] },
       ],
     },
     audio: {
-      peakSwooshFrame: 39,
+      peakSwooshFrame: 25,
       peakSwooshFreq: 180,
       peakSwooshDuration: 0.24,
-      footstepFrames: [{ frame: 106, bone: 'mixamorig:LeftFoot', heavy: false }],
+      footstepFrames: [
+        { frame: 100, bone: 'mixamorig:LeftFoot', heavy: false },
+        { frame: 106, bone: 'mixamorig:LeftFoot', heavy: false },
+      ],
     },
   },
 

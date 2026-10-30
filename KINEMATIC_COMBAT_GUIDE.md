@@ -144,17 +144,18 @@ The dodge roll follows precise Souls combat design timings decoupled from raw di
 
 ```
 [0.00s ─── Startup (0.15s) ─── 0.15s ─── Active I-Frames (0.43s) ─── 0.58s ─── Recovery (0.27s) ─── 0.85s]
+  Frames 1 to 25                  Frames 25 to 100                     Frames 100 to 143
   Vulnerable: Quick Dive          Invulnerable: Reddish Flash          Vulnerable: Feet Landing
   Micro-advance: 1.4 m/s          Sinusoidal Traversal (~2.1m)         Decay to neutral stance
 ```
 
 ### 1. Phase Breakdown
-- **Startup / Delay (Duration: `~0.15 seconds`):**
-  Initial wind-up dive from button press. In Mixamo's `Stand To Roll.fbx`, playback starts at `time = 0.20s` to eliminate sluggish hesitation. Fully vulnerable to incoming attacks.
-- **The Invulnerable Roll (Duration: `~0.43 seconds`, `0.15s` to `0.58s`):**
-  Core invincibility window. Attacks pass through cleanly without damage. Character mesh visualizes active i-frames with a subtle reddish emissive flash (`0xff4433`, intensity `0.65`). Velocity follows a half-sine impulse curve (`peakSpeed = 7.8 m/s`) covering `~2.13 meters`. Total roll distance is calibrated to **`~2.35 meters`** (compact and grounded).
-- **The End / Recovery (Duration: `~0.27 seconds`, `0.58s` to `0.85s`):**
-  Character recovers feet. Vulnerable again. Reddish flash clears immediately. Cannot chain rolls or attacks until recovery completes.
+- **Startup / Delay (Frames 1 to 25, Duration: `~0.15 seconds`):**
+  Initial wind-up dive from button press. Drives animation frames 1 to 25 in 0.15s. Fully vulnerable to incoming attacks.
+- **The Invulnerable Roll (Frames 25 to 100, Duration: `~0.43 seconds`, `0.15s` to `0.58s`):**
+  Core invincibility window. Drives animation frames 25 to 100. Attacks pass through cleanly without damage. Character mesh visualizes active i-frames with a subtle reddish emissive flash (`0xff4433`, intensity `0.65`). Velocity follows a half-sine impulse curve (`peakSpeed = 7.8 m/s`) covering `~2.13 meters`. Total roll distance is calibrated to **`~2.35 meters`** (compact and grounded).
+- **The End / Recovery (Frames 100 to 143, Duration: `~0.27 seconds`, `0.58s` to `0.85s`):**
+  Character recovers feet. Drives animation frames 100 to 143. Vulnerable again. Reddish flash clears immediately. Cannot chain rolls or attacks until recovery completes. Total clip is 143 frames completed in exactly 0.85s.
 
 ---
 
