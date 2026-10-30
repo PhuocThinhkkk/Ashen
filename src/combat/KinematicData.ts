@@ -63,6 +63,35 @@ export interface KinematicActionConfig {
   audio: KinematicAudioConfig;
 }
 
+/**
+ * =========================================================================
+ * SINGLE SOURCE OF TRUTH: DODGE ROLL TIMING, FRAMES & PHYSICS
+ * =========================================================================
+ * Change any frame numbers or durations in this object to tune the roll.
+ * The entire game (animation player, i-frame collision tests, mesh visualizer,
+ * physics travel distance, and HUD telemetry) automatically adapts.
+ */
+export const DODGE_CONFIG = {
+  // Phase 1: Startup (Initial dive commit - vulnerable to hits)
+  startupStartFrame: 1,
+  startupEndFrame: 25,       // E.g. Change to 30 to test 1 to 30
+  startupDuration: 0.15,     // Real-time duration in seconds (~0.15s)
+
+  // Phase 2: Active I-Frames (Core invulnerability window - attacks pass through)
+  iframeStartFrame: 25,      // E.g. Change to 31 to test 31 to 90
+  iframeEndFrame: 100,       // E.g. Change to 90
+  iframeDuration: 0.43,      // Real-time duration in seconds (~0.43s)
+
+  // Phase 3: Recovery (Landing and standing back up - vulnerable, input locked)
+  recoveryStartFrame: 100,   // E.g. Change to 91 to test 91 to 143
+  recoveryEndFrame: 143,     // Total clip keyframes in Stand To Roll.fbx (143)
+  recoveryDuration: 0.27,    // Real-time duration in seconds (~0.27s)
+
+  // Physical Traversal & Resource Tuning
+  totalDistanceMeters: 2.35, // Compact FromSoftware roll distance (~2.35m)
+  staminaCost: 20,           // Stamina consumed
+};
+
 export const KINEMATIC_ACTIONS: Record<string, KinematicActionConfig> = {
   // 1. Great Sword Kick
   kick: {
@@ -290,27 +319,45 @@ export const KINEMATIC_ACTIONS: Record<string, KinematicActionConfig> = {
     actionName: 'Armature|mixamo.com|Layer0',
     totalFrames: 143,
     fps: 60,
-    duration: 0.85,
+    duration:
+      DODGE_CONFIG.startupDuration +
+      DODGE_CONFIG.iframeDuration +
+      DODGE_CONFIG.recoveryDuration,
     rootMotion: { type: 'In-Place', deltaY: 0, deltaX: 0 },
     phases: [
-      { type: 'Windup', startFrame: 1, endFrame: 24 }, // Startup (~0.15s)
-      { type: 'Airborne', startFrame: 25, endFrame: 100 }, // Invulnerable Roll (~0.43s)
-      { type: 'Recovery', startFrame: 101, endFrame: 143 }, // Recovery (~0.27s)
+      {
+        type: 'Windup',
+        startFrame: DODGE_CONFIG.startupStartFrame,
+        endFrame: DODGE_CONFIG.startupEndFrame,
+      },
+      {
+        type: 'Airborne',
+        startFrame: DODGE_CONFIG.iframeStartFrame,
+        endFrame: DODGE_CONFIG.iframeEndFrame,
+      },
+      {
+        type: 'Recovery',
+        startFrame: DODGE_CONFIG.recoveryStartFrame,
+        endFrame: DODGE_CONFIG.recoveryEndFrame,
+      },
     ],
     crossfadeDurationOut: 0.20,
     vfx: {
       landingDustFrames: [
-        { frame: 25, bones: ['mixamorig:Hips'] }, // dive start dust
-        { frame: 100, bones: ['mixamorig:LeftFoot', 'mixamorig:RightFoot'] }, // landing standup dust
+        { frame: DODGE_CONFIG.iframeStartFrame, bones: ['mixamorig:Hips'] },
+        {
+          frame: DODGE_CONFIG.recoveryStartFrame,
+          bones: ['mixamorig:LeftFoot', 'mixamorig:RightFoot'],
+        },
         { frame: 106, bones: ['mixamorig:LeftFoot'] },
       ],
     },
     audio: {
-      peakSwooshFrame: 25,
+      peakSwooshFrame: DODGE_CONFIG.iframeStartFrame,
       peakSwooshFreq: 180,
       peakSwooshDuration: 0.24,
       footstepFrames: [
-        { frame: 100, bone: 'mixamorig:LeftFoot', heavy: false },
+        { frame: DODGE_CONFIG.recoveryStartFrame, bone: 'mixamorig:LeftFoot', heavy: false },
         { frame: 106, bone: 'mixamorig:LeftFoot', heavy: false },
       ],
     },

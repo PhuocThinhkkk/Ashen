@@ -6,6 +6,7 @@ import {
   PLAYER_ATTACKS,
   PLAYER_DODGE,
 } from '../combat/FrameCombat';
+import { DODGE_CONFIG } from '../combat/KinematicData';
 import { KinematicCombatController } from '../combat/KinematicCombatController';
 import { HitboxVisualDebugger } from '../combat/HitboxVisualDebugger';
 import type { CombatInputs } from '../core/InputController';
@@ -530,43 +531,59 @@ export class PlayerCharacter {
   private updateDodge(delta: number, _inputs: CombatInputs): void {
     this.dodgeTimer += delta;
 
-    const STARTUP_TIME = 0.15; // 0.15s startup (frames 1 to 25)
-    const IFRAME_DURATION = 0.43; // 0.43s active i-frames (frames 25 to 100)
-    const RECOVERY_DURATION = 0.27; // 0.27s recovery (frames 100 to 143)
-    const TOTAL_DURATION = 0.85; // 0.15 + 0.43 + 0.27 = 0.85s
-    const IFRAME_END = STARTUP_TIME + IFRAME_DURATION; // 0.58s
+    const {
+      startupStartFrame,
+      startupEndFrame,
+      startupDuration,
+      iframeStartFrame,
+      iframeEndFrame,
+      iframeDuration,
+      recoveryStartFrame,
+      recoveryEndFrame,
+      recoveryDuration,
+      totalDistanceMeters,
+    } = DODGE_CONFIG;
 
-    if (this.dodgeTimer < STARTUP_TIME) {
-      // 1. Startup / Delay (0.00s to 0.15s) -> Frames 1 to 25:
-      // Fully vulnerable, initial quick dive
+    const TOTAL_DURATION = startupDuration + iframeDuration + recoveryDuration;
+    const IFRAME_END = startupDuration + iframeDuration;
+
+    // Peak speed for half-sine traversal curve:
+    // average speed = peakSpeed * (2 / PI); activeDistance = average * iframeDuration
+    const peakSpeed = (totalDistanceMeters * 0.9) / ((2 / Math.PI) * iframeDuration);
+
+    if (this.dodgeTimer < startupDuration) {
+      // 1. Startup / Delay (Windup dive anticipation: startupStartFrame to startupEndFrame)
+      // Fully vulnerable to damage during these frames
       this.isInvulnerable = false;
       this.setDodgeIFrameVisual(false);
 
-      const progress = Math.min(1.0, this.dodgeTimer / STARTUP_TIME);
-      this.setDodgeAnimTime(progress * (25 / 60));
+      const progress = Math.min(1.0, this.dodgeTimer / startupDuration);
+      const frame = startupStartFrame + progress * (startupEndFrame - startupStartFrame);
+      this.setDodgeAnimTime((frame - 1) / 60);
 
-      const startupSpeed = 1.4;
+      const startupSpeed = (totalDistanceMeters * 0.1) / startupDuration;
       this.group.position.addScaledVector(this.dodgeDirection, startupSpeed * delta);
     } else if (this.dodgeTimer < IFRAME_END) {
-      // 2. The Invulnerable Roll (0.15s to 0.58s) -> Frames 25 to 100:
-      // Active invulnerability window (0.43s), reddish emissive flash visualizer
+      // 2. Active I-Frames (Core invulnerability: iframeStartFrame to iframeEndFrame)
+      // Attacks pass through cleanly, character flashes slightly reddish to visualize it
       this.isInvulnerable = true;
       this.setDodgeIFrameVisual(true);
 
-      const progress = Math.min(1.0, (this.dodgeTimer - STARTUP_TIME) / IFRAME_DURATION);
-      this.setDodgeAnimTime((25 / 60) + progress * ((100 - 25) / 60));
+      const progress = Math.min(1.0, (this.dodgeTimer - startupDuration) / iframeDuration);
+      const frame = iframeStartFrame + progress * (iframeEndFrame - iframeStartFrame);
+      this.setDodgeAnimTime((frame - 1) / 60);
 
       const speedCurve = Math.sin(progress * Math.PI);
-      const traversalSpeed = 7.8 * speedCurve; // Tuned for ~2.35m total roll distance
-      this.group.position.addScaledVector(this.dodgeDirection, traversalSpeed * delta);
+      this.group.position.addScaledVector(this.dodgeDirection, peakSpeed * speedCurve * delta);
     } else if (this.dodgeTimer < TOTAL_DURATION) {
-      // 3. The End (Recovery: 0.58s to 0.85s) -> Frames 100 to 143:
-      // Character lands and recovers feet, fully vulnerable again, cannot chain roll yet
+      // 3. Recovery (Landing and standing up: recoveryStartFrame to recoveryEndFrame)
+      // Fully vulnerable again, reddish flash clears, input locked until recovery finishes
       this.isInvulnerable = false;
       this.setDodgeIFrameVisual(false);
 
-      const progress = Math.min(1.0, (this.dodgeTimer - IFRAME_END) / RECOVERY_DURATION);
-      this.setDodgeAnimTime((100 / 60) + progress * ((143 - 100) / 60));
+      const progress = Math.min(1.0, (this.dodgeTimer - IFRAME_END) / recoveryDuration);
+      const frame = recoveryStartFrame + progress * (recoveryEndFrame - recoveryStartFrame);
+      this.setDodgeAnimTime((frame - 1) / 60);
 
       const decaySpeed = (1.0 - progress) * 0.8;
       this.group.position.addScaledVector(this.dodgeDirection, decaySpeed * delta);

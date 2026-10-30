@@ -1,3 +1,5 @@
+import { DODGE_CONFIG } from './KinematicData';
+
 export interface AttackDefinition {
   name: string;
   startup: number;       // Seconds before damage window
@@ -74,11 +76,16 @@ export const PLAYER_ATTACKS: Record<string, AttackDefinition> = {
 };
 
 export const PLAYER_DODGE: DodgeDefinition = {
-  duration: 0.85,          // 0.15s startup + 0.43s active i-frames + 0.27s recovery = 0.85s total
-  invulnerableStart: 0.15, // 4-5 internal frames (~0.15s) startup
-  invulnerableEnd: 0.58,   // 0.15s + 0.43s = 0.58s (13 frames of active i-frames)
-  speed: 7.8,              // Tuned for ~2.35m total roll distance (compact FromSoftware feel)
-  staminaCost: 20,
+  duration:
+    DODGE_CONFIG.startupDuration +
+    DODGE_CONFIG.iframeDuration +
+    DODGE_CONFIG.recoveryDuration,
+  invulnerableStart: DODGE_CONFIG.startupDuration,
+  invulnerableEnd: DODGE_CONFIG.startupDuration + DODGE_CONFIG.iframeDuration,
+  speed:
+    (DODGE_CONFIG.totalDistanceMeters * 0.9) /
+    ((2 / Math.PI) * DODGE_CONFIG.iframeDuration),
+  staminaCost: DODGE_CONFIG.staminaCost,
 };
 
 export const BOSS_ATTACKS: Record<string, AttackDefinition> = {
