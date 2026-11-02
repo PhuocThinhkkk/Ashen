@@ -6,8 +6,8 @@ import {
   toTime,
 } from '../src/combat/KinematicData';
 
-test.describe('Kinematic Combat System & Animation Blueprint', () => {
-  test('verifies all 14 kinematic actions from kinematic_summary.json are properly defined with phases, hitboxes, crossfades, vfx, and audio', () => {
+test.describe('Kinematic Combat System & Action Configurations', () => {
+  test('verifies all 14 kinematic actions are properly defined with phases, hitboxes, crossfades, vfx, and audio', () => {
     const requiredActionIds = [
       'kick',
       'attack_360',

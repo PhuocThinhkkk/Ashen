@@ -57,7 +57,7 @@ A single-boss combat experience inspired by Elden Ring's combat feel, running lo
 
 ### Milestone 5: Kinematic Combat Animation Pipeline & Precision Controller (Complete & Verified)
 1. **Kinematic Data Contract (`src/combat/KinematicData.ts`):**
-   - Implemented full kinematic schema for all 14 actions from `kinematic_summary.json`.
+   - Implemented kinematic schema for all 14 actions.
    - Defined precise frame boundaries for `Windup`, `Airborne`, `Impact`, and `Recovery` phases.
    - Calibrated Recovery-to-Windup crossfade durations (0.15s to 0.40s).
 2. **Kinematic Combat Controller (`src/combat/KinematicCombatController.ts`):**
@@ -70,8 +70,6 @@ A single-boss combat experience inspired by Elden Ring's combat feel, running lo
 4. **Synthetic Web Audio API Hooks (`src/systems/AudioSystem.ts`):**
    - Dynamic oscillator swooshes and impact thuds synchronized with peak velocity frames.
    - Footstep and landing thump audio synchronized with foot plant frames.
-5. **Guides & Documentation:**
-   - Complete developer guide in **[KINEMATIC_COMBAT_GUIDE.md](./KINEMATIC_COMBAT_GUIDE.md)** and technical blueprint in **[COMBAT_ANIMATION_BLUEPRINT.md](./COMBAT_ANIMATION_BLUEPRINT.md)**.
 
 ---
 
