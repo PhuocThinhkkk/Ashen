@@ -4,6 +4,7 @@ import { getDomBindings } from './asset-test/ui/DomBindings';
 import { AssetTestCameraManager } from './asset-test/camera/AssetTestCameraManager';
 import { RawAnimationStage } from './asset-test/track1/RawAnimationStage';
 import { CombatDuelStage } from './asset-test/track2/CombatDuelStage';
+import { DuelCombatResolver } from './asset-test/track2/DuelCombatResolver';
 import { WeaponSocketGUI } from './asset-test/ui/WeaponSocketGUI';
 import { RawInspectorUI } from './asset-test/ui/RawInspectorUI';
 import { CombatDuelUI } from './asset-test/ui/CombatDuelUI';
@@ -66,7 +67,6 @@ scene.add(gridHelper);
 // 2. Stages & Controllers
 let playbackSpeed = 1.0;
 let isPaused = false;
-let isWalkMode = false;
 const keysPressed: Record<string, boolean> = {};
 
 const cameraMgr = new AssetTestCameraManager(dom.canvas, (roamActive) => {
@@ -122,10 +122,31 @@ function toggleHitboxDebug(visible?: boolean): boolean {
 
   if (dom.hitboxStatusBadge) {
     dom.hitboxStatusBadge.textContent = nextVisible ? 'HITBOX: ON' : 'HITBOX: OFF';
-    dom.hitboxStatusBadge.style.color = nextVisible ? '#ff4444' : '#00ff88';
-    dom.hitboxStatusBadge.style.borderColor = nextVisible ? '#ff4444' : '#00ff88';
+    dom.hitboxStatusBadge.style.color = nextVisible ? '#ffff00' : '#888800';
+    dom.hitboxStatusBadge.style.borderColor = nextVisible ? '#ffff00' : '#888800';
   }
   return nextVisible;
+}
+
+function setGameFollowMode(enabled: boolean): void {
+  cameraMgr.setRoamMode(
+    enabled,
+    duelStage.logicPlayer ? duelStage.logicPlayer.group.position : undefined,
+  );
+  if (dom.btnModeToggle) {
+    dom.btnModeToggle.textContent = enabled
+      ? '🚶 Mode: 3rd-Person Follow (Click to Orbit)'
+      : '🎮 Mode: Orbit (Click for 3rd-Person Follow)';
+    dom.btnModeToggle.classList.toggle('active', enabled);
+  }
+  if (dom.cameraButtons) {
+    dom.cameraButtons.querySelectorAll('button').forEach((b) => b.classList.remove('active'));
+    if (enabled) {
+      dom.cameraButtons.querySelector('button[data-cam="roam"]')?.classList.add('active');
+    } else {
+      dom.cameraButtons.querySelector('button[data-cam="both"]')?.classList.add('active');
+    }
+  }
 }
 
 function togglePause(): boolean {
@@ -154,43 +175,6 @@ function updateTelemetry(): { playerActive: boolean; bossActive: boolean } {
     dom.frameTelemetry.textContent = telemetry.telemetryText;
   }
   return { playerActive: telemetry.playerActive, bossActive: telemetry.bossActive };
-}
-
-function updateWalkMode(delta: number): void {
-  if (!isWalkMode || !rawStage.currentPlayerScene) return;
-
-  const moveX = (keysPressed['KeyD'] ? 1 : 0) - (keysPressed['KeyA'] ? 1 : 0);
-  const moveZ = (keysPressed['KeyS'] ? 1 : 0) - (keysPressed['KeyW'] ? 1 : 0);
-
-  if (moveX !== 0 || moveZ !== 0) {
-    const moveDir = new THREE.Vector3(moveX, 0, moveZ).normalize();
-    const speed = keysPressed['ShiftLeft'] ? 6.5 : 3.8;
-    rawStage.currentPlayerScene.position.addScaledVector(moveDir, speed * delta);
-    rawStage.currentPlayerScene.rotation.y = Math.atan2(-moveDir.x, -moveDir.z);
-
-    if (
-      !rawStage.diagnostics.player.activeClip.includes('attack') &&
-      !rawStage.diagnostics.player.activeClip.includes('dodge')
-    ) {
-      const walkClip = keysPressed['ShiftLeft'] ? 'run' : 'walk';
-      if (rawStage.diagnostics.player.activeClip !== walkClip) {
-        rawStage.playPlayerAnimation(walkClip);
-        rawUI.updateActiveClipLabels();
-      }
-    }
-    cameraMgr.controls.target
-      .copy(rawStage.currentPlayerScene.position)
-      .add(new THREE.Vector3(0, 1.1, 0));
-  } else {
-    if (
-      !rawStage.diagnostics.player.activeClip.includes('attack') &&
-      !rawStage.diagnostics.player.activeClip.includes('dodge') &&
-      rawStage.diagnostics.player.activeClip !== 'idle'
-    ) {
-      rawStage.playPlayerAnimation('idle');
-      rawUI.updateActiveClipLabels();
-    }
-  }
 }
 
 // 4. Capture Canvas & Mid-Frame Validation Utilities
@@ -262,13 +246,10 @@ window.addEventListener('keydown', (e) => {
   } else if (e.code === 'KeyR' && !e.repeat) {
     duelStage.resetPositions((text) => duelUI.logCombat(text));
   } else if (e.code === 'Escape') {
-    if (cameraMgr.isRoamMode) cameraMgr.setRoamMode(false);
+    if (cameraMgr.isRoamMode) setGameFollowMode(false);
   } else if (e.code === 'Space' && !e.repeat) {
     if (cameraMgr.isRoamMode) {
       // Handled in inputController
-    } else if (isWalkMode) {
-      rawStage.playPlayerAnimation('dodge');
-      rawUI.updateActiveClipLabels();
     } else {
       togglePause();
     }
@@ -277,17 +258,11 @@ window.addEventListener('keydown', (e) => {
   } else if (e.code === 'BracketRight' && !e.repeat) {
     stepFrame(1);
   } else if (e.code === 'KeyJ' && !e.repeat) {
-    if (isWalkMode) {
-      rawStage.playPlayerAnimation('attack_light');
-      rawUI.updateActiveClipLabels();
-    } else if (!cameraMgr.isRoamMode) {
+    if (!cameraMgr.isRoamMode) {
       duelStage.triggerPlayerAction('light1', (text) => duelUI.logCombat(text));
     }
   } else if (e.code === 'KeyK' && !e.repeat) {
-    if (isWalkMode) {
-      rawStage.playPlayerAnimation('attack_heavy');
-      rawUI.updateActiveClipLabels();
-    } else if (!cameraMgr.isRoamMode) {
+    if (!cameraMgr.isRoamMode) {
       duelStage.triggerPlayerAction('heavy', (text) => duelUI.logCombat(text));
     }
   }
@@ -304,12 +279,13 @@ dom.canvas.addEventListener('click', () => {
 });
 
 dom.btnModeToggle?.addEventListener('click', () => {
-  isWalkMode = !isWalkMode;
-  if (dom.btnModeToggle) {
-    dom.btnModeToggle.textContent = isWalkMode
-      ? '🏃 Mode: Walk (Click to Orbit)'
-      : '🚶 Mode: Orbit (Click to Walk)';
-    dom.btnModeToggle.classList.toggle('active', isWalkMode);
+  setGameFollowMode(!cameraMgr.isRoamMode);
+});
+
+dom.btnOpenSettings?.addEventListener('click', () => {
+  const guiDom = document.querySelector<HTMLElement>('.lil-gui.lil-root');
+  if (guiDom) {
+    guiDom.style.display = guiDom.style.display === 'none' ? 'block' : 'none';
   }
 });
 
@@ -380,13 +356,7 @@ window.__ASSET_TEST__ = {
   stepFrame,
   togglePause,
   setMode: (mode: 'orbit' | 'walk') => {
-    isWalkMode = mode === 'walk';
-    if (dom.btnModeToggle) {
-      dom.btnModeToggle.textContent = isWalkMode
-        ? '🏃 Mode: Walk (Click to Orbit)'
-        : '🚶 Mode: Orbit (Click to Walk)';
-      dom.btnModeToggle.classList.toggle('active', isWalkMode);
-    }
+    setGameFollowMode(mode === 'walk');
   },
   getHitboxDebugState: updateTelemetry,
   triggerPlayerAction: (actionKey: string) =>
@@ -411,11 +381,14 @@ window.__ASSET_TEST__ = {
     }
     return active;
   },
-  setRoamMode: (enabled: boolean) =>
-    cameraMgr.setRoamMode(
-      enabled,
-      duelStage.logicPlayer ? duelStage.logicPlayer.group.position : undefined,
-    ),
+  setRoamMode: (enabled: boolean) => setGameFollowMode(enabled),
+  getWeaponLocations: () => ({
+    playerSword: duelStage.logicPlayer ? duelStage.logicPlayer.getWeaponBladeSegment() : null,
+    bossGreatsword: duelStage.logicBoss ? duelStage.logicBoss.getWeaponBladeSegment() : null,
+    bossFoot: duelStage.logicBoss ? duelStage.logicBoss.getFootLocation() : null,
+    bladeToPlayerDistance: DuelCombatResolver.lastBladeToPlayerDistance,
+    bladeToBossDistance: DuelCombatResolver.lastBladeToBossDistance,
+  }),
 };
 
 // 8. Main Render Loop
@@ -429,7 +402,6 @@ function animate(): void {
     rawStage.update(delta);
   }
 
-  updateWalkMode(delta);
   updateTelemetry();
 
   duelStage.update(

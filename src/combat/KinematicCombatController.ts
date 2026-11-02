@@ -219,7 +219,23 @@ export class KinematicCombatController {
 
       // 2. Root Motion Extraction (Standing Melee Run Jump Attack: delta_y = -5.9m)
       if (cfg.rootMotion.type === 'Root Motion' && cfg.id === 'attack_jump') {
+        const windupPhase = cfg.phases.find((p) => p.type === 'Windup');
         const airbornePhase = cfg.phases.find((p) => p.type === 'Airborne');
+
+        const forward = new THREE.Vector3(
+          -Math.sin(characterFacingRotationY),
+          0,
+          -Math.cos(characterFacingRotationY),
+        ).normalize();
+
+        // A. Approach Run before the leap (frames 15 to 57)
+        if (windupPhase && this.currentFrame >= 15 && this.currentFrame <= windupPhase.endFrame) {
+          const runProgress = (this.currentFrame - 15) / Math.max(1, windupPhase.endFrame - 15);
+          const runSpeed = 2.2 + runProgress * 2.8; // Accelerate from 2.2m/s to 5.0m/s
+          this.pendingRootMotionDelta.addScaledVector(forward, runSpeed * delta);
+        }
+
+        // B. Airborne parabolic leap (frames 58 to 95)
         if (airbornePhase && this.currentFrame >= airbornePhase.startFrame && this.currentFrame <= airbornePhase.endFrame) {
           const airborneDuration = (airbornePhase.endFrame - airbornePhase.startFrame + 1) / 60;
           const avgSpeed = Math.abs(cfg.rootMotion.deltaY) / airborneDuration; // ~9.32 m/s
@@ -229,12 +245,6 @@ export class KinematicCombatController {
           // Half-sine impulse curve (starts at 0, peaks at mid-jump, returns to 0 on landing)
           const impulseFactor = Math.sin(phaseProgress * Math.PI) * (Math.PI / 2);
           const forwardSpeed = avgSpeed * impulseFactor;
-
-          const forward = new THREE.Vector3(
-            -Math.sin(characterFacingRotationY),
-            0,
-            -Math.cos(characterFacingRotationY),
-          ).normalize();
 
           this.pendingRootMotionDelta.addScaledVector(forward, forwardSpeed * delta);
         }

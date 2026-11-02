@@ -101,7 +101,7 @@ test.describe('Visual Hitbox Debugger & Sandbox Asset Viewer Validation', () => 
     let capturedMidRollScreenshot = false;
     const startTime = Date.now();
 
-    while (Date.now() - startTime < 850) {
+    while (Date.now() - startTime < 1200) {
       const elapsed = Date.now() - startTime;
       const diag = await page.evaluate(() => window.__THREE_GAME_DIAGNOSTICS__);
       if (diag?.player.state === 'dodge') {

@@ -308,6 +308,7 @@
         <span>Asset & Animation Validation</span>
         <div style="display: flex; align-items: center; gap: 8px;">
           <span id="load-status" class="status-wait">Loading...</span>
+          <button id="btn-open-settings" class="panel-toggle-btn" style="border-color: #ffd700; color: #ffd777;" title="Open Settings & Tuning">⚙️ Settings</button>
           <button id="overlay-toggle" class="panel-toggle-btn" title="Toggle Panel">Hide</button>
         </div>
       </div>
@@ -430,12 +431,12 @@
             <span id="player-action-state-label" class="active-badge">Idle (HP: 100)</span>
           </div>
           <div class="btn-group">
-            <button id="btn-act-light1" class="btn-action-p" title="Slash 1 (Forward Impulse: +1.2m)">Slash 1 (+1.2m)</button>
-            <button id="btn-act-light2" class="btn-action-p" title="Slash 2 (Forward Impulse: +1.5m)">Slash 2 (+1.5m)</button>
-            <button id="btn-act-light3" class="btn-action-p" title="Combo Finisher (Forward Impulse: +2.0m)">Finisher (+2.0m)</button>
+            <button id="btn-act-light1" class="btn-action-p" title="Slash 1 (Damage Window: Frames 27-44)">Slash 1 (DMG: F27-44)</button>
+            <button id="btn-act-light2" class="btn-action-p" title="Slash 2 (Damage Window: Frames 27-44)">Slash 2 (DMG: F27-44)</button>
+            <button id="btn-act-light3" class="btn-action-p" title="Finisher (Damage Window: Frames 30-52)">Finisher (DMG: F30-52)</button>
             <button id="btn-act-combo" class="btn-action-p" style="border-color: #ffd700;" title="Full 3-Hit Combo Sequence">⚡ Combo 1-2-3</button>
-            <button id="btn-act-heavy" class="btn-action-p" style="border-color: #ffaa33;" title="Sundering Heavy Thrust (Forward Impulse: +3.2m)">Heavy Thrust (+3.2m)</button>
-            <button id="btn-act-dodge-fwd" class="btn-action-p" style="border-color: #38d665;" title="Dodge Roll Forward (+2.35m curve with I-Frames)">Roll Fwd (+2.35m)</button>
+            <button id="btn-act-heavy" class="btn-action-p" style="border-color: #ffaa33;" title="Sundering Heavy Thrust (Damage Window: Frames 52-68)">Heavy Thrust (DMG: F52-68)</button>
+            <button id="btn-act-dodge-fwd" class="btn-action-p" style="border-color: #38d665;" title="Dodge Roll Forward (Invulnerable I-Frames: 33-90)">Roll Fwd (I-Frames: F33-90)</button>
             <button id="btn-act-dodge-back" class="btn-action-p" title="Dodge Roll Backward">Roll Back</button>
           </div>
         </div>
@@ -447,11 +448,11 @@
             <span id="boss-action-state-label" class="active-badge">Idle (HP: 350)</span>
           </div>
           <div class="btn-group">
-            <button id="btn-act-boss-downward" class="btn-action-b" title="Downward Cleave (Forward Impulse: +2.8m)">Downward (+2.8m)</button>
-            <button id="btn-act-boss-combo" class="btn-action-b" title="Relentless Flurry (Forward Impulse: +3.5m)">Flurry (+3.5m)</button>
-            <button id="btn-act-boss-jump" class="btn-action-b" style="border-color: #ff3333; font-weight: 700;" title="Leaping Wrath (+7.0m Leap forward, +1.4m height arc)">🚀 Leaping Wrath (+7m Leap)</button>
-            <button id="btn-act-boss-360" class="btn-action-b" title="Ashen Maelstrom 360° (+1.2m impulse)">360° Maelstrom</button>
-            <button id="btn-act-boss-kick" class="btn-action-b" title="Spartan Kick (+2.2m impulse)">Kick (+2.2m)</button>
+            <button id="btn-act-boss-downward" class="btn-action-b" title="Downward Cleave (Planted, Damage Window: Frames 57-70)">Downward (DMG: F57-70)</button>
+            <button id="btn-act-boss-combo" class="btn-action-b" title="Relentless Flurry (Small steps, Damage Window: Frames 42-66)">Flurry (DMG: F42-66)</button>
+            <button id="btn-act-boss-jump" class="btn-action-b" style="border-color: #ff3333; font-weight: 700;" title="Leaping Wrath (Approach Run + Leap, Damage Window: Frames 96-103)">🚀 Leaping Wrath (DMG: F96-103)</button>
+            <button id="btn-act-boss-360" class="btn-action-b" title="Ashen Maelstrom (Damage Window: Frames 51-74)">360° (DMG: F51-74)</button>
+            <button id="btn-act-boss-kick" class="btn-action-b" title="Spartan Kick (Damage Window: Frames 32-48)">Kick (DMG: F32-48)</button>
           </div>
         </div>
 
@@ -463,17 +464,40 @@
           <div><strong style="color: #ff9999;">Boss Δ:</strong> <span id="tel-boss-disp">Δ0.00m</span></div>
           <div style="grid-column: span 2;"><strong style="color: #8bb2d6;">Combat Hit Log:</strong> <span id="tel-hit-log" style="color: #e5ded2;">Ready</span></div>
         </div>
+
+        <!-- Active Damage Window Visual Timeline Box -->
+        <div class="damage-window-box" style="margin-top: 8px; padding: 8px 10px; background: rgba(30, 25, 10, 0.7); border: 1px solid #d4af37; border-radius: 4px; font-family: monospace; font-size: 11px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+            <strong style="color: #ffd700;">⚔️ ACTIVE DAMAGE FRAME WINDOW</strong>
+            <span id="tel-dmg-badge" class="active-badge" style="color: #888; border-color: #666;">STANDBY</span>
+          </div>
+          <div id="tel-dmg-frames" style="color: #e5ded2; margin-bottom: 4px; font-size: 11px;">
+            Action: None | Damage Window: Standby
+          </div>
+          <!-- Visual Timeline Bar -->
+          <div style="position: relative; width: 100%; height: 12px; background: rgba(255,255,255,0.08); border-radius: 2px; overflow: hidden; border: 1px solid rgba(255, 215, 0, 0.3);">
+            <div id="tel-timeline-windup" style="position: absolute; left: 0; width: 30%; height: 100%; background: rgba(255, 200, 0, 0.35);" title="Windup"></div>
+            <div id="tel-timeline-dmg" style="position: absolute; left: 30%; width: 20%; height: 100%; background: #ffff00; box-shadow: 0 0 10px #ffff00;" title="Damage Active Window (Yellow)"></div>
+            <div id="tel-timeline-recovery" style="position: absolute; left: 50%; width: 50%; height: 100%; background: rgba(0, 255, 120, 0.25);" title="Recovery"></div>
+            <div id="tel-timeline-cursor" style="position: absolute; left: 0%; top: 0; width: 2px; height: 100%; background: #ffffff; z-index: 2; box-shadow: 0 0 4px #ffffff;"></div>
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 9.5px; color: #a0988c; margin-top: 3px;">
+            <span>[Windup]</span>
+            <span style="color: #ffff00; font-weight: 700;">■ DAMAGE ACTIVE (Yellow)</span>
+            <span>[Recovery]</span>
+          </div>
+        </div>
       </div>
 
       <!-- Hitbox Debugger & Frame Scrubber Section -->
       <div class="section">
         <div class="section-header util">
           <span>Hitbox Debugger & Frame Controls</span>
-          <span id="hitbox-status-badge" class="active-badge" style="color: #00ff88; border-color: #00ff88;">HITBOX: OFF</span>
+          <span id="hitbox-status-badge" class="active-badge" style="color: #ffff00; border-color: #ffff00;">HITBOX: OFF</span>
         </div>
         <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px;">
-          <button id="btn-toggle-hitbox" class="btn-util" style="border-color: #ff3333; color: #ff8888; font-weight: 700;">⚔️ Toggle Hitbox Wireframe (Key: H)</button>
-          <button id="btn-mode-toggle" class="btn-util">🚶 Mode: Orbit (Click to Walk)</button>
+          <button id="btn-toggle-hitbox" class="btn-util" style="border-color: #ffd700; color: #ffd777; font-weight: 700;">⚔️ Toggle Yellow Hitboxes (Key: H)</button>
+          <button id="btn-mode-toggle" class="btn-util" style="border-color: #38d665; color: #38d665; font-weight: 700;">🎮 3rd-Person Follow (Click to Orbit)</button>
         </div>
         <div style="display: flex; gap: 6px; flex-wrap: wrap; align-items: center;">
           <button id="btn-step-prev" class="btn-util" title="Step Back 1 Frame (Key: [)">◀ -1 Frame</button>

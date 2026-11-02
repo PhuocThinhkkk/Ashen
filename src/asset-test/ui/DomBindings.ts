@@ -35,6 +35,14 @@ export interface DomBindings {
   telPlayerDisp: HTMLElement | null;
   telBossDisp: HTMLElement | null;
   telHitLog: HTMLElement | null;
+  btnOpenSettings: HTMLButtonElement | null;
+  settingsPanel: HTMLElement | null;
+  telDmgBadge: HTMLElement | null;
+  telDmgFrames: HTMLElement | null;
+  telTimelineCursor: HTMLElement | null;
+  telTimelineDmg: HTMLElement | null;
+  telTimelineWindup: HTMLElement | null;
+  telTimelineRecovery: HTMLElement | null;
 }
 
 export function getDomBindings(): DomBindings {
@@ -75,5 +83,13 @@ export function getDomBindings(): DomBindings {
     telPlayerDisp: document.querySelector<HTMLElement>('#tel-player-disp'),
     telBossDisp: document.querySelector<HTMLElement>('#tel-boss-disp'),
     telHitLog: document.querySelector<HTMLElement>('#tel-hit-log'),
+    btnOpenSettings: document.querySelector<HTMLButtonElement>('#btn-open-settings'),
+    settingsPanel: document.querySelector<HTMLElement>('#settings-modal-panel'),
+    telDmgBadge: document.querySelector<HTMLElement>('#tel-dmg-badge'),
+    telDmgFrames: document.querySelector<HTMLElement>('#tel-dmg-frames'),
+    telTimelineCursor: document.querySelector<HTMLElement>('#tel-timeline-cursor'),
+    telTimelineDmg: document.querySelector<HTMLElement>('#tel-timeline-dmg'),
+    telTimelineWindup: document.querySelector<HTMLElement>('#tel-timeline-windup'),
+    telTimelineRecovery: document.querySelector<HTMLElement>('#tel-timeline-recovery'),
   };
 }

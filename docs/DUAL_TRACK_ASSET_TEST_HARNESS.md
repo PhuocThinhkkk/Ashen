@@ -47,19 +47,29 @@ The testing suite hosts **4 simultaneous models** split across two dedicated zon
 
 | Actor | Action / Trigger | Timing (Startup / Active / Recovery) | Spatial Movement ($\Delta Z$) | Combat Mechanics |
 | :--- | :--- | :--- | :--- | :--- |
-| **Player** | **Slash 1** (`light1`) | 0.14s / 0.16s / 0.28s | $+1.2\text{m}$ forward impulse | Right-hand weapon sweep |
-| **Player** | **Slash 2** (`light2`) | 0.12s / 0.16s / 0.30s | $+1.5\text{m}$ forward impulse | Chained combo swing |
-| **Player** | **Finisher** (`light3`) | 0.18s / 0.20s / 0.42s | $+2.0\text{m}$ forward impulse | High damage finisher |
+| **Player** | **Slash 1** (`light1`) | 0.14s / 0.16s / 0.28s | $+1.2\text{m}$ forward impulse | Right-hand weapon sweep (Damage: F27-44) |
+| **Player** | **Slash 2** (`light2`) | 0.12s / 0.16s / 0.30s | $+1.5\text{m}$ forward impulse | Chained combo swing (Damage: F27-44) |
+| **Player** | **Finisher** (`light3`) | 0.18s / 0.20s / 0.42s | $+2.0\text{m}$ forward impulse | High damage finisher (Damage: F30-52) |
 | **Player** | **Combo 1-2-3** (`combo`) | Continuous sequence | Cascading forward steps | Full 3-hit animation sequence |
-| **Player** | **Heavy Thrust** (`heavy`) | 0.42s / 0.22s / 0.55s | $+3.2\text{m}$ forward lunge | Piercing thrust, heavy poise damage |
-| **Player** | **Roll Fwd** (`dodge_fwd`) | 0.20s / 0.50s / 0.30s | $+2.35\text{m}$ continuous curve | Invulnerability window ($0.2\text{s} \to 0.7\text{s}$) |
-| **Player** | **Roll Back** (`dodge_back`) | 0.20s / 0.50s / 0.30s | $-2.35\text{m}$ backward curve | Evasive disengage with i-frames |
-| **Boss** | **Downward Cleave** (`downward`) | 0.95s / 0.22s / 1.25s | $+2.8\text{m}$ forward lunge | Telegraph glow into overhead smash |
-| **Boss** | **Relentless Flurry** (`combo`) | 0.70s / 0.40s / 1.05s | $+3.5\text{m}$ forward advance | Multi-hit wide horizontal sweep |
-| **Boss** | **Leaping Wrath** (`jump`) | 1.05s / 0.30s / 1.35s | $+7.0\text{m}$ forward, $+1.4\text{m}$ leap arc | Parabolic leap trajectory & shockwave |
-| **Boss** | **Ashen Maelstrom** (`spin360`) | 0.85s / 0.38s / 1.15s | $+1.2\text{m}$ forward impulse | Full $360^\circ$ perimeter strike |
-| **Boss** | **Spartan Kick** (`kick`) | 0.45s / 0.18s / 0.75s | $+2.2\text{m}$ forward impulse | Left-foot hitbox impact |
+| **Player** | **Heavy Thrust** (`heavy`) | 0.42s / 0.22s / 0.55s | $+3.2\text{m}$ forward lunge | Piercing thrust (Damage: F52-68) |
+| **Player** | **Roll Fwd** (`dodge_fwd`) | 0.20s / 0.50s / 0.30s | $+2.35\text{m}$ continuous curve | Invulnerability window (I-Frames: F33-90) |
+| **Player** | **Roll Back** (`dodge_back`) | 0.20s / 0.50s / 0.30s | $-2.35\text{m}$ backward curve | Evasive disengage (I-Frames: F33-90) |
+| **Boss** | **Downward Cleave** (`downward`) | 0.95s / 0.22s / 1.25s | **Planted ($\le 0.05\text{m}$)** | Telegraph glow into overhead smash (Damage: F57-70) |
+| **Boss** | **Relentless Flurry** (`combo`) | 0.70s / 0.40s / 1.05s | **Natural steps ($+0.45\text{m}$)** | Multi-hit wide horizontal sweep (Damage: F42-66) |
+| **Boss** | **Leaping Wrath** (`jump`) | 1.05s / 0.30s / 1.35s | **Approach Run + $+7.0\text{m}$ Leap Arc** | Running forward (F15-57) $\to$ Airborne leap (F58-95) |
+| **Boss** | **Ashen Maelstrom** (`spin360`) | 0.85s / 0.38s / 1.15s | **Planted ($0.0\text{m}$)** | Full $360^\circ$ perimeter strike (Damage: F51-74) |
+| **Boss** | **Spartan Kick** (`kick`) | 0.45s / 0.18s / 0.75s | **Planted step ($+0.1\text{m}$)** | Left-foot impact (Damage: F32-48) |
 
+- **Continuous Swept 3D Weapon Collision (`WeaponCollisionSystem.ts`):**
+  - Uses 3D line segment to vertical capsule shortest distance computation instead of 2D floor cones.
+  - Computes swept area between previous frame and current frame so ultra-fast swings never phase through targets.
+  - Real-time weapon location export available via `window.__ASSET_TEST__.getWeaponLocations()`.
+- **Yellow Hitbox Visualizer & Damage Window Timeline (`WeaponHitboxVisualizer.ts`):**
+  - All debug wireframes, blade lines, and contact points are rendered in glowing **Yellow** (`#ffff00`).
+  - Active damage frame timeline shows real-time progress through Windup, Damage Active (highlighted in yellow), and Recovery phases.
+- **Settings Buttons:**
+  - **Asset Page:** `⚙️ Settings` button in the header toggles weapon socket tuning and debug panels.
+  - **Game Page (`/`):** `⚙️ Settings` button in the top-right 3D Registry HUD toggles Game Tuning and model controls.
 - **Auto-Reset System:**
   - When an action finishes, the actor holds landing position for **1.0 second**, displaying final displacement summary (e.g., `Δ2.80m (Z:+2.80m)`).
   - The character smoothly glides back to its marked Home position over 0.4s and restores facing orientation.
@@ -81,17 +91,11 @@ Switch camera modes via top toolbar buttons or API:
    - `[⚔️ Duel Arena]`: Cinematic 3/4 diagonal view of the duel lane.
    - `[📐 Side View]`: True orthographic-style side profile view for inspecting weapon reach and jump apex heights.
    - `[Overview]`: High-angle arena view showing all 4 models simultaneously.
-2. **🎮 3rd-Person Playable Roam Mode:**
-   - Engages the in-game `SoulslikeCamera` attached behind the logic player.
-   - Automatically collapses overlay to full screen.
-   - **Click Canvas:** Locks mouse look (pointer lock).
-   - **WASD:** Move freely around the entire arena.
-   - **Shift:** Sprint.
-   - **Space:** Dodge roll with physics displacement and i-frames.
-   - **J / Left Click:** Light attack combo sequence (1 $\to$ 2 $\to$ 3).
-   - **K / Right Click:** Heavy thrust.
-   - **Tab / Middle Click:** Lock on to Boss (targeting reticle tracks boss height).
-   - **Escape:** Exit Roam mode and restore Orbit Inspector.
+2. **🎮 3rd-Person Follow Mode (Game Mode):**
+   - Automatically follows behind the `LogicPlayer` with `SoulslikeCamera`.
+   - WASD moves player around the arena with real locomotion animations (walk, sprint, roll, attack).
+   - Click screen to lock mouse look (ESC to release).
+   - Press **Escape** or click the mode button to seamlessly return to Orbit Inspector.
 
 ---
 

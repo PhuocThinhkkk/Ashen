@@ -18,6 +18,7 @@ import {
   loadSocketConfig,
   applyWeaponSocketTransform,
 } from '../combat/WeaponSocketConfig';
+import type { WeaponBladeSegment, BodyCapsule } from '../combat/WeaponCollisionSystem';
 
 export type PlayerState = 'idle' | 'moving' | 'dodge' | 'attack' | 'stagger' | 'dead';
 
@@ -59,6 +60,8 @@ export class PlayerCharacter {
   public currentActionName = '';
   public handBone: THREE.Object3D | null = null;
   public swordObject: THREE.Object3D | null = null;
+  public readonly bladeBaseLocator = new THREE.Object3D();
+  public readonly bladeTipLocator = new THREE.Object3D();
   public currentModelId = 'knight';
   public readonly hitboxDebugger = new HitboxVisualDebugger({
     size: new THREE.Vector3(0.28, 1.4, 0.28),
@@ -121,6 +124,13 @@ export class PlayerCharacter {
           obj.castShadow = true;
         }
       });
+      this.bladeBaseLocator.name = 'PlayerBladeBase';
+      this.bladeBaseLocator.position.set(0, 0, 0.25);
+      this.swordObject.add(this.bladeBaseLocator);
+
+      this.bladeTipLocator.name = 'PlayerBladeTip';
+      this.bladeTipLocator.position.set(0, 0, 1.45);
+      this.swordObject.add(this.bladeTipLocator);
     }
 
     // 4. Load Player Model dynamically via ModelLoader
@@ -238,6 +248,33 @@ export class PlayerCharacter {
       return target;
     }
     return target.copy(this.group.position).add(new THREE.Vector3(0, 1.0, 0));
+  }
+
+  public getWeaponBladeSegment(
+    outBase = new THREE.Vector3(),
+    outTip = new THREE.Vector3(),
+  ): WeaponBladeSegment {
+    if (this.bladeBaseLocator.parent && this.bladeTipLocator.parent) {
+      this.bladeBaseLocator.getWorldPosition(outBase);
+      this.bladeTipLocator.getWorldPosition(outTip);
+      return { base: outBase, tip: outTip, radius: 0.16 };
+    }
+    const fwd = new THREE.Vector3(
+      -Math.sin(this.group.rotation.y),
+      0,
+      -Math.cos(this.group.rotation.y),
+    );
+    outBase.copy(this.group.position).add(new THREE.Vector3(0, 1.0, 0));
+    outTip.copy(outBase).addScaledVector(fwd, 1.4);
+    return { base: outBase, tip: outTip, radius: 0.16 };
+  }
+
+  public getBodyCapsule(): BodyCapsule {
+    return {
+      position: this.group.position,
+      radius: this.radius,
+      height: 1.8,
+    };
   }
 
   public toggleHitboxDebug(visible?: boolean): boolean {

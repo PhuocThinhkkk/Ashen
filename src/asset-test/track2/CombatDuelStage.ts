@@ -2,10 +2,12 @@ import * as THREE from 'three';
 import { PlayerCharacter } from '../../entities/PlayerCharacter';
 import { BossCharacter } from '../../entities/BossCharacter';
 import { PLAYER_ATTACKS, BOSS_ATTACKS } from '../../combat/FrameCombat';
+import { getKinematicAction } from '../../combat/KinematicData';
 import { CONFIG } from '../config';
 import type { DuelSpacing } from '../types';
 import { TrajectoryVisualizer } from './TrajectoryVisualizer';
 import { DuelCombatResolver } from './DuelCombatResolver';
+import { WeaponHitboxVisualizer } from '../../combat/WeaponHitboxVisualizer';
 import type { InputController, CombatInputs } from '../../core/InputController';
 import type { SoulslikeCamera } from '../../systems/SoulslikeCamera';
 
@@ -20,12 +22,20 @@ export interface DuelTelemetryUpdate {
   bossReach: number;
   playerDispText?: string;
   bossDispText?: string;
+  activeActionName?: string;
+  currentFrame?: number;
+  totalFrames?: number;
+  damageStartFrame?: number;
+  damageEndFrame?: number;
+  isDamageActive?: boolean;
 }
 
 export class CombatDuelStage {
   public logicPlayer: PlayerCharacter | null = null;
   public logicBoss: BossCharacter | null = null;
   public readonly trajectory: TrajectoryVisualizer;
+  public readonly playerWeaponVisualizer = new WeaponHitboxVisualizer(1.4, 0.16);
+  public readonly bossWeaponVisualizer = new WeaponHitboxVisualizer(2.2, 0.22);
 
   public autoResetEnabled = true;
   public bossAiMode: 'dummy' | 'duel' = 'dummy';
@@ -58,6 +68,9 @@ export class CombatDuelStage {
     this.logicBoss.group.position.copy(CONFIG.track2.bossHome);
     this.logicBoss.group.rotation.y = 0; // ModelScene already has Math.PI, group rot 0 faces -Z
     scene.add(this.logicBoss.group);
+
+    scene.add(this.playerWeaponVisualizer.group);
+    scene.add(this.bossWeaponVisualizer.group);
   }
 
   public async switchPlayerModel(modelId: 'knight' | 'samurai'): Promise<void> {
@@ -210,6 +223,8 @@ export class CombatDuelStage {
       this.logicBoss.swordHitboxDebugger?.setVisible(visible);
       this.logicBoss.footHitboxDebugger?.setVisible(visible);
     }
+    this.playerWeaponVisualizer.setVisible(visible);
+    this.bossWeaponVisualizer.setVisible(visible);
   }
 
   public stepFrame(deltaSeconds: number): void {
@@ -307,12 +322,69 @@ export class CombatDuelStage {
     );
 
     // 3. Combat Hit Collisions
-    DuelCombatResolver.resolve(this.logicPlayer, this.logicBoss, onCombatLog);
+    DuelCombatResolver.resolve(
+      this.logicPlayer,
+      this.logicBoss,
+      onCombatLog,
+      (pt) => {
+        this.bossWeaponVisualizer.showContactPoint(pt);
+        this.playerWeaponVisualizer.showContactPoint(pt);
+      },
+    );
 
-    // 4. Trajectory Tracking & Auto-Reset
+    // 4. Update Weapon 3D Yellow Visualizers
+    const pBlade = this.logicPlayer.getWeaponBladeSegment();
+    const bBlade = this.logicBoss.getWeaponBladeSegment();
+    this.playerWeaponVisualizer.update(pBlade, this.logicPlayer.isHitboxActive(), delta);
+    this.bossWeaponVisualizer.update(bBlade, this.logicBoss.isHitboxActive(), delta);
+
+    // 5. Trajectory Tracking & Auto-Reset
     this.updateTrajectoryAndReset(delta);
 
-    // 5. Broadcast Telemetry
+    // 6. Active Damage Frame Calculations
+    let activeActionName = 'None';
+    let currentFrame = 0;
+    let totalFrames = 0;
+    let damageStartFrame = 0;
+    let damageEndFrame = 0;
+    let isDamageActive = false;
+
+    if (this.logicPlayer.state === 'attack') {
+      activeActionName = `Player: ${this.logicPlayer.currentAttack?.name || 'Slash'}`;
+      const clipName = this.logicPlayer.currentAttack?.isHeavy ? 'attack_heavy' : 'attack_light';
+      const cfg = getKinematicAction(clipName);
+      if (cfg) {
+        currentFrame = this.logicPlayer.kinematicController?.currentFrame || 1;
+        totalFrames = cfg.totalFrames;
+        damageStartFrame = cfg.hitbox?.activeStartFrame || 27;
+        damageEndFrame = cfg.hitbox?.activeEndFrame || 44;
+        isDamageActive = this.logicPlayer.isHitboxActive();
+      }
+    } else if (
+      this.logicBoss.state === 'windup' ||
+      this.logicBoss.state === 'active' ||
+      this.logicBoss.state === 'recovery'
+    ) {
+      activeActionName = `Boss: ${this.logicBoss.currentAttack?.name || 'Attack'}`;
+      const clipName = this.logicBoss.currentAttack?.animationClip || 'attack_heavy';
+      const cfg = getKinematicAction(clipName);
+      if (cfg) {
+        currentFrame = this.logicBoss.kinematicController?.currentFrame || 1;
+        totalFrames = cfg.totalFrames;
+        damageStartFrame = cfg.hitbox?.activeStartFrame || 32;
+        damageEndFrame = cfg.hitbox?.activeEndFrame || 48;
+        isDamageActive = this.logicBoss.isHitboxActive();
+      }
+    } else if (this.logicPlayer.state === 'dodge') {
+      activeActionName = 'Player: Dodge Roll';
+      currentFrame = Math.round(this.logicPlayer.dodgeTimer * 60) + 1;
+      totalFrames = 120;
+      damageStartFrame = 33; // i-frames start
+      damageEndFrame = 90;   // i-frames end
+      isDamageActive = this.logicPlayer.isInvulnerable;
+    }
+
+    // 7. Broadcast Telemetry
     const dist = this.logicPlayer.group.position.distanceTo(this.logicBoss.group.position);
     const reach = this.logicBoss.currentAttack ? this.logicBoss.currentAttack.range : 4.0;
 
@@ -327,6 +399,12 @@ export class CombatDuelStage {
       bossReach: reach,
       playerDispText: this.lastPlayerDispText,
       bossDispText: this.lastBossDispText,
+      activeActionName,
+      currentFrame,
+      totalFrames,
+      damageStartFrame,
+      damageEndFrame,
+      isDamageActive,
     });
   }
 

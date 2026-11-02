@@ -120,6 +120,15 @@ export class Game {
     this.buildScene();
     this.resetRun();
 
+    // Wire up HUD Settings button to toggle DebugTools & Tuning panel
+    const gameSettingsBtn = document.querySelector<HTMLButtonElement>('#game-settings-btn');
+    let isSettingsOpen = true;
+    gameSettingsBtn?.addEventListener('click', () => {
+      isSettingsOpen = !isSettingsOpen;
+      this.debugTools.setHidden(!isSettingsOpen);
+      gameSettingsBtn.classList.toggle('active');
+    });
+
     // Hotkey 'H' toggles visual hitbox debugging in real-time
     window.addEventListener('keydown', (e) => {
       if (e.code === 'KeyH' && !e.repeat) {

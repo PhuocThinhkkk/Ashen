@@ -21,8 +21,8 @@ export class HitboxVisualDebugger {
   private currentAttachedBone: THREE.Object3D | null = null;
 
   constructor(config: HitboxVolumeConfig) {
-    this.colorInactive = new THREE.Color(config.colorInactive ?? 0x00ff88);
-    this.colorActive = new THREE.Color(config.colorActive ?? 0xff2222);
+    this.colorInactive = new THREE.Color(config.colorInactive ?? 0xccbb00); // yellow inactive
+    this.colorActive = new THREE.Color(config.colorActive ?? 0xffff00);     // bright vivid yellow active
 
     const boxGeo = new THREE.BoxGeometry(config.size.x, config.size.y, config.size.z);
     const edgesGeo = new THREE.EdgesGeometry(boxGeo);

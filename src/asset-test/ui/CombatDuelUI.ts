@@ -116,6 +116,61 @@ export class CombatDuelUI {
     if (data.bossDispText && this.dom.telBossDisp) {
       this.dom.telBossDisp.textContent = data.bossDispText;
     }
+
+    // Damage Frame Window Readout & Timeline
+    if (data.activeActionName && data.totalFrames && data.totalFrames > 0) {
+      if (this.dom.telDmgFrames) {
+        this.dom.telDmgFrames.textContent = `${data.activeActionName} | Frame: ${data.currentFrame}/${data.totalFrames} | DMG Window: [F:${data.damageStartFrame} - ${data.damageEndFrame}]`;
+      }
+      if (this.dom.telDmgBadge) {
+        if (data.isDamageActive) {
+          this.dom.telDmgBadge.textContent = '⚔️ DAMAGE ACTIVE NOW';
+          this.dom.telDmgBadge.style.color = '#ffff00';
+          this.dom.telDmgBadge.style.borderColor = '#ffff00';
+          this.dom.telDmgBadge.style.boxShadow = '0 0 8px rgba(255, 255, 0, 0.6)';
+        } else {
+          this.dom.telDmgBadge.textContent = 'WAITING / RECOVERY';
+          this.dom.telDmgBadge.style.color = '#888';
+          this.dom.telDmgBadge.style.borderColor = '#555';
+          this.dom.telDmgBadge.style.boxShadow = 'none';
+        }
+      }
+
+      // Visual timeline fractions
+      const total = data.totalFrames;
+      const startP = ((data.damageStartFrame || 1) / total) * 100;
+      const endP = ((data.damageEndFrame || total) / total) * 100;
+      const curP = Math.min(100, Math.max(0, ((data.currentFrame || 1) / total) * 100));
+
+      if (this.dom.telTimelineWindup) {
+        this.dom.telTimelineWindup.style.left = '0%';
+        this.dom.telTimelineWindup.style.width = `${startP}%`;
+      }
+      if (this.dom.telTimelineDmg) {
+        this.dom.telTimelineDmg.style.left = `${startP}%`;
+        this.dom.telTimelineDmg.style.width = `${endP - startP}%`;
+      }
+      if (this.dom.telTimelineRecovery) {
+        this.dom.telTimelineRecovery.style.left = `${endP}%`;
+        this.dom.telTimelineRecovery.style.width = `${100 - endP}%`;
+      }
+      if (this.dom.telTimelineCursor) {
+        this.dom.telTimelineCursor.style.left = `${curP}%`;
+      }
+    } else {
+      if (this.dom.telDmgFrames) {
+        this.dom.telDmgFrames.textContent = 'No Action Active | Damage Window: Standby';
+      }
+      if (this.dom.telDmgBadge) {
+        this.dom.telDmgBadge.textContent = 'STANDBY';
+        this.dom.telDmgBadge.style.color = '#777';
+        this.dom.telDmgBadge.style.borderColor = '#444';
+        this.dom.telDmgBadge.style.boxShadow = 'none';
+      }
+      if (this.dom.telTimelineCursor) {
+        this.dom.telTimelineCursor.style.left = '0%';
+      }
+    }
   }
 
   public logCombat(text: string): void {

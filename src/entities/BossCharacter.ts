@@ -10,6 +10,7 @@ import {
   loadSocketConfig,
   applyWeaponSocketTransform,
 } from '../combat/WeaponSocketConfig';
+import type { WeaponBladeSegment, BodyCapsule } from '../combat/WeaponCollisionSystem';
 
 export type BossState =
   | 'idle'
@@ -47,6 +48,8 @@ export class BossCharacter {
   public readonly greatswordGroup = new THREE.Group();
   public bladeMesh: THREE.Mesh | null = null;
   public readonly bladeHitbox = new THREE.Object3D();
+  public readonly bladeBaseLocator = new THREE.Object3D();
+  public readonly bladeTipLocator = new THREE.Object3D();
   public readonly bladeMaterial: THREE.MeshStandardMaterial;
   public handBone: THREE.Object3D | null = null;
 
@@ -125,6 +128,14 @@ export class BossCharacter {
     this.bladeHitbox.name = 'BossBladeHitbox';
     this.bladeHitbox.position.set(0, 0, 0);
     this.bladeMesh.add(this.bladeHitbox);
+
+    this.bladeBaseLocator.name = 'BossBladeBase';
+    this.bladeBaseLocator.position.set(0, 0.1, 0);
+    this.greatswordGroup.add(this.bladeBaseLocator);
+
+    this.bladeTipLocator.name = 'BossBladeTip';
+    this.bladeTipLocator.position.set(0, 2.25, 0);
+    this.greatswordGroup.add(this.bladeTipLocator);
   }
 
   public async loadModel(modelId: string): Promise<void> {
@@ -555,6 +566,44 @@ export class BossCharacter {
     }
     this.bladeHitbox.updateMatrixWorld(true);
     return this.bladeHitbox.getWorldPosition(target);
+  }
+
+  public getWeaponBladeSegment(
+    outBase = new THREE.Vector3(),
+    outTip = new THREE.Vector3(),
+  ): WeaponBladeSegment {
+    if (this.bladeBaseLocator.parent && this.bladeTipLocator.parent) {
+      this.bladeBaseLocator.updateMatrixWorld(true);
+      this.bladeTipLocator.updateMatrixWorld(true);
+      this.bladeBaseLocator.getWorldPosition(outBase);
+      this.bladeTipLocator.getWorldPosition(outTip);
+      return { base: outBase, tip: outTip, radius: 0.22 };
+    }
+    const fwd = new THREE.Vector3(
+      -Math.sin(this.group.rotation.y),
+      0,
+      -Math.cos(this.group.rotation.y),
+    );
+    outBase.copy(this.group.position).add(new THREE.Vector3(0, 1.2, 0));
+    outTip.copy(outBase).addScaledVector(fwd, 2.5);
+    return { base: outBase, tip: outTip, radius: 0.22 };
+  }
+
+  public getFootLocation(outFoot = new THREE.Vector3()): THREE.Vector3 {
+    if (this.kinematicController?.leftFootBone) {
+      this.kinematicController.leftFootBone.updateMatrixWorld(true);
+      this.kinematicController.leftFootBone.getWorldPosition(outFoot);
+      return outFoot;
+    }
+    return outFoot.copy(this.group.position).add(new THREE.Vector3(0, 0.2, 0));
+  }
+
+  public getBodyCapsule(): BodyCapsule {
+    return {
+      position: this.group.position,
+      radius: this.radius,
+      height: 2.45,
+    };
   }
 
   public takeDamage(damage: number, poiseDamage: number): boolean {

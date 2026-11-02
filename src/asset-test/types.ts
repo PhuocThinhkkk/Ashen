@@ -67,6 +67,7 @@ declare global {
       toggleAutoReset?: (enabled?: boolean) => boolean;
       toggleTrajectory?: (enabled?: boolean) => boolean;
       setRoamMode?: (enabled: boolean) => void;
+      getWeaponLocations?: () => any;
     };
   }
 }
