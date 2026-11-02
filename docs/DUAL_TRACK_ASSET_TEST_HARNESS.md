@@ -80,7 +80,45 @@ The testing suite hosts **4 simultaneous models** split across two dedicated zon
 
 ---
 
-## 4. Camera Modes & Third-Person Free Roam
+## 4. 3-Window Dedicated UI Architecture
+
+The interface is structured into **3 independent, clean windows** accessible via the fixed Top Navigation Bar:
+
+1. **Top Navigation Bar (`#top-navbar`):**
+   - Brand title & real-time load status (`All 4 Models Loaded & Ready`).
+   - Window toggle buttons: `[📺 1: Raw Animation]`, `[⚔️ 2: Player & Duel]`, `[🔧 3: Weapon Offsets]`.
+   - Camera quick switcher: `[Raw Stage]`, `[Focus Player]`, `[Focus Boss]`, `[⚔️ Duel Arena]`, `[📐 Side View]`, `[Overview]`, `[Reset]`.
+   - Settings button.
+
+2. **Window 1: Raw Animation Inspector (`#win-raw-anim`, `#overlay`):**
+   - Positioned on the left ($340\text{px}$ width).
+   - Dedicated playback transport: Speed selection ($0.25\times, 0.5\times, 1.0\times, 1.5\times$), Frame Step ($-1$ / $+1$), and Pause/Play.
+   - Real-time frame & kinematic phase telemetry readout (`Frame: F:34/85 [Impact]`).
+   - Model switcher (Knight / Samurai) and full raw clip catalogs for Player and Boss.
+   - Mid-frame snapshot validation button (`📸 Capture Mid-Frames`).
+
+3. **Window 2: In-Game Combat & Player Controller (`#win-combat-duel`):**
+   - Positioned in the center ($480\text{px}$ width).
+   - Dedicated combat transport: Independent speed ($0.25\times, 0.5\times, 1.0\times$), Pause/Play, and Frame Step ($-1$ / $+1$) for duel simulations.
+   - Action Player triggers with damage windows (`Slash 1 (F27-44)`, `Finisher (F30-52)`, `Heavy Thrust (F52-68)`, `Roll Fwd (I-Frames 33-90)`).
+   - Action Boss triggers with damage windows (`Downward (Planted F57-70)`, `Flurry (F42-66)`, `Leaping Wrath (F96-103)`, `360 Maelstrom (F51-74)`, `Kick (F32-48)`).
+   - Active Damage Frame Window progress bar with color-coded Windup, Active Damage (glowing yellow), and Recovery phases.
+   - Combat Spacing, Reach warning, and real-time combat hit logs.
+   - Follow Camera mode toggle (`🎮 3rd-Person Follow`), Yellow Hitbox wireframe toggle (`KeyH`), and instant position reset (`KeyR`).
+
+4. **Window 3: Weapon Socket Offset Controller (`#win-weapon-offsets`):**
+   - Positioned on the right ($350\text{px}$ width).
+   - Interactive native range sliders with live numeric readouts:
+     - Pos X, Pos Y (Palm), Pos Z.
+     - Rot X°, Rot Y°, Rot Z°.
+     - Scale.
+   - Weapon switcher tabs: `[⚔️ Knight Sword]` vs `[👹 Titan Greatsword]`.
+   - Quick grip presets (`Knight 2H Grip`, `Titan 2H Grip`, `Flip Knight`, `Flip Titan`, `Reset Defaults`).
+   - One-click `💾 Save & Print Config` and `📋 Copy TypeScript` with embedded export code viewer.
+
+---
+
+## 5. Camera Modes & Third-Person Free Roam
 
 Switch camera modes via top toolbar buttons or API:
 
@@ -99,11 +137,11 @@ Switch camera modes via top toolbar buttons or API:
 
 ---
 
-## 5. Modular Code Architecture (`src/asset-test/`)
+## 6. Modular Code Architecture (`src/asset-test/`)
 
 ```
 src/
-├── asset-test.ts                          # Clean entry orchestrator (~270 lines)
+├── asset-test.ts                          # Clean entry orchestrator (~280 lines)
 └── asset-test/
     ├── types.ts                           # Type interfaces, DuelSpacing, CameraPreset, Window API
     ├── config.ts                          # Arena geometry, track positions, camera preset definitions
@@ -116,15 +154,15 @@ src/
     │   ├── DuelCombatResolver.ts          # Hit/hurtbox collision, i-frame dodge evasion & logging
     │   └── TrajectoryVisualizer.ts        # Floor trajectory lines & start-point ghost rings
     └── ui/
-        ├── DomBindings.ts                 # Type-safe DOM query selectors
-        ├── RawInspectorUI.ts              # Track 1 buttons, speed, models, frame stepper
-        ├── CombatDuelUI.ts                # Track 2 buttons, auto-reset, telemetry HUD
-        └── WeaponSocketGUI.ts             # lil-gui weapon socket tuning & grip presets
+        ├── DomBindings.ts                 # Type-safe DOM query selectors for all 3 windows
+        ├── RawInspectorUI.ts              # Window 1: Raw animation controls & frame stepper
+        ├── CombatDuelUI.ts                # Window 2: Combat duel triggers, timeline & transport
+        └── WeaponSocketGUI.ts             # Window 3: Native socket sliders & grip presets
 ```
 
 ---
 
-## 6. Automated Testing & Verification
+## 7. Automated Testing & Verification
 
 Comprehensive Playwright test suites verify all functionality:
 

@@ -67,19 +67,21 @@ scene.add(gridHelper);
 // 2. Stages & Controllers
 let playbackSpeed = 1.0;
 let isPaused = false;
+let duelPlaybackSpeed = 1.0;
+let isDuelPaused = false;
 const keysPressed: Record<string, boolean> = {};
 
 const cameraMgr = new AssetTestCameraManager(dom.canvas, (roamActive) => {
   if (roamActive) {
     if (dom.overlay && !dom.overlay.classList.contains('collapsed')) {
       dom.overlay.classList.add('collapsed');
-      if (dom.overlayToggleBtn) dom.overlayToggleBtn.textContent = 'Show';
+      if (dom.overlayToggleBtn) dom.overlayToggleBtn.textContent = '□';
     }
     if (dom.roamBanner) dom.roamBanner.style.display = 'block';
   } else {
     if (dom.overlay && dom.overlay.classList.contains('collapsed')) {
       dom.overlay.classList.remove('collapsed');
-      if (dom.overlayToggleBtn) dom.overlayToggleBtn.textContent = 'Hide';
+      if (dom.overlayToggleBtn) dom.overlayToggleBtn.textContent = '_';
     }
     if (dom.roamBanner) dom.roamBanner.style.display = 'none';
     if (dom.reticle) dom.reticle.style.display = 'none';
@@ -88,9 +90,18 @@ const cameraMgr = new AssetTestCameraManager(dom.canvas, (roamActive) => {
 
 const rawStage = new RawAnimationStage();
 const duelStage = new CombatDuelStage(scene);
-const socketGui = new WeaponSocketGUI(rawStage);
+const socketGui = new WeaponSocketGUI(rawStage, dom);
 
-const duelUI = new CombatDuelUI(dom, duelStage, (text) => duelUI.logCombat(text));
+const duelUI = new CombatDuelUI(
+  dom,
+  duelStage,
+  (text) => duelUI.logCombat(text),
+  (frames) => stepDuelFrame(frames),
+  () => toggleDuelPause(),
+  (speed) => {
+    duelPlaybackSpeed = speed;
+  },
+);
 
 const rawUI = new RawInspectorUI(
   dom,
@@ -163,9 +174,24 @@ function stepFrame(framesCount: number): void {
 
   const deltaSeconds = framesCount * (1 / 60);
   rawStage.stepFrame(deltaSeconds);
-  duelStage.stepFrame(deltaSeconds);
-
   updateTelemetry();
+  renderer.render(scene, cameraMgr.camera);
+}
+
+function toggleDuelPause(): boolean {
+  isDuelPaused = !isDuelPaused;
+  if (dom.btnDuelPlayPause) {
+    dom.btnDuelPlayPause.textContent = isDuelPaused ? '▶ Play' : '⏸ Pause';
+  }
+  return isDuelPaused;
+}
+
+function stepDuelFrame(framesCount: number): void {
+  isDuelPaused = true;
+  if (dom.btnDuelPlayPause) dom.btnDuelPlayPause.textContent = '▶ Play';
+
+  const deltaSeconds = framesCount * (1 / 60);
+  duelStage.stepFrame(deltaSeconds);
   renderer.render(scene, cameraMgr.camera);
 }
 
@@ -283,10 +309,29 @@ dom.btnModeToggle?.addEventListener('click', () => {
 });
 
 dom.btnOpenSettings?.addEventListener('click', () => {
-  const guiDom = document.querySelector<HTMLElement>('.lil-gui.lil-root');
-  if (guiDom) {
-    guiDom.style.display = guiDom.style.display === 'none' ? 'block' : 'none';
-  }
+  const isHidden = dom.winWeaponOffsets?.classList.toggle('hidden');
+  dom.btnToggleWin3?.classList.toggle('active', !isHidden);
+});
+
+// Top Navbar 3-Window Toggle Buttons
+dom.btnToggleWin1?.addEventListener('click', () => {
+  const isHidden = dom.overlay?.classList.toggle('hidden');
+  dom.btnToggleWin1?.classList.toggle('active', !isHidden);
+});
+
+dom.btnToggleWin2?.addEventListener('click', () => {
+  const isHidden = dom.winCombatDuel?.classList.toggle('hidden');
+  dom.btnToggleWin2?.classList.toggle('active', !isHidden);
+});
+
+dom.btnToggleWin3?.addEventListener('click', () => {
+  const isHidden = dom.winWeaponOffsets?.classList.toggle('hidden');
+  dom.btnToggleWin3?.classList.toggle('active', !isHidden);
+});
+
+dom.btnMinWin3?.addEventListener('click', () => {
+  const isCollapsed = dom.winWeaponOffsets?.classList.toggle('collapsed');
+  if (dom.btnMinWin3) dom.btnMinWin3.textContent = isCollapsed ? '□' : '_';
 });
 
 // 6. Main Initialization
@@ -395,7 +440,9 @@ window.__ASSET_TEST__ = {
 const clock = new THREE.Clock();
 function animate(): void {
   requestAnimationFrame(animate);
-  const delta = clock.getDelta() * playbackSpeed;
+  const rawDelta = clock.getDelta();
+  const delta = rawDelta * playbackSpeed;
+  const duelDelta = isDuelPaused ? 0 : rawDelta * duelPlaybackSpeed;
   const elapsed = clock.getElapsedTime();
 
   if (!isPaused) {
@@ -405,7 +452,7 @@ function animate(): void {
   updateTelemetry();
 
   duelStage.update(
-    delta,
+    duelDelta,
     elapsed,
     cameraMgr.isRoamMode,
     cameraMgr.inputController,

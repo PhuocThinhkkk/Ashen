@@ -1,4 +1,3 @@
-import GUI from 'lil-gui';
 import {
   DEFAULT_PLAYER_WEAPON_SOCKET,
   DEFAULT_BOSS_WEAPON_SOCKET,
@@ -6,138 +5,165 @@ import {
   applyWeaponSocketTransform,
 } from '../../combat/WeaponSocketConfig';
 import type { RawAnimationStage } from '../track1/RawAnimationStage';
+import type { DomBindings } from './DomBindings';
 
 export class WeaponSocketGUI {
-  private gui: GUI | null = null;
+  private activeTab: 'player' | 'boss' = 'player';
 
-  constructor(private readonly stage: RawAnimationStage) {}
+  constructor(
+    private readonly stage: RawAnimationStage,
+    private readonly dom: DomBindings,
+  ) {}
 
   public init(): void {
-    this.gui = new GUI({ title: '⚔️ Weapon Socket Tuning' });
-    this.gui.domElement.style.position = 'fixed';
-    this.gui.domElement.style.top = '14px';
-    this.gui.domElement.style.right = '14px';
-    this.gui.domElement.style.zIndex = '90';
+    // 1. Tab Switching
+    this.dom.tabSocketPlayer?.addEventListener('click', () => {
+      this.activeTab = 'player';
+      this.dom.tabSocketPlayer?.classList.add('active');
+      this.dom.tabSocketBoss?.classList.remove('active');
+      this.syncInputsFromSocket();
+    });
 
-    if (window.innerWidth < 850) {
-      this.gui.close();
-    }
+    this.dom.tabSocketBoss?.addEventListener('click', () => {
+      this.activeTab = 'boss';
+      this.dom.tabSocketBoss?.classList.add('active');
+      this.dom.tabSocketPlayer?.classList.remove('active');
+      this.syncInputsFromSocket();
+    });
 
-    const syncGUI = () => {
-      this.gui?.controllersRecursive().forEach((c) => c.updateDisplay());
+    // 2. Wire Slider & Range Inputs
+    const onInputChange = () => {
+      this.readInputsToSocket();
     };
 
-    // Knight Player Folder
-    const playerFolder = this.gui.addFolder('Knight Sword Socket');
-    const updatePlayer = () => {
-      if (this.stage.axeObject) {
-        applyWeaponSocketTransform(this.stage.axeObject, this.stage.playerSocket);
-      }
-      saveSocketConfig('player', this.stage.playerSocket);
-    };
+    const inputs = [
+      this.dom.inpPosX,
+      this.dom.inpPosY,
+      this.dom.inpPosZ,
+      this.dom.inpRotX,
+      this.dom.inpRotY,
+      this.dom.inpRotZ,
+      this.dom.inpScale,
+    ];
 
-    playerFolder.add(this.stage.playerSocket, 'posX', -30, 30, 0.1).name('Pos X').onChange(updatePlayer);
-    playerFolder.add(this.stage.playerSocket, 'posY', -30, 50, 0.1).name('Pos Y (Palm)').onChange(updatePlayer);
-    playerFolder.add(this.stage.playerSocket, 'posZ', -30, 30, 0.1).name('Pos Z').onChange(updatePlayer);
-    playerFolder.add(this.stage.playerSocket, 'rotX', -180, 180, 1).name('Rot X°').onChange(updatePlayer);
-    playerFolder.add(this.stage.playerSocket, 'rotY', -180, 180, 1).name('Rot Y°').onChange(updatePlayer);
-    playerFolder.add(this.stage.playerSocket, 'rotZ', -180, 180, 1).name('Rot Z°').onChange(updatePlayer);
-    playerFolder.add(this.stage.playerSocket, 'scale', 5, 80, 1).name('Scale').onChange(updatePlayer);
-    playerFolder.open();
+    inputs.forEach((inp) => {
+      inp?.addEventListener('input', onInputChange);
+      inp?.addEventListener('change', onInputChange);
+    });
 
-    // Titan Boss Folder
-    const bossFolder = this.gui.addFolder('Titan Greatsword Socket');
-    const updateBoss = () => {
-      if (this.stage.bossSwordGroup) {
-        applyWeaponSocketTransform(this.stage.bossSwordGroup, this.stage.bossSocket);
-      }
-      saveSocketConfig('boss', this.stage.bossSocket);
-    };
-
-    bossFolder.add(this.stage.bossSocket, 'posX', -50, 50, 0.5).name('Pos X').onChange(updateBoss);
-    bossFolder.add(this.stage.bossSocket, 'posY', -50, 80, 0.5).name('Pos Y (Palm)').onChange(updateBoss);
-    bossFolder.add(this.stage.bossSocket, 'posZ', -50, 50, 0.5).name('Pos Z').onChange(updateBoss);
-    bossFolder.add(this.stage.bossSocket, 'rotX', -180, 180, 1).name('Rot X°').onChange(updateBoss);
-    bossFolder.add(this.stage.bossSocket, 'rotY', -180, 180, 1).name('Rot Y°').onChange(updateBoss);
-    bossFolder.add(this.stage.bossSocket, 'rotZ', -180, 180, 1).name('Rot Z°').onChange(updateBoss);
-    bossFolder.add(this.stage.bossSocket, 'scale', 20, 200, 1).name('Scale').onChange(updateBoss);
-    bossFolder.open();
-
-    // Global Actions in GUI
-    this.gui.add({ saveAndPrint: () => this.printAndSaveConfig() }, 'saveAndPrint').name('💾 Save & Print Config');
-    this.gui.add(
-      {
-        resetDefaults: () => {
-          Object.assign(this.stage.playerSocket, DEFAULT_PLAYER_WEAPON_SOCKET);
-          Object.assign(this.stage.bossSocket, DEFAULT_BOSS_WEAPON_SOCKET);
-          saveSocketConfig('player', this.stage.playerSocket);
-          saveSocketConfig('boss', this.stage.bossSocket);
-          updatePlayer();
-          updateBoss();
-          syncGUI();
-        },
-      },
-      'resetDefaults',
-    ).name('↺ Reset Defaults');
-
-    // Wire up overlay preset buttons
-    document.querySelector('#btn-preset-knight-2h')?.addEventListener('click', () => {
+    // 3. Quick Grip Presets
+    this.dom.btnPresetKnight2h?.addEventListener('click', () => {
       this.stage.playerSocket.posX = 1.8;
       this.stage.playerSocket.posY = 12.0;
       this.stage.playerSocket.posZ = -0.5;
       this.stage.playerSocket.rotX = 85.0;
       this.stage.playerSocket.rotY = 5.0;
       this.stage.playerSocket.rotZ = -10.0;
-      updatePlayer();
-      syncGUI();
+      if (this.stage.axeObject) applyWeaponSocketTransform(this.stage.axeObject, this.stage.playerSocket);
+      saveSocketConfig('player', this.stage.playerSocket);
+      this.syncInputsFromSocket();
     });
 
-    document.querySelector('#btn-preset-boss-2h')?.addEventListener('click', () => {
+    this.dom.btnPresetBoss2h?.addEventListener('click', () => {
       this.stage.bossSocket.posX = 2.5;
       this.stage.bossSocket.posY = 16.0;
       this.stage.bossSocket.posZ = -1.0;
       this.stage.bossSocket.rotX = 85.0;
       this.stage.bossSocket.rotY = 5.0;
       this.stage.bossSocket.rotZ = -10.0;
-      updateBoss();
-      syncGUI();
+      if (this.stage.bossSwordGroup) applyWeaponSocketTransform(this.stage.bossSwordGroup, this.stage.bossSocket);
+      saveSocketConfig('boss', this.stage.bossSocket);
+      this.syncInputsFromSocket();
     });
 
-    document.querySelector('#btn-flip-player-blade')?.addEventListener('click', () => {
+    this.dom.btnFlipPlayerBlade?.addEventListener('click', () => {
       this.stage.playerSocket.rotX =
         this.stage.playerSocket.rotX > 0
           ? this.stage.playerSocket.rotX - 180
           : this.stage.playerSocket.rotX + 180;
-      updatePlayer();
-      syncGUI();
+      if (this.stage.axeObject) applyWeaponSocketTransform(this.stage.axeObject, this.stage.playerSocket);
+      saveSocketConfig('player', this.stage.playerSocket);
+      this.syncInputsFromSocket();
     });
 
-    document.querySelector('#btn-flip-boss-blade')?.addEventListener('click', () => {
+    this.dom.btnFlipBossBlade?.addEventListener('click', () => {
       this.stage.bossSocket.rotX =
         this.stage.bossSocket.rotX > 0
           ? this.stage.bossSocket.rotX - 180
           : this.stage.bossSocket.rotX + 180;
-      updateBoss();
-      syncGUI();
+      if (this.stage.bossSwordGroup) applyWeaponSocketTransform(this.stage.bossSwordGroup, this.stage.bossSocket);
+      saveSocketConfig('boss', this.stage.bossSocket);
+      this.syncInputsFromSocket();
     });
 
-    document.querySelector('#btn-save-print-config')?.addEventListener('click', () => this.printAndSaveConfig());
-    document.querySelector('#btn-copy-config-ts')?.addEventListener('click', () => this.printAndSaveConfig());
-
-    document.querySelector('#btn-reset-socket-config')?.addEventListener('click', () => {
+    this.dom.btnResetSocketConfig?.addEventListener('click', () => {
       Object.assign(this.stage.playerSocket, DEFAULT_PLAYER_WEAPON_SOCKET);
       Object.assign(this.stage.bossSocket, DEFAULT_BOSS_WEAPON_SOCKET);
       saveSocketConfig('player', this.stage.playerSocket);
       saveSocketConfig('boss', this.stage.bossSocket);
-      updatePlayer();
-      updateBoss();
-      syncGUI();
+      if (this.stage.axeObject) applyWeaponSocketTransform(this.stage.axeObject, this.stage.playerSocket);
+      if (this.stage.bossSwordGroup) applyWeaponSocketTransform(this.stage.bossSwordGroup, this.stage.bossSocket);
+      this.syncInputsFromSocket();
     });
 
-    document.querySelector('#btn-close-code-box')?.addEventListener('click', () => {
-      const box = document.querySelector<HTMLElement>('#socket-code-container');
-      if (box) box.style.display = 'none';
+    // 4. Save & Export Buttons
+    this.dom.btnSavePrintConfig?.addEventListener('click', () => this.printAndSaveConfig());
+    this.dom.btnCopyConfigTs?.addEventListener('click', () => this.printAndSaveConfig());
+
+    this.dom.btnCloseCodeBox?.addEventListener('click', () => {
+      if (this.dom.socketCodeContainer) this.dom.socketCodeContainer.style.display = 'none';
     });
+
+    // Initial sync
+    this.syncInputsFromSocket();
+  }
+
+  public syncInputsFromSocket(): void {
+    const socket = this.activeTab === 'player' ? this.stage.playerSocket : this.stage.bossSocket;
+
+    if (this.dom.inpPosX) this.dom.inpPosX.value = String(socket.posX);
+    if (this.dom.inpPosY) this.dom.inpPosY.value = String(socket.posY);
+    if (this.dom.inpPosZ) this.dom.inpPosZ.value = String(socket.posZ);
+    if (this.dom.inpRotX) this.dom.inpRotX.value = String(socket.rotX);
+    if (this.dom.inpRotY) this.dom.inpRotY.value = String(socket.rotY);
+    if (this.dom.inpRotZ) this.dom.inpRotZ.value = String(socket.rotZ);
+    if (this.dom.inpScale) this.dom.inpScale.value = String(socket.scale);
+
+    if (this.dom.valPosX) this.dom.valPosX.textContent = Number(socket.posX).toFixed(1);
+    if (this.dom.valPosY) this.dom.valPosY.textContent = Number(socket.posY).toFixed(1);
+    if (this.dom.valPosZ) this.dom.valPosZ.textContent = Number(socket.posZ).toFixed(1);
+    if (this.dom.valRotX) this.dom.valRotX.textContent = `${Math.round(socket.rotX)}°`;
+    if (this.dom.valRotY) this.dom.valRotY.textContent = `${Math.round(socket.rotY)}°`;
+    if (this.dom.valRotZ) this.dom.valRotZ.textContent = `${Math.round(socket.rotZ)}°`;
+    if (this.dom.valScale) this.dom.valScale.textContent = String(Math.round(socket.scale));
+  }
+
+  private readInputsToSocket(): void {
+    const socket = this.activeTab === 'player' ? this.stage.playerSocket : this.stage.bossSocket;
+
+    if (this.dom.inpPosX) socket.posX = parseFloat(this.dom.inpPosX.value);
+    if (this.dom.inpPosY) socket.posY = parseFloat(this.dom.inpPosY.value);
+    if (this.dom.inpPosZ) socket.posZ = parseFloat(this.dom.inpPosZ.value);
+    if (this.dom.inpRotX) socket.rotX = parseFloat(this.dom.inpRotX.value);
+    if (this.dom.inpRotY) socket.rotY = parseFloat(this.dom.inpRotY.value);
+    if (this.dom.inpRotZ) socket.rotZ = parseFloat(this.dom.inpRotZ.value);
+    if (this.dom.inpScale) socket.scale = parseFloat(this.dom.inpScale.value);
+
+    if (this.activeTab === 'player') {
+      if (this.stage.axeObject) applyWeaponSocketTransform(this.stage.axeObject, this.stage.playerSocket);
+      saveSocketConfig('player', this.stage.playerSocket);
+    } else {
+      if (this.stage.bossSwordGroup) applyWeaponSocketTransform(this.stage.bossSwordGroup, this.stage.bossSocket);
+      saveSocketConfig('boss', this.stage.bossSocket);
+    }
+
+    if (this.dom.valPosX) this.dom.valPosX.textContent = Number(socket.posX).toFixed(1);
+    if (this.dom.valPosY) this.dom.valPosY.textContent = Number(socket.posY).toFixed(1);
+    if (this.dom.valPosZ) this.dom.valPosZ.textContent = Number(socket.posZ).toFixed(1);
+    if (this.dom.valRotX) this.dom.valRotX.textContent = `${Math.round(socket.rotX)}°`;
+    if (this.dom.valRotY) this.dom.valRotY.textContent = `${Math.round(socket.rotY)}°`;
+    if (this.dom.valRotZ) this.dom.valRotZ.textContent = `${Math.round(socket.rotZ)}°`;
+    if (this.dom.valScale) this.dom.valScale.textContent = String(Math.round(socket.scale));
   }
 
   public printAndSaveConfig(): string {
@@ -152,20 +178,18 @@ export class WeaponSocketGUI {
       navigator.clipboard.writeText(code).catch(() => {});
     }
 
-    const codeBox = document.querySelector<HTMLElement>('#socket-code-container');
-    const codeOutput = document.querySelector<HTMLElement>('#socket-code-output');
-    const saveStatus = document.querySelector<HTMLElement>('#socket-save-status');
-
-    if (codeBox && codeOutput) {
-      codeOutput.textContent = code;
-      codeBox.style.display = 'block';
+    if (this.dom.socketCodeContainer && this.dom.socketCodeOutput) {
+      this.dom.socketCodeOutput.textContent = code;
+      this.dom.socketCodeContainer.style.display = 'block';
     }
-    if (saveStatus) {
-      saveStatus.textContent = 'SAVED & PRINTED!';
-      saveStatus.style.color = '#38d665';
-      saveStatus.style.borderColor = '#38d665';
+    if (this.dom.socketSaveStatus) {
+      this.dom.socketSaveStatus.textContent = 'SAVED & PRINTED!';
+      this.dom.socketSaveStatus.style.color = '#38d665';
+      this.dom.socketSaveStatus.style.borderColor = '#38d665';
       setTimeout(() => {
-        saveStatus.textContent = 'SYNCED';
+        if (this.dom.socketSaveStatus) {
+          this.dom.socketSaveStatus.textContent = 'SYNCED';
+        }
       }, 2500);
     }
 

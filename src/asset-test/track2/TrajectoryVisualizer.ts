@@ -4,19 +4,16 @@ import { CONFIG } from '../config';
 export class TrajectoryVisualizer {
   public isVisible = true;
 
-  private readonly playerTrajGeo = new THREE.BufferGeometry();
   private readonly playerTrajLine: THREE.Line;
   private readonly playerTrailPoints: THREE.Vector3[] = [];
   private readonly playerStartMarker: THREE.Mesh;
 
-  private readonly bossTrajGeo = new THREE.BufferGeometry();
   private readonly bossTrajLine: THREE.Line;
   private readonly bossTrailPoints: THREE.Vector3[] = [];
   private readonly bossStartMarker: THREE.Mesh;
 
   constructor(scene: THREE.Scene) {
     // 1. Stage Floor Markers
-    // Track 1 Floor Marker Ring
     const track1Geo = new THREE.RingGeometry(2.1, 2.2, 48);
     const track1Mat = new THREE.MeshBasicMaterial({
       color: 0x7a5e2a,
@@ -85,18 +82,36 @@ export class TrajectoryVisualizer {
 
     // 3. Dynamic Floor Trajectory Lines
     const playerTrajMat = new THREE.LineBasicMaterial({ color: 0xffd700, linewidth: 2 });
-    this.playerTrajLine = new THREE.Line(this.playerTrajGeo, playerTrajMat);
+    this.playerTrajLine = new THREE.Line(new THREE.BufferGeometry(), playerTrajMat);
     scene.add(this.playerTrajLine);
 
     const bossTrajMat = new THREE.LineBasicMaterial({ color: 0xff4422, linewidth: 2 });
-    this.bossTrajLine = new THREE.Line(this.bossTrajGeo, bossTrajMat);
+    this.bossTrajLine = new THREE.Line(new THREE.BufferGeometry(), bossTrajMat);
     scene.add(this.bossTrajLine);
+  }
+
+  private updateLine(line: THREE.Line, points: THREE.Vector3[]): void {
+    if (points.length < 2) {
+      line.visible = false;
+      return;
+    }
+    line.visible = this.isVisible;
+    const pos = new Float32Array(points.length * 3);
+    for (let i = 0; i < points.length; i++) {
+      pos[i * 3] = points[i].x;
+      pos[i * 3 + 1] = points[i].y;
+      pos[i * 3 + 2] = points[i].z;
+    }
+    line.geometry.dispose();
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    line.geometry = geo;
   }
 
   public startPlayerAction(pos: THREE.Vector3): void {
     this.playerTrailPoints.length = 0;
     this.playerTrailPoints.push(new THREE.Vector3(pos.x, 0.03, pos.z));
-    this.playerTrajGeo.setFromPoints(this.playerTrailPoints);
+    this.updateLine(this.playerTrajLine, this.playerTrailPoints);
     this.playerStartMarker.position.set(pos.x, 0.025, pos.z);
     this.playerStartMarker.visible = this.isVisible;
   }
@@ -104,16 +119,16 @@ export class TrajectoryVisualizer {
   public recordPlayerPoint(pos: THREE.Vector3): void {
     if (!this.isVisible) return;
     const last = this.playerTrailPoints[this.playerTrailPoints.length - 1];
-    if (!last || pos.distanceTo(last) > 0.04) {
+    if (!last || pos.distanceTo(last) > 0.05) {
       this.playerTrailPoints.push(new THREE.Vector3(pos.x, 0.03, pos.z));
-      this.playerTrajGeo.setFromPoints(this.playerTrailPoints);
+      this.updateLine(this.playerTrajLine, this.playerTrailPoints);
     }
   }
 
   public startBossAction(pos: THREE.Vector3): void {
     this.bossTrailPoints.length = 0;
     this.bossTrailPoints.push(new THREE.Vector3(pos.x, 0.03, pos.z));
-    this.bossTrajGeo.setFromPoints(this.bossTrailPoints);
+    this.updateLine(this.bossTrajLine, this.bossTrailPoints);
     this.bossStartMarker.position.set(pos.x, 0.025, pos.z);
     this.bossStartMarker.visible = this.isVisible;
   }
@@ -121,25 +136,29 @@ export class TrajectoryVisualizer {
   public recordBossPoint(pos: THREE.Vector3): void {
     if (!this.isVisible) return;
     const last = this.bossTrailPoints[this.bossTrailPoints.length - 1];
-    if (!last || pos.distanceTo(last) > 0.04) {
+    if (!last || pos.distanceTo(last) > 0.05) {
       this.bossTrailPoints.push(new THREE.Vector3(pos.x, 0.03, pos.z));
-      this.bossTrajGeo.setFromPoints(this.bossTrailPoints);
+      this.updateLine(this.bossTrajLine, this.bossTrailPoints);
     }
   }
 
   public clear(): void {
     this.playerTrailPoints.length = 0;
     this.bossTrailPoints.length = 0;
-    this.playerTrajGeo.setFromPoints(this.playerTrailPoints);
-    this.bossTrajGeo.setFromPoints(this.bossTrailPoints);
+    this.playerTrajLine.geometry.dispose();
+    this.playerTrajLine.geometry = new THREE.BufferGeometry();
+    this.playerTrajLine.visible = false;
+    this.bossTrajLine.geometry.dispose();
+    this.bossTrajLine.geometry = new THREE.BufferGeometry();
+    this.bossTrajLine.visible = false;
     this.playerStartMarker.visible = false;
     this.bossStartMarker.visible = false;
   }
 
   public toggleVisibility(visible?: boolean): boolean {
     this.isVisible = visible !== undefined ? visible : !this.isVisible;
-    this.playerTrajLine.visible = this.isVisible;
-    this.bossTrajLine.visible = this.isVisible;
+    this.playerTrajLine.visible = this.isVisible && this.playerTrailPoints.length >= 2;
+    this.bossTrajLine.visible = this.isVisible && this.bossTrailPoints.length >= 2;
     this.playerStartMarker.visible = this.isVisible && this.playerTrailPoints.length > 0;
     this.bossStartMarker.visible = this.isVisible && this.bossTrailPoints.length > 0;
     return this.isVisible;

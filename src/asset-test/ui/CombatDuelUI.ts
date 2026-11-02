@@ -6,14 +6,25 @@ export class CombatDuelUI {
     private readonly dom: DomBindings,
     private readonly duelStage: CombatDuelStage,
     private readonly onCombatLog: (text: string) => void,
+    private readonly onDuelStepFrame?: (frames: number) => void,
+    private readonly onDuelTogglePause?: () => void,
+    private readonly onDuelSpeedChange?: (speed: number) => void,
   ) {}
 
   public init(): void {
-    // 1. Settings Buttons
+    // 0. Window Minimize Button
+    this.dom.btnMinWin2?.addEventListener('click', () => {
+      const isCollapsed = this.dom.winCombatDuel?.classList.toggle('collapsed');
+      if (this.dom.btnMinWin2) {
+        this.dom.btnMinWin2.textContent = isCollapsed ? '□' : '_';
+      }
+    });
+
+    // 1. Settings & Reset Buttons
     this.dom.btnToggleAutoReset?.addEventListener('click', () => {
       const active = this.duelStage.toggleAutoReset();
       if (this.dom.btnToggleAutoReset) {
-        this.dom.btnToggleAutoReset.textContent = `Auto-Reset: ${active ? 'ON (1.0s)' : 'OFF'}`;
+        this.dom.btnToggleAutoReset.textContent = `Auto-Reset: ${active ? 'ON' : 'OFF'}`;
         this.dom.btnToggleAutoReset.classList.toggle('active', active);
       }
     });
@@ -33,7 +44,7 @@ export class CombatDuelUI {
     this.dom.btnBossAiMode?.addEventListener('click', () => {
       const mode = this.duelStage.toggleBossAiMode();
       if (this.dom.btnBossAiMode) {
-        this.dom.btnBossAiMode.textContent = `Boss: ${mode === 'dummy' ? 'Practice Dummy' : 'Active Duel AI'}`;
+        this.dom.btnBossAiMode.textContent = mode === 'dummy' ? 'Dummy Mode' : 'Active AI';
         this.dom.btnBossAiMode.classList.toggle('active', mode === 'duel');
       }
     });
@@ -77,6 +88,20 @@ export class CombatDuelUI {
     document.querySelector('#btn-act-boss-kick')?.addEventListener('click', () =>
       this.duelStage.triggerBossAction('kick', this.onCombatLog),
     );
+
+    // 4. Combat Dedicated Transport Bar (Speed, Pause, Step +/- 1)
+    this.dom.btnDuelStepPrev?.addEventListener('click', () => this.onDuelStepFrame?.(-1));
+    this.dom.btnDuelPlayPause?.addEventListener('click', () => this.onDuelTogglePause?.());
+    this.dom.btnDuelStepNext?.addEventListener('click', () => this.onDuelStepFrame?.(1));
+
+    this.dom.duelSpeedButtons?.querySelectorAll<HTMLButtonElement>('button').forEach((btn) => {
+      btn.onclick = () => {
+        const speed = parseFloat(btn.getAttribute('data-duel-speed') || '1.0');
+        this.dom.duelSpeedButtons?.querySelectorAll('button').forEach((b) => b.classList.remove('active'));
+        btn.classList.add('active');
+        this.onDuelSpeedChange?.(speed);
+      };
+    });
   }
 
   public updateTelemetry(data: DuelTelemetryUpdate): void {
@@ -99,7 +124,7 @@ export class CombatDuelUI {
     if (this.dom.bossActionStateLabel) {
       const bState = data.bossState.toUpperCase();
       this.dom.bossActionStateLabel.textContent = `${bState} (HP: ${Math.round(data.bossHp)})`;
-      this.dom.bossActionStateLabel.style.color = data.isBossHitboxActive ? '#ff4444' : '#e5ded2';
+      this.dom.bossActionStateLabel.style.color = data.isBossHitboxActive ? '#ffff00' : '#e5ded2';
     }
 
     if (this.dom.telReach) {
