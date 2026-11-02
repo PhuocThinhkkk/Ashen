@@ -14,5 +14,11 @@ export default defineConfig({
   build: {
     sourcemap: true,
     chunkSizeWarningLimit: 900,
+    rollupOptions: {
+      input: {
+        main: 'index.html',
+        assetTest: 'asset-test.html',
+      },
+    },
   },
 });

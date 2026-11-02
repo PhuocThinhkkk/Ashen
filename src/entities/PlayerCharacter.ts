@@ -457,7 +457,7 @@ export class PlayerCharacter {
     }
   }
 
-  private startDodge(inputs: CombatInputs, cameraYaw: number): void {
+  public startDodge(inputs?: CombatInputs, cameraYaw = 0, explicitDirection?: THREE.Vector3): void {
     this.state = 'dodge';
     this.dodgeTimer = 0;
     this.isInvulnerable = false;
@@ -465,7 +465,9 @@ export class PlayerCharacter {
     this.staminaRegenDelay = 1.0;
 
     // Compute dodge direction
-    if (inputs.move.lengthSq() > 0.05) {
+    if (explicitDirection) {
+      this.dodgeDirection.copy(explicitDirection).normalize();
+    } else if (inputs && inputs.move.lengthSq() > 0.05) {
       const sinYaw = Math.sin(cameraYaw);
       const cosYaw = Math.cos(cameraYaw);
       const fwdX = -sinYaw;

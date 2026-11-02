@@ -1,88 +1,21 @@
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import GUI from 'lil-gui';
-import { HitboxVisualDebugger } from './combat/HitboxVisualDebugger';
-import { getKinematicAction } from './combat/KinematicData';
-import { ModelLoader } from './utils/ModelLoader';
-import {
-  DEFAULT_PLAYER_WEAPON_SOCKET,
-  DEFAULT_BOSS_WEAPON_SOCKET,
-  loadSocketConfig,
-  saveSocketConfig,
-  applyWeaponSocketTransform,
-  type WeaponSocketTransform,
-} from './combat/WeaponSocketConfig';
+import './asset-test/types';
+import { getDomBindings } from './asset-test/ui/DomBindings';
+import { AssetTestCameraManager } from './asset-test/camera/AssetTestCameraManager';
+import { RawAnimationStage } from './asset-test/track1/RawAnimationStage';
+import { CombatDuelStage } from './asset-test/track2/CombatDuelStage';
+import { WeaponSocketGUI } from './asset-test/ui/WeaponSocketGUI';
+import { RawInspectorUI } from './asset-test/ui/RawInspectorUI';
+import { CombatDuelUI } from './asset-test/ui/CombatDuelUI';
+import { CONFIG } from './asset-test/config';
 
-export interface AssetTestDiagnostics {
-  loaded: boolean;
-  error: string | null;
-  player: {
-    modelId: string;
-    bonesCount: number;
-    clips: string[];
-    activeClip: string;
-    height: number;
-    weaponAttached: boolean;
-    handBoneFound: boolean;
-  };
-  boss: {
-    modelId: string;
-    bonesCount: number;
-    clips: string[];
-    activeClip: string;
-    height: number;
-    handBoneFound: boolean;
-  };
-}
-
-declare global {
-  interface Window {
-    __ASSET_TEST__?: {
-      diagnostics: AssetTestDiagnostics;
-      playPlayerClip: (name: string) => void;
-      playBossClip: (name: string) => void;
-      getWeaponDistanceToHand: () => number;
-      switchPlayerModel: (modelId: string) => Promise<void>;
-      setPlaybackSpeed: (speed: number) => void;
-      setCamera: (preset: 'both' | 'player' | 'boss' | 'reset') => void;
-      pauseAtMidFrame: (category: 'player' | 'boss', clipName: string) => Promise<{ duration: number; midTime: number }>;
-      captureCanvas: () => string;
-      captureAllAnimations: () => Promise<Record<string, string>>;
-      toggleHitbox?: (visible?: boolean) => boolean;
-      isHitboxVisible?: () => boolean;
-      stepFrame?: (frames: number) => void;
-      togglePause?: () => boolean;
-      setMode?: (mode: 'orbit' | 'walk') => void;
-      getHitboxDebugState?: () => { playerActive: boolean; bossActive: boolean };
-    };
-  }
-}
-
-// DOM Elements
-const canvas = document.querySelector<HTMLCanvasElement>('#test-canvas')!;
-const loadStatusEl = document.querySelector<HTMLElement>('#load-status')!;
-const playerInfoEl = document.querySelector<HTMLElement>('#player-info')!;
-const bossInfoEl = document.querySelector<HTMLElement>('#boss-info')!;
-const weaponInfoEl = document.querySelector<HTMLElement>('#weapon-info')!;
-const playerActiveLabel = document.querySelector<HTMLElement>('#player-active-label')!;
-const bossActiveLabel = document.querySelector<HTMLElement>('#boss-active-label')!;
-const playerAnimButtonsEl = document.querySelector<HTMLElement>('#player-anim-buttons')!;
-const bossAnimButtonsEl = document.querySelector<HTMLElement>('#boss-anim-buttons')!;
-const playerModelButtonsEl = document.querySelector<HTMLElement>('#player-model-buttons')!;
-const cameraButtonsEl = document.querySelector<HTMLElement>('#camera-buttons')!;
-const speedButtonsEl = document.querySelector<HTMLElement>('#speed-buttons')!;
-
-// 1. Scene & Renderer Setup
+// 1. Scene, Lights & Floor
+const dom = getDomBindings();
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0a0e16);
-scene.fog = new THREE.Fog(0x0b101a, 16, 60);
+scene.fog = new THREE.Fog(0x0b101a, 20, 75);
 
-const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
-camera.position.set(1.9, 1.9, 5.0);
-camera.lookAt(1.9, 1.1, 0);
-
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+const renderer = new THREE.WebGLRenderer({ canvas: dom.canvas, antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -91,16 +24,6 @@ renderer.toneMappingExposure = 1.1;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFShadowMap;
 
-// OrbitControls
-const controls = new OrbitControls(camera, renderer.domElement);
-controls.target.set(1.9, 1.1, 0);
-controls.enableDamping = true;
-controls.dampingFactor = 0.08;
-controls.maxDistance = 30;
-controls.minDistance = 1;
-controls.maxPolarAngle = Math.PI / 2 + 0.05;
-
-// Lights
 const hemiLight = new THREE.HemisphereLight(0x506888, 0x222a36, 1.8);
 scene.add(hemiLight);
 
@@ -115,731 +38,126 @@ const rimLight = new THREE.DirectionalLight(0x5577aa, 0.85);
 rimLight.position.set(16, 12, -14);
 scene.add(rimLight);
 
-// Floor
-const floorGeo = new THREE.CylinderGeometry(15, 15, 0.5, 32);
-const floorMat = new THREE.MeshStandardMaterial({ color: 0x1a222e, roughness: 0.8, metalness: 0.1 });
+const floorGeo = new THREE.CylinderGeometry(
+  CONFIG.arena.floorRadius,
+  CONFIG.arena.floorRadius,
+  0.5,
+  48,
+);
+const floorMat = new THREE.MeshStandardMaterial({
+  color: 0x141b24,
+  roughness: 0.85,
+  metalness: 0.1,
+});
 const floor = new THREE.Mesh(floorGeo, floorMat);
 floor.position.y = -0.25;
 floor.receiveShadow = true;
 scene.add(floor);
 
-// Floor Grid
-const gridHelper = new THREE.GridHelper(30, 30, 0x7a5e2a, 0x1f2736);
+const gridHelper = new THREE.GridHelper(
+  CONFIG.arena.gridSize,
+  CONFIG.arena.gridSize,
+  0x7a5e2a,
+  0x1b2332,
+);
 gridHelper.position.y = 0.01;
 scene.add(gridHelper);
 
-// Hitbox Visual Debuggers
-const playerHitboxDebugger = new HitboxVisualDebugger({
-  size: new THREE.Vector3(0.28, 1.4, 0.28),
-  offset: new THREE.Vector3(0, 0.7, 0),
-});
-const bossHitboxDebugger = new HitboxVisualDebugger({
-  size: new THREE.Vector3(0.45, 2.4, 0.45),
-  offset: new THREE.Vector3(0, 1.2, 0),
-});
-const bossFootHitboxDebugger = new HitboxVisualDebugger({
-  size: new THREE.Vector3(0.35, 0.4, 0.5),
-  offset: new THREE.Vector3(0, 0.1, 0),
-});
-let bossLeftFootBone: THREE.Object3D | null = null;
-let isHitboxVisible = false;
+// 2. Stages & Controllers
+let playbackSpeed = 1.0;
 let isPaused = false;
 let isWalkMode = false;
 const keysPressed: Record<string, boolean> = {};
 
-// 2. State & Loaders
-const loader = new GLTFLoader();
-let currentPlayerScene: THREE.Group | null = null;
-let currentBossScene: THREE.Group | null = null;
-let playerMixer: THREE.AnimationMixer | null = null;
-let bossMixer: THREE.AnimationMixer | null = null;
-const playerActions = new Map<string, THREE.AnimationAction>();
-const bossActions = new Map<string, THREE.AnimationAction>();
-let playerRawClips: THREE.AnimationClip[] = [];
-let bossRawClips: THREE.AnimationClip[] = [];
-let currentPlayerAction: THREE.AnimationAction | null = null;
-let currentBossAction: THREE.AnimationAction | null = null;
+const cameraMgr = new AssetTestCameraManager(dom.canvas, (roamActive) => {
+  if (roamActive) {
+    if (dom.overlay && !dom.overlay.classList.contains('collapsed')) {
+      dom.overlay.classList.add('collapsed');
+      if (dom.overlayToggleBtn) dom.overlayToggleBtn.textContent = 'Show';
+    }
+    if (dom.roamBanner) dom.roamBanner.style.display = 'block';
+  } else {
+    if (dom.overlay && dom.overlay.classList.contains('collapsed')) {
+      dom.overlay.classList.remove('collapsed');
+      if (dom.overlayToggleBtn) dom.overlayToggleBtn.textContent = 'Hide';
+    }
+    if (dom.roamBanner) dom.roamBanner.style.display = 'none';
+    if (dom.reticle) dom.reticle.style.display = 'none';
+  }
+});
 
-let playerHandBone: THREE.Object3D | null = null;
-let axeObject: THREE.Object3D | null = null;
-let bossHandBone: THREE.Object3D | null = null;
-let bossSwordGroup: THREE.Group | null = null;
-let playbackSpeed = 1.0;
+const rawStage = new RawAnimationStage();
+const duelStage = new CombatDuelStage(scene);
+const socketGui = new WeaponSocketGUI(rawStage);
 
-const playerSocket: WeaponSocketTransform = loadSocketConfig('player', DEFAULT_PLAYER_WEAPON_SOCKET);
-const bossSocket: WeaponSocketTransform = loadSocketConfig('boss', DEFAULT_BOSS_WEAPON_SOCKET);
+const duelUI = new CombatDuelUI(dom, duelStage, (text) => duelUI.logCombat(text));
 
-const diagnostics: AssetTestDiagnostics = {
-  loaded: false,
-  error: null,
-  player: {
-    modelId: 'knight',
-    bonesCount: 0,
-    clips: [],
-    activeClip: '',
-    height: 0,
-    weaponAttached: false,
-    handBoneFound: false,
+const rawUI = new RawInspectorUI(
+  dom,
+  rawStage,
+  cameraMgr,
+  () => toggleHitboxDebug(),
+  (frames) => stepFrame(frames),
+  () => togglePause(),
+  (speed) => {
+    playbackSpeed = speed;
   },
-  boss: {
-    modelId: 'titan',
-    bonesCount: 0,
-    clips: [],
-    activeClip: '',
-    height: 0,
-    handBoneFound: false,
+  async (modelId) => {
+    await rawStage.loadPlayer(modelId);
+    await duelStage.switchPlayerModel(modelId);
+    rawUI.populatePlayerButtons();
+    rawUI.updateActiveClipLabels();
+    rawUI.updateDiagnosticsInfo();
   },
-};
-
-// Strips horizontal (X and Z) root translation so animations don't drift away from origin
-function stripRootMotion(clip: THREE.AnimationClip, rootBoneName: string) {
-  ModelLoader.stripRootMotion(clip, [rootBoneName, 'hips', 'body', 'HumanArmature|Hips']);
-}
-
-// 3. Load Player Model
-async function loadPlayer(modelId: 'knight' | 'samurai') {
-  loadStatusEl.className = 'status-wait';
-  loadStatusEl.textContent = `Loading ${modelId}.glb...`;
-
-  // Cleanup old player if present
-  if (currentPlayerScene) {
-    if (playerMixer) playerMixer.stopAllAction();
-    playerActions.clear();
-    currentPlayerAction = null;
-    playerHandBone = null;
-    if (axeObject && axeObject.parent) {
-      axeObject.parent.remove(axeObject);
-    }
-    scene.remove(currentPlayerScene);
-    currentPlayerScene.traverse((obj) => {
-      if (obj instanceof THREE.Mesh) {
-        obj.geometry.dispose();
-        if (Array.isArray(obj.material)) obj.material.forEach((m) => m.dispose());
-        else obj.material?.dispose();
-      }
-    });
-    currentPlayerScene = null;
-  }
-
-  const playerGltf = await loader.loadAsync(`/assets/models/players/${modelId}.glb`);
-  currentPlayerScene = playerGltf.scene;
-  currentPlayerScene.position.set(0.9, 0, 0);
-
-  // Measure raw bounds and scale to exactly 1.80m height
-  const rawBox = new THREE.Box3().setFromObject(currentPlayerScene);
-  const rawSize = new THREE.Vector3();
-  rawBox.getSize(rawSize);
-  const scaleFactor = 1.80 / (rawSize.y || 1);
-  currentPlayerScene.scale.set(scaleFactor, scaleFactor, scaleFactor);
-  currentPlayerScene.rotation.y = 0;
-  currentPlayerScene.updateMatrixWorld(true);
-
-  const playerBox = new THREE.Box3().setFromObject(currentPlayerScene);
-  const playerSize = new THREE.Vector3();
-  playerBox.getSize(playerSize);
-  diagnostics.player.height = parseFloat(playerSize.y.toFixed(2));
-  scene.add(currentPlayerScene);
-
-  // Skeletons & Bones
-  let pBones = 0;
-  currentPlayerScene.traverse((obj) => {
-    const lower = obj.name.toLowerCase();
-    if (
-      lower.includes('icosphere') ||
-      lower.includes('cylinder') ||
-      lower.includes('hand_shape') ||
-      lower.includes('plane')
-    ) {
-      obj.visible = false;
-    }
-    if (obj instanceof THREE.Mesh) {
-      if (lower.includes('icosphere') || lower.includes('cylinder')) {
-        obj.visible = false;
-      } else {
-        obj.castShadow = true;
-        obj.receiveShadow = true;
-      }
-    }
-    if (obj instanceof THREE.Bone) {
-      pBones++;
-      if (
-        obj.name === 'PalmR' ||
-        obj.name === 'Palm.R' ||
-        obj.name === 'MiddleHand.R' ||
-        obj.name.toLowerCase().includes('palmr') ||
-        obj.name.toLowerCase().includes('middlehand.r') ||
-        obj.name.toLowerCase().includes('righthand')
-      ) {
-        if (!playerHandBone) playerHandBone = obj;
-      }
-    }
-  });
-
-  diagnostics.player.bonesCount = pBones;
-  diagnostics.player.handBoneFound = !!playerHandBone;
-
-  // Load Weapon (Sword.glb) if not loaded yet, then attach to hand
-  if (!axeObject) {
-    loadStatusEl.textContent = 'Loading Sword.glb...';
-    const swordGltf = await loader.loadAsync('/assets/weapons/Sword.glb');
-    axeObject = swordGltf.scene;
-    axeObject.castShadow = true;
-    axeObject.traverse((obj) => {
-      if (obj instanceof THREE.Mesh) obj.castShadow = true;
-    });
-  }
-
-  if (playerHandBone && axeObject) {
-    applyWeaponSocketTransform(axeObject, playerSocket);
-    playerHandBone.add(axeObject);
-    playerHitboxDebugger.attachToBone(playerHandBone);
-    diagnostics.player.weaponAttached = true;
-  }
-
-  // Animations
-  playerMixer = new THREE.AnimationMixer(currentPlayerScene);
-  playerRawClips = playerGltf.animations;
-  diagnostics.player.clips = playerRawClips.map((a) => a.name);
-
-  for (const clip of playerRawClips) {
-    stripRootMotion(clip, 'Hips');
-    const action = playerMixer.clipAction(clip);
-    playerActions.set(clip.name, action);
-  }
-
-  // Populate Player UI buttons
-  populatePlayerButtons();
-
-  // Play default idle
-  playPlayerAnimation('idle');
-
-  // Update Player info line
-  playerInfoEl.innerHTML = `<strong>Player (${modelId}):</strong> Height ${diagnostics.player.height}m | Bones: ${diagnostics.player.bonesCount} | Clips: ${diagnostics.player.clips.length}`;
-  weaponInfoEl.innerHTML = `<strong>Weapon:</strong> Socketed to <span class="status-ok">${playerHandBone ? playerHandBone.name : 'NONE'}</span>`;
-  diagnostics.player.modelId = modelId;
-}
-
-// 4. Load Boss Model (titan.glb)
-async function loadBoss() {
-  loadStatusEl.textContent = 'Loading titan.glb...';
-  const bossGltf = await loader.loadAsync('/assets/models/bosses/titan.glb');
-  currentBossScene = bossGltf.scene;
-  currentBossScene.position.set(2.8, 0, 0);
-
-  // Scale to 2.40m boss height
-  const rawBossBox = new THREE.Box3().setFromObject(currentBossScene);
-  const rawBossSize = new THREE.Vector3();
-  rawBossBox.getSize(rawBossSize);
-  const bossScaleFactor = 2.40 / (rawBossSize.y || 1);
-  currentBossScene.scale.set(bossScaleFactor, bossScaleFactor, bossScaleFactor);
-  currentBossScene.rotation.y = 0;
-  currentBossScene.updateMatrixWorld(true);
-  scene.add(currentBossScene);
-
-  const bossBox = new THREE.Box3().setFromObject(currentBossScene);
-  const bossSize = new THREE.Vector3();
-  bossBox.getSize(bossSize);
-  diagnostics.boss.height = parseFloat(bossSize.y.toFixed(2));
-
-  let bBones = 0;
-  currentBossScene.traverse((obj) => {
-    const lower = obj.name.toLowerCase();
-    if (
-      lower.includes('icosphere') ||
-      lower.includes('cylinder') ||
-      lower.includes('hand_shape') ||
-      lower.includes('plane')
-    ) {
-      obj.visible = false;
-    }
-    if (obj instanceof THREE.Mesh) {
-      if (lower.includes('icosphere') || lower.includes('cylinder') || lower.includes('hand_shape')) {
-        obj.visible = false;
-      } else {
-        obj.castShadow = true;
-        obj.receiveShadow = true;
-      }
-    }
-    if (obj instanceof THREE.Bone || (obj as any).isBone) {
-      bBones++;
-      if (
-        (obj.name === 'handR' ||
-          obj.name === 'hand.R' ||
-          obj.name === 'PalmR' ||
-          obj.name === 'Palm.R' ||
-          obj.name === 'mixamorig:RightHand' ||
-          obj.name.toLowerCase().includes('righthand')) &&
-        !obj.name.includes('IK')
-      ) {
-        if (!bossHandBone) bossHandBone = obj;
-      }
-      if (
-        (obj.name === 'mixamorig:LeftFoot' || obj.name.toLowerCase().includes('leftfoot')) &&
-        !obj.name.includes('IK')
-      ) {
-        if (!bossLeftFootBone) bossLeftFootBone = obj;
-      }
-    }
-  });
-
-  diagnostics.boss.bonesCount = bBones;
-  diagnostics.boss.handBoneFound = !!bossHandBone;
-
-  // Build and attach Greatsword to boss hand bone
-  if (bossHandBone) {
-    bossSwordGroup = new THREE.Group();
-    const gripGeo = new THREE.CylinderGeometry(0.04, 0.04, 0.6, 8);
-    const gripMat = new THREE.MeshStandardMaterial({ color: 0x332211, roughness: 0.7 });
-    const grip = new THREE.Mesh(gripGeo, gripMat);
-    grip.position.y = -0.3;
-    bossSwordGroup.add(grip);
-
-    const guardGeo = new THREE.BoxGeometry(0.7, 0.1, 0.12);
-    const guardMat = new THREE.MeshStandardMaterial({ color: 0x8c6d2c, roughness: 0.3, metalness: 0.8 });
-    const guard = new THREE.Mesh(guardGeo, guardMat);
-    bossSwordGroup.add(guard);
-
-    const bladeGeo = new THREE.BoxGeometry(0.2, 2.0, 0.04);
-    const bladeMat = new THREE.MeshStandardMaterial({
-      color: 0x222428,
-      emissive: 0xff4400,
-      emissiveIntensity: 0.6,
-      roughness: 0.3,
-      metalness: 0.9,
-    });
-    const blade = new THREE.Mesh(bladeGeo, bladeMat);
-    blade.position.y = 1.0;
-    bossSwordGroup.add(blade);
-
-    // Collision hitbox parented directly to the sword mesh
-    const bladeHitbox = new THREE.Object3D();
-    bladeHitbox.name = 'BossSwordHitbox';
-    bladeHitbox.position.set(0, 0, 0);
-    blade.add(bladeHitbox);
-
-    bossSwordGroup.traverse((o) => {
-      if (o instanceof THREE.Mesh) o.castShadow = true;
-    });
-    applyWeaponSocketTransform(bossSwordGroup, bossSocket);
-    bossHandBone.add(bossSwordGroup);
-
-    bossHitboxDebugger.attachToBone(bossHandBone);
-  }
-
-  if (bossLeftFootBone) {
-    bossFootHitboxDebugger.attachToBone(bossLeftFootBone);
-  }
-
-  // Boss Animations
-  bossMixer = new THREE.AnimationMixer(currentBossScene);
-  bossRawClips = bossGltf.animations;
-  diagnostics.boss.clips = bossRawClips.map((a) => a.name);
-
-  for (const clip of bossRawClips) {
-    stripRootMotion(clip, 'hips');
-    const action = bossMixer.clipAction(clip);
-    bossActions.set(clip.name, action);
-  }
-
-  // Populate Boss UI buttons
-  populateBossButtons();
-
-  // Play default idle
-  playBossAnimation('idle');
-
-  // Update Boss info line
-  bossInfoEl.innerHTML = `<strong>Boss (titan):</strong> Height ${diagnostics.boss.height}m | Bones: ${diagnostics.boss.bonesCount} | Clips: ${diagnostics.boss.clips.length}`;
-}
-
-// 5. Populate Buttons dynamically for all clips
-function populatePlayerButtons() {
-  if (!playerAnimButtonsEl) return;
-  playerAnimButtonsEl.innerHTML = '';
-
-  for (const clip of playerRawClips) {
-    const btn = document.createElement('button');
-    btn.className = 'btn-player';
-    btn.setAttribute('data-clip', clip.name);
-    btn.textContent = clip.name;
-    if (clip.name === diagnostics.player.activeClip) {
-      btn.classList.add('active');
-    }
-    btn.onclick = () => playPlayerAnimation(clip.name);
-    playerAnimButtonsEl.appendChild(btn);
-  }
-}
-
-function populateBossButtons() {
-  if (!bossAnimButtonsEl) return;
-  bossAnimButtonsEl.innerHTML = '';
-
-  for (const clip of bossRawClips) {
-    const btn = document.createElement('button');
-    btn.className = 'btn-boss';
-    btn.setAttribute('data-clip', clip.name);
-    btn.textContent = clip.name;
-    if (clip.name === diagnostics.boss.activeClip) {
-      btn.classList.add('active');
-    }
-    btn.onclick = () => playBossAnimation(clip.name);
-    bossAnimButtonsEl.appendChild(btn);
-  }
-}
-
-// 6. Animation Playback Handlers
-function playPlayerAnimation(name: string) {
-  let targetAction = playerActions.get(name);
-  let resolvedClipName = name;
-
-  if (!targetAction) {
-    const foundClip = ModelLoader.findClip(playerRawClips, name);
-    if (foundClip) {
-      targetAction = playerActions.get(foundClip.name);
-      resolvedClipName = foundClip.name;
-    }
-  }
-
-  if (!targetAction) {
-    console.warn(`[AssetTest] Player clip "${name}" not found.`);
-    return;
-  }
-
-  if (targetAction === currentPlayerAction && targetAction.isRunning()) {
-    targetAction.reset();
-    targetAction.play();
-    return;
-  }
-
-  targetAction.reset();
-
-  const isOneShot = ['attack_light', 'attack_heavy', 'dodge', 'death'].some(
-    (k) => resolvedClipName.toLowerCase().includes(k)
-  );
-
-  if (resolvedClipName.toLowerCase().includes('dodge')) {
-    targetAction.setLoop(THREE.LoopOnce, 1);
-    targetAction.clampWhenFinished = true;
-    targetAction.timeScale = targetAction.getClip().duration / 0.40; // Scales full dodge/roll to 0.40s window
-  } else if (resolvedClipName.toLowerCase().includes('death')) {
-    targetAction.setLoop(THREE.LoopOnce, 1);
-    targetAction.clampWhenFinished = true;
-    targetAction.timeScale = 1.0;
-  } else if (isOneShot) {
-    targetAction.setLoop(THREE.LoopOnce, 1);
-    targetAction.clampWhenFinished = true;
-    targetAction.timeScale = 1.0;
-  } else {
-    targetAction.setLoop(THREE.LoopRepeat, Infinity);
-    targetAction.clampWhenFinished = false;
-    targetAction.timeScale = 1.0;
-  }
-
-  if (currentPlayerAction) {
-    currentPlayerAction.crossFadeTo(targetAction, 0.18, true);
-  }
-  targetAction.play();
-  currentPlayerAction = targetAction;
-  diagnostics.player.activeClip = resolvedClipName;
-
-  if (playerActiveLabel) playerActiveLabel.textContent = resolvedClipName;
-
-  if (playerAnimButtonsEl) {
-    playerAnimButtonsEl.querySelectorAll<HTMLButtonElement>('button').forEach((b) => {
-      const clip = b.getAttribute('data-clip');
-      if (clip === resolvedClipName || clip === name) b.classList.add('active');
-      else b.classList.remove('active');
-    });
-  }
-}
-
-function playBossAnimation(name: string) {
-  let targetAction = bossActions.get(name);
-  let resolvedClipName = name;
-
-  if (!targetAction) {
-    const foundClip = ModelLoader.findClip(bossRawClips, name);
-    if (foundClip) {
-      targetAction = bossActions.get(foundClip.name);
-      resolvedClipName = foundClip.name;
-    }
-  }
-
-  if (!targetAction) {
-    console.warn(`[AssetTest] Boss clip "${name}" not found.`);
-    return;
-  }
-
-  if (targetAction === currentBossAction && targetAction.isRunning()) {
-    targetAction.reset();
-    targetAction.play();
-    return;
-  }
-
-  targetAction.reset();
-
-  const isLoop = ['idle', 'walking', 'walk'].includes(resolvedClipName.toLowerCase());
-
-  if (isLoop) {
-    targetAction.setLoop(THREE.LoopRepeat, Infinity);
-    targetAction.clampWhenFinished = false;
-  } else {
-    targetAction.setLoop(THREE.LoopOnce, 1);
-    targetAction.clampWhenFinished = true;
-  }
-
-  if (currentBossAction) {
-    currentBossAction.crossFadeTo(targetAction, 0.2, true);
-  }
-  targetAction.play();
-  currentBossAction = targetAction;
-  diagnostics.boss.activeClip = resolvedClipName;
-
-  if (bossActiveLabel) bossActiveLabel.textContent = resolvedClipName;
-
-  if (bossAnimButtonsEl) {
-    bossAnimButtonsEl.querySelectorAll<HTMLButtonElement>('button').forEach((b) => {
-      const clip = b.getAttribute('data-clip');
-      if (clip === resolvedClipName || clip === name) b.classList.add('active');
-      else b.classList.remove('active');
-    });
-  }
-}
-
-function setCamera(preset: 'both' | 'player' | 'boss' | 'reset') {
-  if (cameraButtonsEl) {
-    cameraButtonsEl.querySelectorAll('button').forEach((b) => b.classList.remove('active'));
-    cameraButtonsEl.querySelector(`button[data-cam="${preset}"]`)?.classList.add('active');
-  }
-  if (preset === 'player') {
-    camera.position.set(-1.4, 1.8, 3.2);
-    controls.target.set(-1.4, 1.0, 0);
-  } else if (preset === 'boss') {
-    camera.position.set(1.4, 2.2, 4.2);
-    controls.target.set(1.4, 1.3, 0);
-  } else {
-    camera.position.set(0, 2.5, 6.5);
-    controls.target.set(0, 1.2, 0);
-  }
-}
-
-// 7. Camera Presets & Speed Controls
-function setupUIControls() {
-  if (playerModelButtonsEl) {
-    playerModelButtonsEl.querySelectorAll<HTMLButtonElement>('button').forEach((btn) => {
-      btn.onclick = async () => {
-        const modelId = btn.getAttribute('data-model') as 'knight' | 'samurai';
-        if (!modelId || modelId === diagnostics.player.modelId) return;
-        playerModelButtonsEl.querySelectorAll('button').forEach((b) => b.classList.remove('active'));
-        btn.classList.add('active');
-        await loadPlayer(modelId);
-      };
-    });
-  }
-
-  if (cameraButtonsEl) {
-    cameraButtonsEl.querySelectorAll<HTMLButtonElement>('button').forEach((btn) => {
-      btn.onclick = () => {
-        const preset = btn.getAttribute('data-cam') as 'both' | 'player' | 'boss' | 'reset';
-        setCamera(preset);
-      };
-    });
-  }
-
-  if (speedButtonsEl) {
-    speedButtonsEl.querySelectorAll<HTMLButtonElement>('button').forEach((btn) => {
-      btn.onclick = () => {
-        const speed = parseFloat(btn.getAttribute('data-speed') || '1.0');
-        speedButtonsEl.querySelectorAll('button').forEach((b) => b.classList.remove('active'));
-        btn.classList.add('active');
-        playbackSpeed = speed;
-      };
-    });
-  }
-
-  const toggleBtn = document.querySelector<HTMLButtonElement>('#overlay-toggle');
-  const overlayEl = document.querySelector<HTMLElement>('#overlay');
-  if (toggleBtn && overlayEl) {
-    toggleBtn.onclick = () => {
-      const isCollapsed = overlayEl.classList.toggle('collapsed');
-      toggleBtn.textContent = isCollapsed ? 'Show' : 'Hide';
-    };
-  }
-
-  const captureBtn = document.querySelector<HTMLButtonElement>('#btn-capture-all');
-  const captureStatusEl = document.querySelector<HTMLElement>('#capture-status');
-  if (captureBtn) {
-    captureBtn.onclick = async () => {
-      captureBtn.disabled = true;
-      if (captureStatusEl) captureStatusEl.textContent = 'Capturing mid-frames...';
-      const shots = await captureAllAnimations();
-      const count = Object.keys(shots).length;
-      if (captureStatusEl) captureStatusEl.textContent = `✓ Captured ${count} clips!`;
-      captureBtn.disabled = false;
-    };
-  }
-
-  // Hitbox & Frame Scrubber Controls
-  const hitboxToggleBtn = document.querySelector<HTMLButtonElement>('#btn-toggle-hitbox');
-  if (hitboxToggleBtn) {
-    hitboxToggleBtn.onclick = () => toggleHitboxDebug();
-  }
-
-  const modeToggleBtn = document.querySelector<HTMLButtonElement>('#btn-mode-toggle');
-  if (modeToggleBtn) {
-    modeToggleBtn.onclick = () => {
-      isWalkMode = !isWalkMode;
-      modeToggleBtn.textContent = isWalkMode
-        ? '🏃 Mode: Walk (Click to Orbit)'
-        : '🚶 Mode: Orbit (Click to Walk)';
-      modeToggleBtn.classList.toggle('active', isWalkMode);
-    };
-  }
-
-  const stepPrevBtn = document.querySelector<HTMLButtonElement>('#btn-step-prev');
-  if (stepPrevBtn) {
-    stepPrevBtn.onclick = () => stepFrame(-1);
-  }
-
-  const playPauseBtn = document.querySelector<HTMLButtonElement>('#btn-play-pause');
-  if (playPauseBtn) {
-    playPauseBtn.onclick = () => togglePause();
-  }
-
-  const stepNextBtn = document.querySelector<HTMLButtonElement>('#btn-step-next');
-  if (stepNextBtn) {
-    stepNextBtn.onclick = () => stepFrame(1);
-  }
-
-  // Keyboard Navigation & Shortcuts
-  window.addEventListener('keydown', (e) => {
-    keysPressed[e.code] = true;
-    if (e.code === 'KeyH' && !e.repeat) {
-      toggleHitboxDebug();
-    } else if (e.code === 'Space' && !e.repeat) {
-      if (isWalkMode) {
-        playPlayerAnimation('dodge');
-      } else {
-        togglePause();
-      }
-    } else if (e.code === 'BracketLeft' && !e.repeat) {
-      stepFrame(-1);
-    } else if (e.code === 'BracketRight' && !e.repeat) {
-      stepFrame(1);
-    } else if (e.code === 'KeyJ' && isWalkMode && !e.repeat) {
-      playPlayerAnimation('attack_light');
-    } else if (e.code === 'KeyK' && isWalkMode && !e.repeat) {
-      playPlayerAnimation('attack_heavy');
-    }
-  });
-
-  window.addEventListener('keyup', (e) => {
-    keysPressed[e.code] = false;
-  });
-}
-
+  async () => {
+    await captureAllAnimations();
+  },
+);
+
+// 3. Global Control Functions
 function toggleHitboxDebug(visible?: boolean): boolean {
-  isHitboxVisible = visible !== undefined ? visible : !isHitboxVisible;
-  playerHitboxDebugger.setVisible(isHitboxVisible);
-  bossHitboxDebugger.setVisible(isHitboxVisible);
-  bossFootHitboxDebugger.setVisible(isHitboxVisible);
+  const nextVisible = visible !== undefined ? visible : !rawStage.isHitboxVisible;
+  rawStage.setHitboxVisible(nextVisible);
+  duelStage.setHitboxVisible(nextVisible);
 
-  const badge = document.querySelector<HTMLElement>('#hitbox-status-badge');
-  if (badge) {
-    badge.textContent = isHitboxVisible ? 'HITBOX: ON' : 'HITBOX: OFF';
-    badge.style.color = isHitboxVisible ? '#ff4444' : '#00ff88';
-    badge.style.borderColor = isHitboxVisible ? '#ff4444' : '#00ff88';
+  if (dom.hitboxStatusBadge) {
+    dom.hitboxStatusBadge.textContent = nextVisible ? 'HITBOX: ON' : 'HITBOX: OFF';
+    dom.hitboxStatusBadge.style.color = nextVisible ? '#ff4444' : '#00ff88';
+    dom.hitboxStatusBadge.style.borderColor = nextVisible ? '#ff4444' : '#00ff88';
   }
-  return isHitboxVisible;
+  return nextVisible;
 }
 
 function togglePause(): boolean {
   isPaused = !isPaused;
-  const btn = document.querySelector<HTMLButtonElement>('#btn-play-pause');
-  if (btn) {
-    btn.textContent = isPaused ? '▶ Play' : '⏸ Pause';
+  if (dom.btnPlayPause) {
+    dom.btnPlayPause.textContent = isPaused ? '▶ Play' : '⏸ Pause';
   }
   return isPaused;
 }
 
 function stepFrame(framesCount: number): void {
   isPaused = true;
-  const btn = document.querySelector<HTMLButtonElement>('#btn-play-pause');
-  if (btn) btn.textContent = '▶ Play';
+  if (dom.btnPlayPause) dom.btnPlayPause.textContent = '▶ Play';
 
   const deltaSeconds = framesCount * (1 / 60);
-  if (playerMixer) playerMixer.update(deltaSeconds);
-  if (bossMixer) bossMixer.update(deltaSeconds);
-  updateFrameTelemetry();
-  renderer.render(scene, camera);
+  rawStage.stepFrame(deltaSeconds);
+  duelStage.stepFrame(deltaSeconds);
+
+  updateTelemetry();
+  renderer.render(scene, cameraMgr.camera);
 }
 
-function updateFrameTelemetry(): { playerActive: boolean; bossActive: boolean } {
-  let playerImpact = false;
-  let bossImpact = false;
-  let telemetryText = '';
-
-  if (currentPlayerAction) {
-    const clipName = diagnostics.player.activeClip;
-    const cfg = getKinematicAction(clipName);
-    const duration = currentPlayerAction.getClip().duration;
-    const totalFrames = cfg ? cfg.totalFrames : Math.round(duration * 60);
-    const timeNorm = ((currentPlayerAction.time % duration) + duration) % duration;
-    const frame = Math.min(totalFrames, Math.floor(timeNorm * 60) + 1);
-
-    let phase = 'Idle';
-    if (cfg) {
-      for (const p of cfg.phases) {
-        if (frame >= p.startFrame && frame <= p.endFrame) {
-          phase = p.type;
-          break;
-        }
-      }
-      if (cfg.hitbox && frame >= cfg.hitbox.activeStartFrame && frame <= cfg.hitbox.activeEndFrame) {
-        playerImpact = true;
-      }
-    }
-    telemetryText = `Player: [${clipName}] F:${frame}/${totalFrames} [${phase}]`;
+function updateTelemetry(): { playerActive: boolean; bossActive: boolean } {
+  const telemetry = rawStage.updateFrameTelemetry();
+  if (dom.frameTelemetry && telemetry.telemetryText) {
+    dom.frameTelemetry.textContent = telemetry.telemetryText;
   }
-
-  if (currentBossAction) {
-    const clipName = diagnostics.boss.activeClip;
-    const cfg = getKinematicAction(clipName);
-    const duration = currentBossAction.getClip().duration;
-    const totalFrames = cfg ? cfg.totalFrames : Math.round(duration * 60);
-    const timeNorm = ((currentBossAction.time % duration) + duration) % duration;
-    const frame = Math.min(totalFrames, Math.floor(timeNorm * 60) + 1);
-
-    let phase = 'Idle';
-    if (cfg) {
-      for (const p of cfg.phases) {
-        if (frame >= p.startFrame && frame <= p.endFrame) {
-          phase = p.type;
-          break;
-        }
-      }
-      if (cfg.hitbox && frame >= cfg.hitbox.activeStartFrame && frame <= cfg.hitbox.activeEndFrame) {
-        bossImpact = true;
-      }
-    }
-    telemetryText += ` | Boss: [${clipName}] F:${frame}/${totalFrames} [${phase}]`;
-  }
-
-  // Update visual debuggers: Turns RED when Impact is active, GREEN when inactive!
-  playerHitboxDebugger.update(playerImpact);
-  const isKick = diagnostics.boss.activeClip.toLowerCase().includes('kick');
-  bossHitboxDebugger.update(!isKick && bossImpact);
-  bossFootHitboxDebugger.update(isKick && bossImpact);
-
-  const telemetryEl = document.querySelector<HTMLElement>('#frame-telemetry');
-  if (telemetryEl && telemetryText) {
-    telemetryEl.textContent = telemetryText;
-  }
-
-  return { playerActive: playerImpact, bossActive: bossImpact };
+  return { playerActive: telemetry.playerActive, bossActive: telemetry.bossActive };
 }
 
 function updateWalkMode(delta: number): void {
-  if (!isWalkMode || !currentPlayerScene) return;
+  if (!isWalkMode || !rawStage.currentPlayerScene) return;
 
   const moveX = (keysPressed['KeyD'] ? 1 : 0) - (keysPressed['KeyA'] ? 1 : 0);
   const moveZ = (keysPressed['KeyS'] ? 1 : 0) - (keysPressed['KeyW'] ? 1 : 0);
@@ -847,382 +165,299 @@ function updateWalkMode(delta: number): void {
   if (moveX !== 0 || moveZ !== 0) {
     const moveDir = new THREE.Vector3(moveX, 0, moveZ).normalize();
     const speed = keysPressed['ShiftLeft'] ? 6.5 : 3.8;
-    currentPlayerScene.position.addScaledVector(moveDir, speed * delta);
-    currentPlayerScene.rotation.y = Math.atan2(-moveDir.x, -moveDir.z);
+    rawStage.currentPlayerScene.position.addScaledVector(moveDir, speed * delta);
+    rawStage.currentPlayerScene.rotation.y = Math.atan2(-moveDir.x, -moveDir.z);
 
     if (
-      !diagnostics.player.activeClip.includes('attack') &&
-      !diagnostics.player.activeClip.includes('dodge')
+      !rawStage.diagnostics.player.activeClip.includes('attack') &&
+      !rawStage.diagnostics.player.activeClip.includes('dodge')
     ) {
       const walkClip = keysPressed['ShiftLeft'] ? 'run' : 'walk';
-      if (diagnostics.player.activeClip !== walkClip) {
-        playPlayerAnimation(walkClip);
+      if (rawStage.diagnostics.player.activeClip !== walkClip) {
+        rawStage.playPlayerAnimation(walkClip);
+        rawUI.updateActiveClipLabels();
       }
     }
-
-    controls.target.copy(currentPlayerScene.position).add(new THREE.Vector3(0, 1.1, 0));
+    cameraMgr.controls.target
+      .copy(rawStage.currentPlayerScene.position)
+      .add(new THREE.Vector3(0, 1.1, 0));
   } else {
     if (
-      !diagnostics.player.activeClip.includes('attack') &&
-      !diagnostics.player.activeClip.includes('dodge') &&
-      diagnostics.player.activeClip !== 'idle'
+      !rawStage.diagnostics.player.activeClip.includes('attack') &&
+      !rawStage.diagnostics.player.activeClip.includes('dodge') &&
+      rawStage.diagnostics.player.activeClip !== 'idle'
     ) {
-      playPlayerAnimation('idle');
+      rawStage.playPlayerAnimation('idle');
+      rawUI.updateActiveClipLabels();
     }
   }
 }
 
-// 8. Visual Validation & Capture Utilities
-async function pauseAtMidFrame(category: 'player' | 'boss', clipName: string): Promise<{ duration: number; midTime: number }> {
+// 4. Capture Canvas & Mid-Frame Validation Utilities
+function captureCanvas(): string {
+  renderer.render(scene, cameraMgr.camera);
+  return dom.canvas.toDataURL('image/png');
+}
+
+async function pauseAtMidFrame(
+  category: 'player' | 'boss',
+  clipName: string,
+): Promise<{ duration: number; midTime: number }> {
   if (category === 'player') {
-    playPlayerAnimation(clipName);
-    const action = playerActions.get(diagnostics.player.activeClip) || currentPlayerAction;
+    rawStage.playPlayerAnimation(clipName);
+    rawUI.updateActiveClipLabels();
+    const action =
+      rawStage.playerActions.get(rawStage.diagnostics.player.activeClip) ||
+      rawStage.currentPlayerAction;
     if (action) {
       const clip = action.getClip();
       const mid = clip.duration / 2;
       action.time = mid;
       action.paused = true;
-      if (playerMixer) playerMixer.update(0);
-      renderer.render(scene, camera);
+      if (rawStage.playerMixer) rawStage.playerMixer.update(0);
+      renderer.render(scene, cameraMgr.camera);
       return { duration: clip.duration, midTime: mid };
     }
   } else {
-    playBossAnimation(clipName);
-    const action = bossActions.get(diagnostics.boss.activeClip) || currentBossAction;
+    rawStage.playBossAnimation(clipName);
+    rawUI.updateActiveClipLabels();
+    const action =
+      rawStage.bossActions.get(rawStage.diagnostics.boss.activeClip) || rawStage.currentBossAction;
     if (action) {
       const clip = action.getClip();
       const mid = clip.duration / 2;
       action.time = mid;
       action.paused = true;
-      if (bossMixer) bossMixer.update(0);
-      renderer.render(scene, camera);
+      if (rawStage.bossMixer) rawStage.bossMixer.update(0);
+      renderer.render(scene, cameraMgr.camera);
       return { duration: clip.duration, midTime: mid };
     }
   }
   return { duration: 0, midTime: 0 };
 }
 
-function captureCanvas(): string {
-  renderer.render(scene, camera);
-  return canvas.toDataURL('image/png');
-}
-
 async function captureAllAnimations(): Promise<Record<string, string>> {
   const result: Record<string, string> = {};
-  // Player clips
-  for (const clip of diagnostics.player.clips) {
+  for (const clip of rawStage.diagnostics.player.clips) {
     await pauseAtMidFrame('player', clip);
     result[`player_${clip}`] = captureCanvas();
   }
-  // Boss clips
-  for (const clip of diagnostics.boss.clips) {
+  for (const clip of rawStage.diagnostics.boss.clips) {
     await pauseAtMidFrame('boss', clip);
     result[`boss_${clip}`] = captureCanvas();
   }
-  // Unpause & restore default idles
-  if (currentPlayerAction) currentPlayerAction.paused = false;
-  if (currentBossAction) currentBossAction.paused = false;
-  playPlayerAnimation('idle');
-  playBossAnimation('idle');
+  if (rawStage.currentPlayerAction) rawStage.currentPlayerAction.paused = false;
+  if (rawStage.currentBossAction) rawStage.currentBossAction.paused = false;
+  rawStage.playPlayerAnimation('idle');
+  rawStage.playBossAnimation('idle');
+  rawUI.updateActiveClipLabels();
   return result;
 }
 
-function generateConfigExportCode(): string {
-  return `export const DEFAULT_PLAYER_WEAPON_SOCKET: WeaponSocketTransform = {
-  posX: ${Number(playerSocket.posX.toFixed(2))},
-  posY: ${Number(playerSocket.posY.toFixed(2))},
-  posZ: ${Number(playerSocket.posZ.toFixed(2))},
-  rotX: ${Number(playerSocket.rotX.toFixed(1))},
-  rotY: ${Number(playerSocket.rotY.toFixed(1))},
-  rotZ: ${Number(playerSocket.rotZ.toFixed(1))},
-  scale: ${playerSocket.scale},
-};
-
-export const DEFAULT_BOSS_WEAPON_SOCKET: WeaponSocketTransform = {
-  posX: ${Number(bossSocket.posX.toFixed(2))},
-  posY: ${Number(bossSocket.posY.toFixed(2))},
-  posZ: ${Number(bossSocket.posZ.toFixed(2))},
-  rotX: ${Number(bossSocket.rotX.toFixed(1))},
-  rotY: ${Number(bossSocket.rotY.toFixed(1))},
-  rotZ: ${Number(bossSocket.rotZ.toFixed(1))},
-  scale: ${bossSocket.scale},
-};`;
-}
-
-function printAndSaveConfig(): string {
-  saveSocketConfig('player', playerSocket);
-  saveSocketConfig('boss', bossSocket);
-  const code = generateConfigExportCode();
-
-  console.log('%c======================================================', 'color: #38d665; font-weight: bold;');
-  console.log('%c⚔️ CURRENT WEAPON SOCKET CONFIG (WeaponSocketConfig.ts)', 'color: #ffaa33; font-weight: bold;');
-  console.log('%c======================================================', 'color: #38d665; font-weight: bold;');
-  console.log(code);
-  console.log('%c======================================================', 'color: #38d665; font-weight: bold;');
-
-  if (navigator.clipboard) {
-    navigator.clipboard.writeText(code).catch(() => {});
-  }
-
-  const codeBox = document.querySelector<HTMLElement>('#socket-code-container');
-  const codeOutput = document.querySelector<HTMLElement>('#socket-code-output');
-  const saveStatus = document.querySelector<HTMLElement>('#socket-save-status');
-
-  if (codeBox && codeOutput) {
-    codeOutput.textContent = code;
-    codeBox.style.display = 'block';
-  }
-  if (saveStatus) {
-    saveStatus.textContent = 'SAVED & PRINTED!';
-    saveStatus.style.color = '#38d665';
-    saveStatus.style.borderColor = '#38d665';
-    setTimeout(() => {
-      saveStatus.textContent = 'SYNCED';
-    }, 2500);
-  }
-
-  return code;
-}
-
-// 8.5 Weapon Socket Real-Time Tuning GUI & Overlay Buttons
-function setupWeaponTuningGUI(): void {
-  const gui = new GUI({ title: '⚔️ Weapon Socket Tuning' });
-  gui.domElement.style.position = 'fixed';
-  gui.domElement.style.top = '14px';
-  gui.domElement.style.right = '14px';
-  gui.domElement.style.zIndex = '1000';
-
-  const syncGUI = () => {
-    gui.controllersRecursive().forEach((c) => c.updateDisplay());
-  };
-
-  // Knight Player Folder
-  const playerFolder = gui.addFolder('Knight Sword Socket');
-  playerFolder.add(playerSocket, 'posX', -30, 30, 0.1).name('Pos X').onChange(() => {
-    if (axeObject) applyWeaponSocketTransform(axeObject, playerSocket);
-    saveSocketConfig('player', playerSocket);
-  });
-  playerFolder.add(playerSocket, 'posY', -30, 50, 0.1).name('Pos Y (Palm)').onChange(() => {
-    if (axeObject) applyWeaponSocketTransform(axeObject, playerSocket);
-    saveSocketConfig('player', playerSocket);
-  });
-  playerFolder.add(playerSocket, 'posZ', -30, 30, 0.1).name('Pos Z').onChange(() => {
-    if (axeObject) applyWeaponSocketTransform(axeObject, playerSocket);
-    saveSocketConfig('player', playerSocket);
-  });
-  playerFolder.add(playerSocket, 'rotX', -180, 180, 1).name('Rot X°').onChange(() => {
-    if (axeObject) applyWeaponSocketTransform(axeObject, playerSocket);
-    saveSocketConfig('player', playerSocket);
-  });
-  playerFolder.add(playerSocket, 'rotY', -180, 180, 1).name('Rot Y°').onChange(() => {
-    if (axeObject) applyWeaponSocketTransform(axeObject, playerSocket);
-    saveSocketConfig('player', playerSocket);
-  });
-  playerFolder.add(playerSocket, 'rotZ', -180, 180, 1).name('Rot Z°').onChange(() => {
-    if (axeObject) applyWeaponSocketTransform(axeObject, playerSocket);
-    saveSocketConfig('player', playerSocket);
-  });
-  playerFolder.add(playerSocket, 'scale', 5, 80, 1).name('Scale').onChange(() => {
-    if (axeObject) applyWeaponSocketTransform(axeObject, playerSocket);
-    saveSocketConfig('player', playerSocket);
-  });
-  playerFolder.open();
-
-  // Titan Boss Folder
-  const bossFolder = gui.addFolder('Titan Greatsword Socket');
-  bossFolder.add(bossSocket, 'posX', -50, 50, 0.5).name('Pos X').onChange(() => {
-    if (bossSwordGroup) applyWeaponSocketTransform(bossSwordGroup, bossSocket);
-    saveSocketConfig('boss', bossSocket);
-  });
-  bossFolder.add(bossSocket, 'posY', -50, 80, 0.5).name('Pos Y (Palm)').onChange(() => {
-    if (bossSwordGroup) applyWeaponSocketTransform(bossSwordGroup, bossSocket);
-    saveSocketConfig('boss', bossSocket);
-  });
-  bossFolder.add(bossSocket, 'posZ', -50, 50, 0.5).name('Pos Z').onChange(() => {
-    if (bossSwordGroup) applyWeaponSocketTransform(bossSwordGroup, bossSocket);
-    saveSocketConfig('boss', bossSocket);
-  });
-  bossFolder.add(bossSocket, 'rotX', -180, 180, 1).name('Rot X°').onChange(() => {
-    if (bossSwordGroup) applyWeaponSocketTransform(bossSwordGroup, bossSocket);
-    saveSocketConfig('boss', bossSocket);
-  });
-  bossFolder.add(bossSocket, 'rotY', -180, 180, 1).name('Rot Y°').onChange(() => {
-    if (bossSwordGroup) applyWeaponSocketTransform(bossSwordGroup, bossSocket);
-    saveSocketConfig('boss', bossSocket);
-  });
-  bossFolder.add(bossSocket, 'rotZ', -180, 180, 1).name('Rot Z°').onChange(() => {
-    if (bossSwordGroup) applyWeaponSocketTransform(bossSwordGroup, bossSocket);
-    saveSocketConfig('boss', bossSocket);
-  });
-  bossFolder.add(bossSocket, 'scale', 20, 200, 1).name('Scale').onChange(() => {
-    if (bossSwordGroup) applyWeaponSocketTransform(bossSwordGroup, bossSocket);
-    saveSocketConfig('boss', bossSocket);
-  });
-  bossFolder.open();
-
-  // Global Actions in GUI
-  gui.add({ saveAndPrint: printAndSaveConfig }, 'saveAndPrint').name('💾 Save & Print Config');
-  gui.add({
-    resetDefaults: () => {
-      Object.assign(playerSocket, DEFAULT_PLAYER_WEAPON_SOCKET);
-      Object.assign(bossSocket, DEFAULT_BOSS_WEAPON_SOCKET);
-      saveSocketConfig('player', playerSocket);
-      saveSocketConfig('boss', bossSocket);
-      if (axeObject) applyWeaponSocketTransform(axeObject, playerSocket);
-      if (bossSwordGroup) applyWeaponSocketTransform(bossSwordGroup, bossSocket);
-      syncGUI();
+// 5. Keyboard Navigation & Canvas Events
+window.addEventListener('keydown', (e) => {
+  keysPressed[e.code] = true;
+  if (e.code === 'KeyH' && !e.repeat) {
+    toggleHitboxDebug();
+  } else if (e.code === 'KeyR' && !e.repeat) {
+    duelStage.resetPositions((text) => duelUI.logCombat(text));
+  } else if (e.code === 'Escape') {
+    if (cameraMgr.isRoamMode) cameraMgr.setRoamMode(false);
+  } else if (e.code === 'Space' && !e.repeat) {
+    if (cameraMgr.isRoamMode) {
+      // Handled in inputController
+    } else if (isWalkMode) {
+      rawStage.playPlayerAnimation('dodge');
+      rawUI.updateActiveClipLabels();
+    } else {
+      togglePause();
     }
-  }, 'resetDefaults').name('↺ Reset Defaults');
+  } else if (e.code === 'BracketLeft' && !e.repeat) {
+    stepFrame(-1);
+  } else if (e.code === 'BracketRight' && !e.repeat) {
+    stepFrame(1);
+  } else if (e.code === 'KeyJ' && !e.repeat) {
+    if (isWalkMode) {
+      rawStage.playPlayerAnimation('attack_light');
+      rawUI.updateActiveClipLabels();
+    } else if (!cameraMgr.isRoamMode) {
+      duelStage.triggerPlayerAction('light1', (text) => duelUI.logCombat(text));
+    }
+  } else if (e.code === 'KeyK' && !e.repeat) {
+    if (isWalkMode) {
+      rawStage.playPlayerAnimation('attack_heavy');
+      rawUI.updateActiveClipLabels();
+    } else if (!cameraMgr.isRoamMode) {
+      duelStage.triggerPlayerAction('heavy', (text) => duelUI.logCombat(text));
+    }
+  }
+});
 
-  // --- Wire up HTML overlay buttons on asset page ---
-  const btnPresetKnight2H = document.querySelector<HTMLButtonElement>('#btn-preset-knight-2h');
-  btnPresetKnight2H?.addEventListener('click', () => {
-    playerSocket.posX = 1.8;
-    playerSocket.posY = 12.0;
-    playerSocket.posZ = -0.5;
-    playerSocket.rotX = 85.0;
-    playerSocket.rotY = 5.0;
-    playerSocket.rotZ = -10.0;
-    if (axeObject) applyWeaponSocketTransform(axeObject, playerSocket);
-    saveSocketConfig('player', playerSocket);
-    syncGUI();
-  });
+window.addEventListener('keyup', (e) => {
+  keysPressed[e.code] = false;
+});
 
-  const btnPresetBoss2H = document.querySelector<HTMLButtonElement>('#btn-preset-boss-2h');
-  btnPresetBoss2H?.addEventListener('click', () => {
-    bossSocket.posX = 2.5;
-    bossSocket.posY = 16.0;
-    bossSocket.posZ = -1.0;
-    bossSocket.rotX = 85.0;
-    bossSocket.rotY = 5.0;
-    bossSocket.rotZ = -10.0;
-    if (bossSwordGroup) applyWeaponSocketTransform(bossSwordGroup, bossSocket);
-    saveSocketConfig('boss', bossSocket);
-    syncGUI();
-  });
+dom.canvas.addEventListener('click', () => {
+  if (cameraMgr.isRoamMode && document.pointerLockElement !== dom.canvas) {
+    dom.canvas.requestPointerLock();
+  }
+});
 
-  const btnFlipPlayer = document.querySelector<HTMLButtonElement>('#btn-flip-player-blade');
-  btnFlipPlayer?.addEventListener('click', () => {
-    playerSocket.rotX = playerSocket.rotX > 0 ? playerSocket.rotX - 180 : playerSocket.rotX + 180;
-    if (axeObject) applyWeaponSocketTransform(axeObject, playerSocket);
-    saveSocketConfig('player', playerSocket);
-    syncGUI();
-  });
+dom.btnModeToggle?.addEventListener('click', () => {
+  isWalkMode = !isWalkMode;
+  if (dom.btnModeToggle) {
+    dom.btnModeToggle.textContent = isWalkMode
+      ? '🏃 Mode: Walk (Click to Orbit)'
+      : '🚶 Mode: Orbit (Click to Walk)';
+    dom.btnModeToggle.classList.toggle('active', isWalkMode);
+  }
+});
 
-  const btnFlipBoss = document.querySelector<HTMLButtonElement>('#btn-flip-boss-blade');
-  btnFlipBoss?.addEventListener('click', () => {
-    bossSocket.rotX = bossSocket.rotX > 0 ? bossSocket.rotX - 180 : bossSocket.rotX + 180;
-    if (bossSwordGroup) applyWeaponSocketTransform(bossSwordGroup, bossSocket);
-    saveSocketConfig('boss', bossSocket);
-    syncGUI();
-  });
-
-  const btnSavePrint = document.querySelector<HTMLButtonElement>('#btn-save-print-config');
-  btnSavePrint?.addEventListener('click', printAndSaveConfig);
-
-  const btnCopyTs = document.querySelector<HTMLButtonElement>('#btn-copy-config-ts');
-  btnCopyTs?.addEventListener('click', printAndSaveConfig);
-
-  const btnReset = document.querySelector<HTMLButtonElement>('#btn-reset-socket-config');
-  btnReset?.addEventListener('click', () => {
-    Object.assign(playerSocket, DEFAULT_PLAYER_WEAPON_SOCKET);
-    Object.assign(bossSocket, DEFAULT_BOSS_WEAPON_SOCKET);
-    saveSocketConfig('player', playerSocket);
-    saveSocketConfig('boss', bossSocket);
-    if (axeObject) applyWeaponSocketTransform(axeObject, playerSocket);
-    if (bossSwordGroup) applyWeaponSocketTransform(bossSwordGroup, bossSocket);
-    syncGUI();
-  });
-
-  const btnCloseCode = document.querySelector<HTMLButtonElement>('#btn-close-code-box');
-  btnCloseCode?.addEventListener('click', () => {
-    const codeBox = document.querySelector<HTMLElement>('#socket-code-container');
-    if (codeBox) codeBox.style.display = 'none';
-  });
-}
-
-// 9. Main Asset Initialization
-async function initHarness() {
+// 6. Main Initialization
+async function initHarness(): Promise<void> {
   try {
-    setupUIControls();
-    await loadPlayer('knight');
-    await loadBoss();
-    setupWeaponTuningGUI();
+    rawUI.init();
+    duelUI.init();
 
-    loadStatusEl.className = 'status-ok';
-    loadStatusEl.textContent = 'All Assets Loaded & Ready';
-    diagnostics.loaded = true;
+    // Load Track 1 (Raw Models)
+    await rawStage.init(scene, (status) => {
+      if (dom.loadStatus) dom.loadStatus.textContent = status;
+    });
+    rawUI.populatePlayerButtons();
+    rawUI.populateBossButtons();
+    rawUI.updateDiagnosticsInfo();
+    socketGui.init();
+
+    // Load Track 2 (Logic Models)
+    if (dom.loadStatus) dom.loadStatus.textContent = 'Loading Track 2 Combat Duel Models...';
+    await duelStage.init(scene);
+
+    if (dom.loadStatus) {
+      dom.loadStatus.className = 'status-ok';
+      dom.loadStatus.textContent = 'All 4 Models Loaded & Ready';
+    }
+    rawStage.diagnostics.loaded = true;
   } catch (err) {
-    diagnostics.error = err instanceof Error ? err.message : String(err);
-    loadStatusEl.className = 'status-err';
-    loadStatusEl.textContent = `Error: ${diagnostics.error}`;
+    rawStage.diagnostics.error = err instanceof Error ? err.message : String(err);
+    if (dom.loadStatus) {
+      dom.loadStatus.className = 'status-err';
+      dom.loadStatus.textContent = `Error: ${rawStage.diagnostics.error}`;
+    }
     console.error('Asset load error:', err);
   }
 }
 
-// Global API Hook
+// 7. Global Window API Hook (Full Backward Compatibility & Dual-Track Extensions)
 window.__ASSET_TEST__ = {
-  diagnostics,
-  playPlayerClip: playPlayerAnimation,
-  playBossClip: playBossAnimation,
-  getWeaponDistanceToHand: () => {
-    if (!playerHandBone || !axeObject) return 999;
-    const handWorld = new THREE.Vector3();
-    const axeWorld = new THREE.Vector3();
-    playerHandBone.getWorldPosition(handWorld);
-    axeObject.getWorldPosition(axeWorld);
-    return handWorld.distanceTo(axeWorld);
+  diagnostics: rawStage.diagnostics,
+  playPlayerClip: (name: string) => {
+    rawStage.playPlayerAnimation(name);
+    rawUI.updateActiveClipLabels();
   },
+  playBossClip: (name: string) => {
+    rawStage.playBossAnimation(name);
+    rawUI.updateActiveClipLabels();
+  },
+  getWeaponDistanceToHand: () => rawStage.getWeaponDistanceToHand(),
   switchPlayerModel: async (modelId: string) => {
     if (modelId === 'knight' || modelId === 'samurai') {
-      await loadPlayer(modelId);
+      await rawStage.loadPlayer(modelId);
+      await duelStage.switchPlayerModel(modelId);
+      rawUI.populatePlayerButtons();
+      rawUI.updateActiveClipLabels();
+      rawUI.updateDiagnosticsInfo();
     }
   },
   setPlaybackSpeed: (speed: number) => {
     playbackSpeed = speed;
   },
-  setCamera,
+  setCamera: (preset) => cameraMgr.setCamera(preset),
   pauseAtMidFrame,
   captureCanvas,
   captureAllAnimations,
   toggleHitbox: toggleHitboxDebug,
-  isHitboxVisible: () => isHitboxVisible,
+  isHitboxVisible: () => rawStage.isHitboxVisible,
   stepFrame,
   togglePause,
   setMode: (mode: 'orbit' | 'walk') => {
     isWalkMode = mode === 'walk';
-    const modeToggleBtn = document.querySelector<HTMLButtonElement>('#btn-mode-toggle');
-    if (modeToggleBtn) {
-      modeToggleBtn.textContent = isWalkMode
+    if (dom.btnModeToggle) {
+      dom.btnModeToggle.textContent = isWalkMode
         ? '🏃 Mode: Walk (Click to Orbit)'
         : '🚶 Mode: Orbit (Click to Walk)';
-      modeToggleBtn.classList.toggle('active', isWalkMode);
+      dom.btnModeToggle.classList.toggle('active', isWalkMode);
     }
   },
-  getHitboxDebugState: updateFrameTelemetry,
+  getHitboxDebugState: updateTelemetry,
+  triggerPlayerAction: (actionKey: string) =>
+    duelStage.triggerPlayerAction(actionKey, (text) => duelUI.logCombat(text)),
+  triggerBossAction: (actionKey: string) =>
+    duelStage.triggerBossAction(actionKey, (text) => duelUI.logCombat(text)),
+  resetDuelPositions: () => duelStage.resetPositions((text) => duelUI.logCombat(text)),
+  getDuelSpacing: () => duelStage.getSpacing(),
+  toggleAutoReset: (enabled?: boolean) => {
+    const active = duelStage.toggleAutoReset(enabled);
+    if (dom.btnToggleAutoReset) {
+      dom.btnToggleAutoReset.textContent = `Auto-Reset: ${active ? 'ON (1.0s)' : 'OFF'}`;
+      dom.btnToggleAutoReset.classList.toggle('active', active);
+    }
+    return active;
+  },
+  toggleTrajectory: (enabled?: boolean) => {
+    const active = duelStage.trajectory.toggleVisibility(enabled);
+    if (dom.btnToggleTrajectory) {
+      dom.btnToggleTrajectory.textContent = `Trajectory: ${active ? 'ON' : 'OFF'}`;
+      dom.btnToggleTrajectory.classList.toggle('active', active);
+    }
+    return active;
+  },
+  setRoamMode: (enabled: boolean) =>
+    cameraMgr.setRoamMode(
+      enabled,
+      duelStage.logicPlayer ? duelStage.logicPlayer.group.position : undefined,
+    ),
 };
 
-// Render Loop
+// 8. Main Render Loop
 const clock = new THREE.Clock();
-function animate() {
+function animate(): void {
   requestAnimationFrame(animate);
   const delta = clock.getDelta() * playbackSpeed;
+  const elapsed = clock.getElapsedTime();
 
   if (!isPaused) {
-    if (playerMixer) playerMixer.update(delta);
-    if (bossMixer) bossMixer.update(delta);
+    rawStage.update(delta);
   }
 
   updateWalkMode(delta);
-  updateFrameTelemetry();
-  controls.update();
+  updateTelemetry();
 
-  renderer.render(scene, camera);
+  duelStage.update(
+    delta,
+    elapsed,
+    cameraMgr.isRoamMode,
+    cameraMgr.inputController,
+    cameraMgr.soulslikeCamera,
+    (text) => duelUI.logCombat(text),
+    (telemetryData) => {
+      duelUI.updateTelemetry(telemetryData);
+      if (cameraMgr.soulslikeCamera.isLockedOn && dom.reticle && duelStage.logicBoss) {
+        const screenPos = cameraMgr.projectToScreen(duelStage.logicBoss.group.position, 1.8);
+        dom.reticle.style.display = 'block';
+        dom.reticle.style.left = `${screenPos.x}px`;
+        dom.reticle.style.top = `${screenPos.y}px`;
+      } else if (dom.reticle) {
+        dom.reticle.style.display = 'none';
+      }
+    },
+  );
+
+  cameraMgr.update();
+  renderer.render(scene, cameraMgr.camera);
 }
 
 window.addEventListener('resize', () => {
-  camera.aspect = window.innerWidth / window.innerHeight;
-  camera.updateProjectionMatrix();
+  cameraMgr.handleResize();
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
 

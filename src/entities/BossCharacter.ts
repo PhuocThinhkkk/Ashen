@@ -485,7 +485,7 @@ export class BossCharacter {
     }
   }
 
-  private chooseAttack(attack: AttackDefinition): void {
+  public chooseAttack(attack: AttackDefinition): void {
     this.currentAttack = attack;
     this.attackTimer = 0;
     this.state = 'windup';

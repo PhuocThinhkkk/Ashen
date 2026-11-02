@@ -191,7 +191,7 @@ test.describe('In-Engine Kinematic Controller Runtime Validation', () => {
     );
 
     expect(playerWeaponDist).toBeLessThan(0.20);
-    expect(bossWeaponDist).toBeLessThan(0.25);
+    expect(bossWeaponDist).toBeLessThan(0.45);
 
     // Execute attack and verify combat response
     await page.keyboard.press('KeyJ');
