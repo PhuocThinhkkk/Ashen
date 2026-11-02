@@ -43,6 +43,8 @@ export class BossCharacter {
 
   // Telegraph warning indicator
   public telegraphGlow = 0;
+  public onGroundSlamImpact?: (pos: THREE.Vector3) => void;
+  private hasTriggeredGroundSlam = false;
 
   // Weapon & Material
   public readonly greatswordGroup = new THREE.Group();
@@ -272,12 +274,40 @@ export class BossCharacter {
     this.kinematicController.setCallbacks({
       onFootDust: (pos, count) => this.vfxSystem?.spawnFootDustKickup(pos, count),
       onPeakSparks: (pos, count, isHeavy) => this.vfxSystem?.spawnPeakVelocitySparks(pos, count, isHeavy),
-      onWeaponTrail: (bone, duration) => this.vfxSystem?.spawnWeaponTrail(bone, duration),
+      onWeaponTrail: () => {
+        this.vfxSystem?.spawnAttackSlashArc(
+          this.group.position,
+          this.group.rotation.y,
+          this.currentAttack?.name || 'boss_attack',
+          this.currentAttack?.isHeavy || false,
+          true,
+        );
+      },
       onPeakSwoosh: (freq, duration, isHeavy) => this.audioSystem?.playPeakSwoosh(freq, duration, isHeavy),
       onPeakImpact: (isHeavy) => this.audioSystem?.hitImpact(isHeavy),
       onFootstep: (heavy) => this.audioSystem?.playFootstep(heavy),
-      onLandingThud: (heavy) => this.audioSystem?.playLandingThud(heavy),
+      onLandingThud: (heavy) => {
+        this.audioSystem?.playLandingThud(heavy);
+        if (this.currentAttack?.animationClip === 'attack_jump') {
+          this.triggerJumpGroundSlam();
+        }
+      },
+      onGroundSlam: (pos) => {
+        this.triggerJumpGroundSlam(pos);
+      },
     });
+  }
+
+  public triggerJumpGroundSlam(customPos?: THREE.Vector3): void {
+    if (this.hasTriggeredGroundSlam) return;
+    this.hasTriggeredGroundSlam = true;
+
+    const fwd = new THREE.Vector3(-Math.sin(this.group.rotation.y), 0, -Math.cos(this.group.rotation.y));
+    const slamPos = customPos || this.group.position.clone().addScaledVector(fwd, 2.2);
+    slamPos.y = 0;
+
+    this.vfxSystem?.triggerGroundSlam(slamPos);
+    this.onGroundSlamImpact?.(slamPos);
   }
 
   public isHitboxActive(): boolean {
@@ -501,6 +531,7 @@ export class BossCharacter {
     this.attackTimer = 0;
     this.state = 'windup';
     this.hasHitCurrentSwing = false;
+    this.hasTriggeredGroundSlam = false;
     this.telegraphGlow = 0;
 
     const speedMod = this.isPhase2 ? 1.15 : 1.0;
@@ -535,7 +566,19 @@ export class BossCharacter {
       }
       this.telegraphGlow = progress;
     } else if (this.attackTimer < startup + active) {
-      this.state = 'active';
+      if (this.state !== 'active') {
+        this.state = 'active';
+        this.vfxSystem?.spawnAttackSlashArc(
+          this.group.position,
+          this.group.rotation.y,
+          this.currentAttack.name,
+          this.currentAttack.isHeavy,
+          true,
+        );
+        if (this.currentAttack.animationClip === 'attack_jump') {
+          this.triggerJumpGroundSlam();
+        }
+      }
       this.telegraphGlow = 1.0;
 
       const fwd = new THREE.Vector3(

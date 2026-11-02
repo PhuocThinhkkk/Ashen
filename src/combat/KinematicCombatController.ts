@@ -14,6 +14,7 @@ export interface KinematicEventCallbacks {
   onPeakImpact?: (isHeavy: boolean) => void;
   onFootstep?: (heavy: boolean) => void;
   onLandingThud?: (heavy: boolean) => void;
+  onGroundSlam?: (pos: THREE.Vector3) => void;
 }
 
 export class KinematicCombatController {
@@ -355,6 +356,15 @@ export class KinematicCombatController {
       if (!this.firedTriggers.has(key) && this.currentFrame >= cfg.audio.peakImpactFrame) {
         this.firedTriggers.add(key);
         this.callbacks.onPeakImpact?.(cfg.audio.peakImpactHeavy ?? false);
+
+        if (cfg.id === 'attack_jump') {
+          const slamPos = new THREE.Vector3();
+          if (this.rightHandBone) {
+            this.rightHandBone.getWorldPosition(slamPos);
+          }
+          slamPos.y = 0;
+          this.callbacks.onGroundSlam?.(slamPos);
+        }
       }
     }
 

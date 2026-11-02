@@ -11,6 +11,7 @@
     "build:models": "node scripts/build-models.mjs",
     "build:models:clean": "node scripts/build-models.mjs --clean",
     "watch:models": "node scripts/build-models.mjs --watch",
+    "build:sfx": "node scripts/process-sfx.mjs",
     "inspect:model": "node scripts/inspect-model.mjs",
     "inspect:fbx": "blender --background --python scripts/inspect-fbx.py --",
     "capture:anims": "playwright test tests/animation-capture.spec.ts",
@@ -22,7 +23,7 @@
   "dependencies": {
     "lil-gui": "^0.21.0",
     "three": "^0.184.0",
-    "three-nebula": "^13.3.0"
+    "three.quarks": "^0.17.1"
   },
   "devDependencies": {
     "@playwright/test": "^1.60.0",

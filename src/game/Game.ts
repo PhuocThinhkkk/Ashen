@@ -80,9 +80,14 @@ export class Game {
     this.input = new InputController(canvas);
     this.cameraRig = new SoulslikeCamera(this.camera);
     this.vfx = new VFXSystem(this.scene);
+    this.vfx.setGroundTarget(this.arena.floorMesh);
 
     this.player.setVfxAndAudio(this.vfx, this.audio);
     this.boss.setVfxAndAudio(this.vfx, this.audio);
+    this.boss.onGroundSlamImpact = () => {
+      this.cameraRig.addShake(0.55);
+      this.hitstopTimer = 0.06;
+    };
 
     this.hud = new Hud({
       playerModels: AVAILABLE_PLAYER_MODELS,
@@ -160,6 +165,10 @@ export class Game {
   public async setBossModel(modelId: string): Promise<void> {
     await this.boss.loadModel(modelId);
     this.boss.setVfxAndAudio(this.vfx, this.audio);
+    this.boss.onGroundSlamImpact = () => {
+      this.cameraRig.addShake(0.55);
+      this.hitstopTimer = 0.06;
+    };
     this.hud.syncModels(this.player.modelId, this.boss.modelId);
     this.debugTools.syncModels(this.player.modelId, this.boss.modelId);
     this.render();
@@ -356,11 +365,12 @@ export class Game {
         const screenPos = this.projectToScreen(this.boss.group.position, 1.5);
         this.hud.spawnDamageNumber(hit.damage, screenPos.x, screenPos.y, false);
 
-        // Combat VFX: Hit sparks and mesh flash
+        // Combat VFX: Hit sparks, visceral blood splatter, and mesh flash
         const hitPoint = hit.contactPoint || this.player.getHitboxWorldPosition();
         const fwdAngle = this.player.group.rotation.y;
         const hitDir = new THREE.Vector3(-Math.sin(fwdAngle), 0.25, -Math.cos(fwdAngle)).normalize();
         this.vfx.spawnHitSparks(hitPoint, hitDir, hit.isHeavy);
+        this.vfx.spawnBloodBurst(hitPoint, hitDir, hit.isHeavy);
         this.vfx.triggerHitFlash(this.boss.group, hit.isHeavy, 0xffeedd, hit.isHeavy ? 0.14 : 0.09);
 
         this.audio.hitConfirm(hit.isHeavy);
@@ -410,11 +420,12 @@ export class Game {
           const screenPos = this.projectToScreen(this.player.group.position, 1.2);
           this.hud.spawnDamageNumber(hit.damage, screenPos.x, screenPos.y, true);
 
-          // Combat VFX: Hit sparks and mesh flash on player
+          // Combat VFX: Hit sparks, visceral blood splatter, and mesh flash on player
           const hitPoint = hit.contactPoint || this.player.group.position.clone().add(new THREE.Vector3(0, 1.1, 0));
           const fwdAngle = this.boss.group.rotation.y;
           const hitDir = new THREE.Vector3(-Math.sin(fwdAngle), 0.25, -Math.cos(fwdAngle)).normalize();
           this.vfx.spawnHitSparks(hitPoint, hitDir, true);
+          this.vfx.spawnBloodBurst(hitPoint, hitDir, true);
           this.vfx.triggerHitFlash(this.player.group, true, 0xff2200, 0.16);
 
           this.audio.hitConfirm(true);
@@ -549,6 +560,20 @@ export class Game {
         if (atk) {
           (this.boss as any).chooseAttack(atk);
         }
+      },
+      triggerGroundSlam: (pos?: THREE.Vector3) => {
+        const p = pos || this.boss.group.position.clone().add(new THREE.Vector3(0, 0, 2));
+        this.vfx.triggerGroundSlam(p, this.arena.floorMesh);
+      },
+      triggerBloodBurst: (pos?: THREE.Vector3, dir?: THREE.Vector3) => {
+        const p = pos || this.player.group.position.clone().add(new THREE.Vector3(0, 1, 0));
+        const d = dir || new THREE.Vector3(0, 0.5, 1);
+        this.vfx.spawnBloodBurst(p, d, true);
+      },
+      triggerSlashArc: (origin?: THREE.Vector3, rotation?: THREE.Euler, color?: number | string) => {
+        const o = origin || this.player.group.position.clone().add(new THREE.Vector3(0, 1, 0));
+        const r = rotation || new THREE.Euler(0, this.player.group.rotation.y, 0);
+        this.vfx.spawnSlashArc(o, r, 1.2, color || 0xffe066);
       },
     };
   }

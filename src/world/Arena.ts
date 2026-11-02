@@ -7,6 +7,7 @@ export interface ArenaConfig {
 export class Arena {
   public readonly group = new THREE.Group();
   public readonly radius: number;
+  public floorMesh!: THREE.Mesh;
   private readonly brazierLights: THREE.PointLight[] = [];
   private readonly brazierEmbers: THREE.Mesh[] = [];
   private readonly particleSystem: THREE.Points;
@@ -44,6 +45,7 @@ export class Arena {
     const floor = new THREE.Mesh(floorGeo, floorMat);
     floor.position.y = -0.5;
     floor.receiveShadow = true;
+    this.floorMesh = floor;
     this.group.add(floor);
 
     // Inner ritual ring (central dais)

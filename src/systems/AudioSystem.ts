@@ -1,6 +1,16 @@
+export type SoundKey =
+  | 'swingLight'
+  | 'swingHeavy'
+  | 'swordClash'
+  | 'groundSlam'
+  | 'damageGrunt'
+  | 'footstepHeavy';
+
 export class AudioSystem {
   private context: AudioContext | null = null;
   private unlocked = false;
+
+  private soundBuffers: Partial<Record<SoundKey, AudioBuffer>> = {};
 
   constructor() {
     const unlock = () => {
@@ -10,6 +20,11 @@ export class AudioSystem {
     };
     window.addEventListener('pointerdown', unlock, { once: true });
     window.addEventListener('keydown', unlock, { once: true });
+
+    // Pre-fetch SFX immediately if AudioContext can be initialized
+    if (typeof window !== 'undefined') {
+      void this.loadAllSounds();
+    }
   }
 
   public async unlock(): Promise<void> {
@@ -23,6 +38,60 @@ export class AudioSystem {
       await this.context.resume();
     }
     this.unlocked = true;
+    await this.loadAllSounds();
+  }
+
+  private async loadAllSounds(): Promise<void> {
+    const sfxList: Array<{ key: SoundKey; path: string }> = [
+      { key: 'swingLight', path: '/assets/sfx/sword_swing_light.mp3' },
+      { key: 'swingHeavy', path: '/assets/sfx/sword_swing_heavy.mp3' },
+      { key: 'swordClash', path: '/assets/sfx/sword_clash_heavy.mp3' },
+      { key: 'groundSlam', path: '/assets/sfx/ground_slam.mp3' },
+      { key: 'damageGrunt', path: '/assets/sfx/damage_grunt.mp3' },
+      { key: 'footstepHeavy', path: '/assets/sfx/footstep_heavy.mp3' },
+    ];
+
+    for (const item of sfxList) {
+      if (this.soundBuffers[item.key]) continue;
+      try {
+        const res = await fetch(item.path);
+        if (!res.ok) continue;
+        const arrayBuf = await res.arrayBuffer();
+        if (this.context) {
+          const audioBuf = await this.context.decodeAudioData(arrayBuf);
+          this.soundBuffers[item.key] = audioBuf;
+        }
+      } catch {
+        // Silently fall back to synthesized audio if fetch/decode unavailable
+      }
+    }
+  }
+
+  private playBuffer(
+    buffer: AudioBuffer | undefined,
+    volume = 1.0,
+    pitchVariation = 0.08,
+  ): boolean {
+    if (!this.context || this.context.state !== 'running' || !buffer) return false;
+
+    try {
+      const source = this.context.createBufferSource();
+      source.buffer = buffer;
+
+      // Organic pitch variation to avoid mechanical repetition
+      if (pitchVariation > 0) {
+        source.playbackRate.value = 1.0 + (Math.random() - 0.5) * pitchVariation * 2;
+      }
+
+      const gain = this.context.createGain();
+      gain.gain.value = volume;
+
+      source.connect(gain).connect(this.context.destination);
+      source.start();
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   public attackSwing(heavy = false): void {
@@ -30,10 +99,16 @@ export class AudioSystem {
   }
 
   public swordSwing(heavy = false): void {
+    const played = heavy
+      ? this.playBuffer(this.soundBuffers.swingHeavy || this.soundBuffers.swingLight, 0.75)
+      : this.playBuffer(this.soundBuffers.swingLight, 0.65);
+
+    if (played) return;
+
     if (!this.context || this.context.state !== 'running') return;
     const now = this.context.currentTime;
 
-    // Filtered noise swoosh
+    // Filtered noise swoosh fallback
     const bufferSize = this.context.sampleRate * (heavy ? 0.28 : 0.18);
     const buffer = this.context.createBuffer(1, bufferSize, this.context.sampleRate);
     const data = buffer.getChannelData(0);
@@ -111,10 +186,13 @@ export class AudioSystem {
   }
 
   public hitConfirm(isHeavy = false): void {
+    const played = this.playBuffer(this.soundBuffers.swordClash, isHeavy ? 0.95 : 0.7);
+    if (played) return;
+
     if (!this.context || this.context.state !== 'running') return;
     const now = this.context.currentTime;
 
-    // Sharp metallic impact cut
+    // Sharp metallic impact cut fallback
     const osc = this.context.createOscillator();
     const gain = this.context.createGain();
     osc.type = 'sawtooth';
@@ -133,11 +211,14 @@ export class AudioSystem {
     osc.start(now);
     osc.stop(now + 0.15);
 
-    // Punchy bottom body impact
     this.hitImpact(isHeavy);
   }
 
   public damageTaken(isHeavy = false, isBoss = false): void {
+    if (!isBoss) {
+      this.playBuffer(this.soundBuffers.damageGrunt, 0.85);
+    }
+
     if (!this.context || this.context.state !== 'running') return;
     const now = this.context.currentTime;
 
@@ -154,69 +235,99 @@ export class AudioSystem {
 
     osc.connect(gain).connect(this.context.destination);
     osc.start(now);
-    osc.stop(now + (isHeavy ? 0.35 : 0.22));
-
-    // Low rumble noise burst for heavy damage
-    if (isHeavy) {
-      const bufferSize = Math.floor(this.context.sampleRate * 0.18);
-      const buffer = this.context.createBuffer(1, bufferSize, this.context.sampleRate);
-      const data = buffer.getChannelData(0);
-      for (let i = 0; i < bufferSize; i++) {
-        data[i] = (Math.random() * 2 - 1) * 0.7;
-      }
-      const noise = this.context.createBufferSource();
-      noise.buffer = buffer;
-      const noiseFilter = this.context.createBiquadFilter();
-      noiseFilter.type = 'lowpass';
-      noiseFilter.frequency.setValueAtTime(isBoss ? 280 : 450, now);
-      noiseFilter.frequency.exponentialRampToValueAtTime(60, now + 0.16);
-
-      const noiseGain = this.context.createGain();
-      noiseGain.gain.setValueAtTime(0.3, now);
-      noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
-
-      noise.connect(noiseFilter).connect(noiseGain).connect(this.context.destination);
-      noise.start(now);
-    }
+    osc.stop(now + 0.35);
   }
 
   public bossTelegraph(): void {
-    if (!this.context || this.context.state !== 'running') return;
-    const now = this.context.currentTime;
-
-    // Dark swelling hum
-    const osc = this.context.createOscillator();
-    const gain = this.context.createGain();
-    osc.type = 'sawtooth';
-    osc.frequency.setValueAtTime(55, now);
-    osc.frequency.linearRampToValueAtTime(75, now + 0.6);
-
-    const filter = this.context.createBiquadFilter();
-    filter.type = 'lowpass';
-    filter.frequency.setValueAtTime(140, now);
-    filter.frequency.linearRampToValueAtTime(380, now + 0.6);
-
-    gain.gain.setValueAtTime(0.001, now);
-    gain.gain.linearRampToValueAtTime(0.18, now + 0.5);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.7);
-
-    osc.connect(filter).connect(gain).connect(this.context.destination);
-    osc.start(now);
-    osc.stop(now + 0.75);
+    this.bossTelegraphRoar();
   }
 
   public bossSmash(): void {
+    this.playGroundSlam();
+  }
+
+  public bossTelegraphRoar(): void {
     if (!this.context || this.context.state !== 'running') return;
     const now = this.context.currentTime;
 
-    // Deep sub-bass crunch
     const osc = this.context.createOscillator();
     const gain = this.context.createGain();
-    osc.type = 'triangle';
-    osc.frequency.setValueAtTime(110, now);
-    osc.frequency.exponentialRampToValueAtTime(25, now + 0.45);
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(85, now);
+    osc.frequency.linearRampToValueAtTime(140, now + 0.35);
+    osc.frequency.exponentialRampToValueAtTime(45, now + 0.7);
 
-    gain.gain.setValueAtTime(0.55, now);
+    const filter = this.context.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(450, now);
+    filter.frequency.exponentialRampToValueAtTime(120, now + 0.7);
+
+    gain.gain.setValueAtTime(0.001, now);
+    gain.gain.linearRampToValueAtTime(0.35, now + 0.2);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.75);
+
+    osc.connect(filter).connect(gain).connect(this.context.destination);
+    osc.start(now);
+    osc.stop(now + 0.8);
+  }
+
+  public phase2Roar(): void {
+    if (!this.context || this.context.state !== 'running') return;
+    const now = this.context.currentTime;
+
+    [55, 75, 110].forEach((freq) => {
+      const osc = this.context!.createOscillator();
+      const gain = this.context!.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(freq, now);
+      osc.frequency.linearRampToValueAtTime(freq * 1.8, now + 0.6);
+      osc.frequency.exponentialRampToValueAtTime(35, now + 1.8);
+
+      const filter = this.context!.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(700, now);
+      filter.frequency.exponentialRampToValueAtTime(100, now + 1.8);
+
+      gain.gain.setValueAtTime(0.001, now);
+      gain.gain.linearRampToValueAtTime(0.35, now + 0.4);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 1.9);
+
+      osc.connect(filter).connect(gain).connect(this.context!.destination);
+      osc.start(now);
+      osc.stop(now + 2.0);
+    });
+  }
+
+  public staminaDepleted(): void {
+    if (!this.context || this.context.state !== 'running') return;
+    const now = this.context.currentTime;
+
+    const osc = this.context.createOscillator();
+    const gain = this.context.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(180, now);
+    osc.frequency.exponentialRampToValueAtTime(90, now + 0.18);
+
+    gain.gain.setValueAtTime(0.2, now);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.2);
+
+    osc.connect(gain).connect(this.context.destination);
+    osc.start(now);
+    osc.stop(now + 0.22);
+  }
+
+  public estusDrink(): void {
+    if (!this.context || this.context.state !== 'running') return;
+    const now = this.context.currentTime;
+
+    const osc = this.context.createOscillator();
+    const gain = this.context.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(380, now);
+    osc.frequency.exponentialRampToValueAtTime(620, now + 0.45);
+
+    gain.gain.setValueAtTime(0.001, now);
+    gain.gain.linearRampToValueAtTime(0.25, now + 0.15);
     gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.5);
 
     osc.connect(gain).connect(this.context.destination);
@@ -225,10 +336,13 @@ export class AudioSystem {
   }
 
   public staggerClang(): void {
+    const played = this.playBuffer(this.soundBuffers.swordClash, 1.0);
+    if (played) return;
+
     if (!this.context || this.context.state !== 'running') return;
     const now = this.context.currentTime;
 
-    // Loud metallic bell resonance
+    // Loud metallic bell resonance fallback
     [840, 1260, 1680].forEach((freq, idx) => {
       const osc = this.context!.createOscillator();
       const gain = this.context!.createGain();
@@ -247,7 +361,6 @@ export class AudioSystem {
   public victoryStinger(): void {
     if (!this.context || this.context.state !== 'running') return;
     const now = this.context.currentTime;
-    // Majestic major chord: D4, F#4, A4, D5
     const notes = [293.66, 369.99, 440.0, 587.33];
     notes.forEach((freq, i) => {
       const osc = this.context!.createOscillator();
@@ -268,7 +381,6 @@ export class AudioSystem {
   public deathStinger(): void {
     if (!this.context || this.context.state !== 'running') return;
     const now = this.context.currentTime;
-    // Low somber minor chord: D3, F3, A3
     const notes = [146.83, 174.61, 220.0];
     notes.forEach((freq) => {
       const osc = this.context!.createOscillator();
@@ -289,10 +401,12 @@ export class AudioSystem {
     });
   }
 
-  /**
-   * Placeholder synthetic swoosh synchronized with attack peak velocity frame.
-   */
   public playPeakSwoosh(frequency = 380, duration = 0.16, isHeavy = false): void {
+    const played = isHeavy
+      ? this.playBuffer(this.soundBuffers.swingHeavy, 0.8)
+      : this.playBuffer(this.soundBuffers.swingLight, 0.65);
+    if (played) return;
+
     if (!this.context || this.context.state !== 'running') return;
     const now = this.context.currentTime;
 
@@ -317,46 +431,80 @@ export class AudioSystem {
     osc.stop(now + duration + 0.05);
   }
 
-  /**
-   * Placeholder synthetic footstep audio synchronized with heavy footstep frames.
-   */
-  public playFootstep(heavy = false): void {
+  public playFootstep(_heavy = false): void {
+    const played = this.playBuffer(this.soundBuffers.footstepHeavy, 0.55);
+    if (played) return;
+
     if (!this.context || this.context.state !== 'running') return;
     const now = this.context.currentTime;
 
     const osc = this.context.createOscillator();
     const gain = this.context.createGain();
     osc.type = 'triangle';
-    osc.frequency.setValueAtTime(heavy ? 95 : 140, now);
+    osc.frequency.setValueAtTime(95, now);
     osc.frequency.exponentialRampToValueAtTime(35, now + 0.06);
 
-    gain.gain.setValueAtTime(heavy ? 0.22 : 0.12, now);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + (heavy ? 0.08 : 0.05));
+    gain.gain.setValueAtTime(0.22, now);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.08);
 
     osc.connect(gain).connect(this.context.destination);
     osc.start(now);
     osc.stop(now + 0.09);
   }
 
-  /**
-   * Placeholder landing thump synchronized with transitioning from Airborne to Ground/Impact.
-   */
   public playLandingThud(heavy = false): void {
+    if (heavy) {
+      this.playGroundSlam();
+      return;
+    }
+
+    const played = this.playBuffer(this.soundBuffers.footstepHeavy, 0.85);
+    if (played) return;
+
     if (!this.context || this.context.state !== 'running') return;
     const now = this.context.currentTime;
 
     const osc = this.context.createOscillator();
     const gain = this.context.createGain();
     osc.type = 'triangle';
-    osc.frequency.setValueAtTime(heavy ? 120 : 160, now);
-    osc.frequency.exponentialRampToValueAtTime(25, now + (heavy ? 0.22 : 0.14));
+    osc.frequency.setValueAtTime(120, now);
+    osc.frequency.exponentialRampToValueAtTime(25, now + 0.22);
 
-    gain.gain.setValueAtTime(heavy ? 0.45 : 0.25, now);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + (heavy ? 0.24 : 0.15));
+    gain.gain.setValueAtTime(0.45, now);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.24);
 
     osc.connect(gain).connect(this.context.destination);
     osc.start(now);
     osc.stop(now + 0.26);
+  }
+
+  /**
+   * Colossal ground crash sound effect for heavy ground slams.
+   */
+  public playGroundSlam(): void {
+    const played = this.playBuffer(this.soundBuffers.groundSlam, 1.0, 0.04);
+    if (played) return;
+
+    if (!this.context || this.context.state !== 'running') return;
+    const now = this.context.currentTime;
+
+    // Deep earthquake sub-bass rumble fallback
+    const osc = this.context.createOscillator();
+    const gain = this.context.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(85, now);
+    osc.frequency.exponentialRampToValueAtTime(20, now + 0.8);
+
+    const filter = this.context.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(220, now);
+
+    gain.gain.setValueAtTime(0.7, now);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.95);
+
+    osc.connect(filter).connect(gain).connect(this.context.destination);
+    osc.start(now);
+    osc.stop(now + 1.0);
   }
 
   public dispose(): void {

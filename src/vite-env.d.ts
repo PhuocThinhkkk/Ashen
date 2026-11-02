@@ -53,6 +53,9 @@ interface ThreeGameTestHooks {
   toggleHitboxDebug?(visible?: boolean): boolean;
   isHitboxDebugVisible?(): boolean;
   triggerBossAttack?(attackKey: string): void;
+  triggerGroundSlam?(pos?: any): void;
+  triggerBloodBurst?(pos?: any, dir?: any): void;
+  triggerSlashArc?(origin?: any, rotation?: any, color?: any): void;
 }
 
 interface Window {
@@ -60,76 +63,3 @@ interface Window {
   __THREE_GAME_TEST_HOOKS__?: ThreeGameTestHooks;
 }
 
-declare module 'three-nebula' {
-  export class SpriteRenderer {
-    constructor(scene: any, THREE: any);
-    [key: string]: any;
-  }
-  export class Emitter {
-    constructor();
-    [key: string]: any;
-  }
-  export class Rate {
-    constructor(numPan: any, interval?: any);
-    [key: string]: any;
-  }
-  export class Span {
-    constructor(a: any, b?: any);
-    [key: string]: any;
-  }
-  export class Position {
-    constructor(zone?: any);
-    [key: string]: any;
-  }
-  export class PointZone {
-    constructor(x?: number, y?: number, z?: number);
-    [key: string]: any;
-  }
-  export class Mass {
-    constructor(mass: any);
-    [key: string]: any;
-  }
-  export class Radius {
-    constructor(radius: any);
-    [key: string]: any;
-  }
-  export class Life {
-    constructor(life: any);
-    [key: string]: any;
-  }
-  export class RadialVelocity {
-    constructor(radius: any, vector?: any, theta?: any);
-    [key: string]: any;
-  }
-  export class VectorVelocity {
-    constructor(vector: any);
-    [key: string]: any;
-  }
-  export class Vector3D {
-    constructor(x?: number, y?: number, z?: number);
-    [key: string]: any;
-  }
-  export class Alpha {
-    constructor(a: any, b?: any);
-    [key: string]: any;
-  }
-  export class Scale {
-    constructor(a: any, b?: any);
-    [key: string]: any;
-  }
-  export class Color {
-    constructor(a: any, b?: any);
-    [key: string]: any;
-  }
-  export class Body {
-    constructor(target: any);
-    [key: string]: any;
-  }
-  export class Behaviour {
-    [key: string]: any;
-  }
-  export default class System {
-    constructor();
-    [key: string]: any;
-  }
-}

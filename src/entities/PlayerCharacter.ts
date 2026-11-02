@@ -224,7 +224,15 @@ export class PlayerCharacter {
     this.kinematicController.setCallbacks({
       onFootDust: (pos, count) => this.vfxSystem?.spawnFootDustKickup(pos, count),
       onPeakSparks: (pos, count, isHeavy) => this.vfxSystem?.spawnPeakVelocitySparks(pos, count, isHeavy),
-      onWeaponTrail: (bone, duration) => this.vfxSystem?.spawnWeaponTrail(bone, duration),
+      onWeaponTrail: () => {
+        this.vfxSystem?.spawnAttackSlashArc(
+          this.group.position,
+          this.group.rotation.y,
+          this.currentAttack?.name || 'light',
+          this.currentAttack?.isHeavy || false,
+          false,
+        );
+      },
       onPeakSwoosh: (freq, duration, isHeavy) => this.audioSystem?.playPeakSwoosh(freq, duration, isHeavy),
       onPeakImpact: (isHeavy) => this.audioSystem?.hitImpact(isHeavy),
       onFootstep: (heavy) => this.audioSystem?.playFootstep(heavy),
@@ -689,7 +697,16 @@ export class PlayerCharacter {
       const fwd = new THREE.Vector3(-Math.sin(this.group.rotation.y), 0, -Math.cos(this.group.rotation.y));
       this.group.position.addScaledVector(fwd, step);
     } else if (this.attackTimer < startup + active) {
-      this.attackPhase = 'active';
+      if (this.attackPhase !== 'active') {
+        this.attackPhase = 'active';
+        this.vfxSystem?.spawnAttackSlashArc(
+          this.group.position,
+          this.group.rotation.y,
+          this.currentAttack.name,
+          this.currentAttack.isHeavy,
+          false,
+        );
+      }
       const step = (delta / active) * forwardImpulse * 0.8;
       const fwd = new THREE.Vector3(-Math.sin(this.group.rotation.y), 0, -Math.cos(this.group.rotation.y));
       this.group.position.addScaledVector(fwd, step);
