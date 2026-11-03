@@ -23,6 +23,7 @@ export class Hud {
   private readonly damageContainer: HTMLElement;
   private readonly deathOverlay: HTMLElement;
   private readonly victoryOverlay: HTMLElement;
+  private readonly fpsDisplay: HTMLElement | null;
 
   // Model Selection UI Elements
   private readonly modelSelectPanel: HTMLElement | null;
@@ -34,6 +35,8 @@ export class Hud {
 
   private playerChipHp = 100;
   private bossChipHp = 420;
+  private fpsFrames = 0;
+  private fpsTimer = 0;
 
   constructor(modelControls?: HudModelControls) {
     this.playerHpFill = this.getEl('#player-hp-fill');
@@ -49,6 +52,7 @@ export class Hud {
     this.damageContainer = this.getEl('#damage-container');
     this.deathOverlay = this.getEl('#death-overlay');
     this.victoryOverlay = this.getEl('#victory-overlay');
+    this.fpsDisplay = document.querySelector<HTMLElement>('#fps-display');
 
     this.modelSelectPanel = document.querySelector<HTMLElement>('#model-select-panel');
     this.playerModelSelect = document.querySelector<HTMLSelectElement>('#player-model-select');
@@ -191,6 +195,25 @@ export class Hud {
     } else {
       this.victoryOverlay.classList.add('hidden');
     }
+
+    // 6. FPS Counter (smooth rolling 250ms average)
+    this.fpsFrames++;
+    this.fpsTimer += delta;
+    if (this.fpsTimer >= 0.25) {
+      const currentFps = Math.min(999, Math.round(this.fpsFrames / this.fpsTimer));
+      if (this.fpsDisplay) {
+        this.fpsDisplay.textContent = `FPS: ${currentFps}`;
+        if (currentFps >= 50) {
+          this.fpsDisplay.style.color = '#7ef29d';
+        } else if (currentFps >= 30) {
+          this.fpsDisplay.style.color = '#e5c158';
+        } else {
+          this.fpsDisplay.style.color = '#ff5555';
+        }
+      }
+      this.fpsFrames = 0;
+      this.fpsTimer = 0;
+    }
   }
 
   public spawnDamageNumber(amount: number, screenX: number, screenY: number, isPlayerDamage = false): void {
@@ -211,6 +234,8 @@ export class Hud {
     this.victoryOverlay.classList.add('hidden');
     this.lockonReticle.classList.add('hidden');
     this.damageContainer.innerHTML = '';
+    this.fpsFrames = 0;
+    this.fpsTimer = 0;
   }
 
   private getEl(selector: string): HTMLElement {

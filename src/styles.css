@@ -113,6 +113,26 @@ body,
   letter-spacing: 0.5px;
 }
 
+.fps-display {
+  display: inline-flex;
+  align-items: center;
+  font-family: "Cinzel", "Georgia", monospace, sans-serif;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #7ef29d;
+  letter-spacing: 1px;
+  background: rgba(10, 14, 22, 0.82);
+  border: 1px solid rgba(181, 149, 74, 0.4);
+  padding: 2px 8px;
+  border-radius: 3px;
+  width: fit-content;
+  margin-top: 2px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+  user-select: none;
+  transition: color 0.2s ease;
+}
+
 /* ========================================================
    2. Boss HUD (Bottom-Center)
    ======================================================== */

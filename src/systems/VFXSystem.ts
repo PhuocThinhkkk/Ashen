@@ -289,6 +289,31 @@ export class VFXSystem {
     }
   }
 
+  /**
+   * Pre-warms VFX shaders with WebGLRenderer to eliminate first-attack/hit shader compilation stalls.
+   */
+  public prewarm(renderer: THREE.WebGLRenderer, camera: THREE.Camera): void {
+    if (typeof window === 'undefined' || !renderer) return;
+    try {
+      for (const arc of this.slashArcPool) {
+        arc.mesh.visible = true;
+      }
+      for (const burst of this.sparkPool) {
+        (burst as unknown as { points: THREE.Points }).points.visible = true;
+      }
+      renderer.compile(this.scene, camera);
+    } catch {
+      // Best-effort pre-warming
+    } finally {
+      for (const arc of this.slashArcPool) {
+        arc.mesh.visible = false;
+      }
+      for (const burst of this.sparkPool) {
+        (burst as unknown as { points: THREE.Points }).points.visible = false;
+      }
+    }
+  }
+
   public setGroundTarget(mesh: THREE.Mesh): void {
     this.groundSlamVFX.setGroundTarget(mesh);
   }

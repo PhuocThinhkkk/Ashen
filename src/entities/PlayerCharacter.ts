@@ -42,6 +42,7 @@ export class PlayerCharacter {
   public comboStep = 0;
   public comboQueued = false;
   public hasHitCurrentSwing = false;
+  public hasSpawnedSlashArc = false;
 
   // Dodge Frame Data
   public readonly dodgeConfig: DodgeDefinition = PLAYER_DODGE;
@@ -225,6 +226,8 @@ export class PlayerCharacter {
       onFootDust: (pos, count) => this.vfxSystem?.spawnFootDustKickup(pos, count),
       onPeakSparks: (pos, count, isHeavy) => this.vfxSystem?.spawnPeakVelocitySparks(pos, count, isHeavy),
       onWeaponTrail: () => {
+        if (this.hasSpawnedSlashArc) return;
+        this.hasSpawnedSlashArc = true;
         this.vfxSystem?.spawnAttackSlashArc(
           this.group.position,
           this.group.rotation.y,
@@ -657,6 +660,7 @@ export class PlayerCharacter {
     this.comboStep = comboStep;
     this.comboQueued = false;
     this.hasHitCurrentSwing = false;
+    this.hasSpawnedSlashArc = false;
 
     this.stamina = Math.max(0, this.stamina - attack.staminaCost);
     this.staminaRegenDelay = 1.1;
@@ -699,13 +703,16 @@ export class PlayerCharacter {
     } else if (this.attackTimer < startup + active) {
       if (this.attackPhase !== 'active') {
         this.attackPhase = 'active';
-        this.vfxSystem?.spawnAttackSlashArc(
-          this.group.position,
-          this.group.rotation.y,
-          this.currentAttack.name,
-          this.currentAttack.isHeavy,
-          false,
-        );
+        if (!this.hasSpawnedSlashArc) {
+          this.hasSpawnedSlashArc = true;
+          this.vfxSystem?.spawnAttackSlashArc(
+            this.group.position,
+            this.group.rotation.y,
+            this.currentAttack.name,
+            this.currentAttack.isHeavy,
+            false,
+          );
+        }
       }
       const step = (delta / active) * forwardImpulse * 0.8;
       const fwd = new THREE.Vector3(-Math.sin(this.group.rotation.y), 0, -Math.cos(this.group.rotation.y));
@@ -774,6 +781,8 @@ export class PlayerCharacter {
     this.attackPhase = 'none';
     this.comboStep = 0;
     this.comboQueued = false;
+    this.hasHitCurrentSwing = false;
+    this.hasSpawnedSlashArc = false;
     this.isInvulnerable = false;
     this.setDodgeIFrameVisual(false);
     const dodgeAct = this.actions.get('dodge');

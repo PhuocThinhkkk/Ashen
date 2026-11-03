@@ -40,6 +40,7 @@ export class BossCharacter {
   public attackTimer = 0;
   public stateTimer = 0;
   public hasHitCurrentSwing = false;
+  public hasSpawnedSlashArc = false;
 
   // Telegraph warning indicator
   public telegraphGlow = 0;
@@ -275,6 +276,8 @@ export class BossCharacter {
       onFootDust: (pos, count) => this.vfxSystem?.spawnFootDustKickup(pos, count),
       onPeakSparks: (pos, count, isHeavy) => this.vfxSystem?.spawnPeakVelocitySparks(pos, count, isHeavy),
       onWeaponTrail: () => {
+        if (this.hasSpawnedSlashArc) return;
+        this.hasSpawnedSlashArc = true;
         this.vfxSystem?.spawnAttackSlashArc(
           this.group.position,
           this.group.rotation.y,
@@ -531,6 +534,7 @@ export class BossCharacter {
     this.attackTimer = 0;
     this.state = 'windup';
     this.hasHitCurrentSwing = false;
+    this.hasSpawnedSlashArc = false;
     this.hasTriggeredGroundSlam = false;
     this.telegraphGlow = 0;
 
@@ -568,13 +572,16 @@ export class BossCharacter {
     } else if (this.attackTimer < startup + active) {
       if (this.state !== 'active') {
         this.state = 'active';
-        this.vfxSystem?.spawnAttackSlashArc(
-          this.group.position,
-          this.group.rotation.y,
-          this.currentAttack.name,
-          this.currentAttack.isHeavy,
-          true,
-        );
+        if (!this.hasSpawnedSlashArc) {
+          this.hasSpawnedSlashArc = true;
+          this.vfxSystem?.spawnAttackSlashArc(
+            this.group.position,
+            this.group.rotation.y,
+            this.currentAttack.name,
+            this.currentAttack.isHeavy,
+            true,
+          );
+        }
         if (this.currentAttack.animationClip === 'attack_jump') {
           this.triggerJumpGroundSlam();
         }
@@ -734,6 +741,7 @@ export class BossCharacter {
     this.currentAttack = null;
     this.attackTimer = 0;
     this.hasHitCurrentSwing = false;
+    this.hasSpawnedSlashArc = false;
     this.telegraphGlow = 0;
 
     this.group.position.copy(spawnPos);

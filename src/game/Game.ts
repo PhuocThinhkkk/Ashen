@@ -123,6 +123,7 @@ export class Game {
     );
 
     this.buildScene();
+    this.vfx.prewarm(this.renderer, this.camera);
     this.resetRun();
 
     // Wire up HUD Settings button to toggle DebugTools & Tuning panel
@@ -236,11 +237,11 @@ export class Game {
     this.elapsed += delta;
     resizeRenderer(this.renderer, this.camera, this.tuning.maxDpr);
 
-    // Hitstop freeze-frame on impacts
+    // Hitstop time dilation on impacts (visceral weight without halting browser rendering or dropping frames)
+    let simDelta = delta;
     if (this.hitstopTimer > 0) {
       this.hitstopTimer -= delta;
-      this.publishDiagnostics();
-      return;
+      simDelta = delta * 0.15;
     }
 
     // 1. Read Inputs
@@ -280,7 +281,7 @@ export class Game {
     const lockedTargetPos = this.cameraRig.isLockedOn ? this.boss.group.position : null;
 
     this.player.update(
-      delta,
+      simDelta,
       elapsed,
       this.combatInputs,
       this.cameraRig.yaw,
@@ -288,8 +289,8 @@ export class Game {
       this.arena.radius,
     );
 
-    this.boss.update(delta, elapsed, this.player.group.position, this.arena.radius);
-    this.arena.update(delta, elapsed);
+    this.boss.update(simDelta, elapsed, this.player.group.position, this.arena.radius);
+    this.arena.update(simDelta, elapsed);
 
     // Entity collision separation (prevent player clipping through boss)
     const sepX = this.player.group.position.x - this.boss.group.position.x;
