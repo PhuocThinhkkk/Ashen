@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { SettingsManager } from '../systems/SettingsManager';
 
 export interface ArenaConfig {
   radius: number;
@@ -104,7 +105,7 @@ export class Arena {
       const baseGeo = new THREE.BoxGeometry(1.8, 1.2, 1.8);
       const baseMesh = new THREE.Mesh(baseGeo, accentMat);
       baseMesh.position.y = 0.6;
-      baseMesh.castShadow = true;
+      baseMesh.castShadow = false;
       baseMesh.receiveShadow = true;
       pillarGroup.add(baseMesh);
 
@@ -112,7 +113,7 @@ export class Arena {
       const shaftGeo = new THREE.CylinderGeometry(0.65, 0.72, 7.5, 12);
       const shaftMesh = new THREE.Mesh(shaftGeo, pillarMat);
       shaftMesh.position.y = 4.8;
-      shaftMesh.castShadow = true;
+      shaftMesh.castShadow = false;
       shaftMesh.receiveShadow = true;
       pillarGroup.add(shaftMesh);
 
@@ -120,13 +121,13 @@ export class Arena {
       const capGeo = new THREE.BoxGeometry(1.6, 0.9, 1.6);
       const capMesh = new THREE.Mesh(capGeo, accentMat);
       capMesh.position.y = 8.8;
-      capMesh.castShadow = true;
+      capMesh.castShadow = false;
       pillarGroup.add(capMesh);
 
       const spireGeo = new THREE.ConeGeometry(0.8, 2.2, 8);
       const spireMesh = new THREE.Mesh(spireGeo, accentMat);
       spireMesh.position.y = 10.1;
-      spireMesh.castShadow = true;
+      spireMesh.castShadow = false;
       pillarGroup.add(spireMesh);
 
       this.group.add(pillarGroup);
@@ -142,7 +143,7 @@ export class Arena {
       const wallMesh = new THREE.Mesh(wallGeo, pillarMat);
       wallMesh.position.set(midX, 1.1, midZ);
       wallMesh.rotation.y = -midAngle + Math.PI / 2;
-      wallMesh.castShadow = true;
+      wallMesh.castShadow = false;
       wallMesh.receiveShadow = true;
       this.group.add(wallMesh);
     }
@@ -171,7 +172,7 @@ export class Arena {
       const plinthGeo = new THREE.CylinderGeometry(0.9, 1.1, 0.6, 8);
       const plinthMesh = new THREE.Mesh(plinthGeo, pillarMat);
       plinthMesh.position.y = 0.3;
-      plinthMesh.castShadow = true;
+      plinthMesh.castShadow = false;
       plinthMesh.receiveShadow = true;
       brazierGroup.add(plinthMesh);
 
@@ -179,7 +180,7 @@ export class Arena {
       const bowlGeo = new THREE.CylinderGeometry(0.85, 0.4, 0.5, 12, 1, true);
       const bowlMesh = new THREE.Mesh(bowlGeo, ironMat);
       bowlMesh.position.y = 0.85;
-      bowlMesh.castShadow = true;
+      bowlMesh.castShadow = false;
       brazierGroup.add(bowlMesh);
 
       // Glowing coals
@@ -235,16 +236,21 @@ export class Arena {
       light.intensity = 1.6 + noise;
     }
 
-    // Slowly drift dust/ember particles upward
-    const posAttr = this.particleSystem.geometry.attributes.position as THREE.BufferAttribute;
-    const array = posAttr.array as Float32Array;
-    for (let i = 0; i < array.length; i += 3) {
-      array[i + 1] += delta * 0.45;
-      if (array[i + 1] > 6.5) {
-        array[i + 1] = 0.2;
+    // Slowly drift dust/ember particles upward if enabled
+    const arenaDustEnabled = SettingsManager.getInstance().data.vfx.arenaDust;
+    this.particleSystem.visible = arenaDustEnabled;
+
+    if (arenaDustEnabled) {
+      const posAttr = this.particleSystem.geometry.attributes.position as THREE.BufferAttribute;
+      const array = posAttr.array as Float32Array;
+      for (let i = 0; i < array.length; i += 3) {
+        array[i + 1] += delta * 0.45;
+        if (array[i + 1] > 6.5) {
+          array[i + 1] = 0.2;
+        }
       }
+      posAttr.needsUpdate = true;
     }
-    posAttr.needsUpdate = true;
   }
 
   public clampToArena(position: THREE.Vector3, entityRadius = 0.6): boolean {

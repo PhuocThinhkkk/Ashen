@@ -21,6 +21,8 @@ import {
 } from '../vfx/SlashArcRibbon';
 import { BloodBurstVFX } from '../vfx/BloodBurstVFX';
 import { GroundSlamVFX } from '../vfx/GroundSlamVFX';
+import { SettingsManager } from './SettingsManager';
+import type { ActiveVFXCounts } from './PerformanceProfiler';
 
 interface SparkParticle {
   pos: THREE.Vector3;
@@ -32,7 +34,7 @@ interface SparkParticle {
 
 class SparkBurst {
   public active = false;
-  private points: THREE.Points;
+  public points: THREE.Points;
   private geometry: THREE.BufferGeometry;
   private positions: Float32Array;
   private colors: Float32Array;
@@ -165,16 +167,6 @@ class SparkBurst {
   }
 }
 
-interface FlashingRecord {
-  material: THREE.MeshStandardMaterial;
-  origEmissive: THREE.Color;
-  origIntensity: number;
-  timer: number;
-  duration: number;
-  flashColor: THREE.Color;
-  flashIntensity: number;
-}
-
 export class VFXSystem {
   public readonly scene: THREE.Scene;
   public readonly batchRenderer: BatchedRenderer;
@@ -198,9 +190,6 @@ export class VFXSystem {
   // Spark burst pool
   private sparkTexture: THREE.Texture;
   private sparkPool: SparkBurst[] = [];
-
-  // Hit flash records
-  private flashingMaterials = new Map<THREE.MeshStandardMaterial, FlashingRecord>();
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
@@ -289,19 +278,64 @@ export class VFXSystem {
     }
   }
 
+  public setGroundTarget(mesh: THREE.Mesh): void {
+    this.groundSlamVFX.setGroundTarget(mesh);
+  }
+
+  /**
+   * Returns live active count of all VFX subsystems for diagnostics profiler.
+   */
+  public getActiveCounts(): ActiveVFXCounts {
+    let activeSlashArcs = 0;
+    for (const arc of this.slashArcPool) {
+      if (arc.active) activeSlashArcs++;
+    }
+
+    let activeSparks = 0;
+    for (const burst of this.sparkPool) {
+      if (burst.active) activeSparks++;
+    }
+
+    return {
+      slashArcs: activeSlashArcs,
+      sparks: activeSparks,
+      decals: this.groundSlamVFX.getActiveDecalCount(),
+      shockwaves: this.groundSlamVFX.getActiveShockwaveCount(),
+      particles: 0, // three.quarks maintains internal particle counts
+    };
+  }
+
   /**
    * Pre-warms VFX shaders with WebGLRenderer to eliminate first-attack/hit shader compilation stalls.
+   * Warms slash arcs, sparks, ground slam decals/shockwaves, and three.quarks particle systems.
    */
   public prewarm(renderer: THREE.WebGLRenderer, camera: THREE.Camera): void {
     if (typeof window === 'undefined' || !renderer) return;
     try {
+      // 1. Slash Arcs
       for (const arc of this.slashArcPool) {
         arc.mesh.visible = true;
       }
+
+      // 2. Spark Bursts
       for (const burst of this.sparkPool) {
-        (burst as unknown as { points: THREE.Points }).points.visible = true;
+        burst.points.visible = true;
       }
+
+      // 3. Ground Slam Decals & Shockwaves
+      this.groundSlamVFX.prewarm(renderer, camera);
+
+      // 4. Force Three.js shader program compilation
       renderer.compile(this.scene, camera);
+
+      // 5. Pre-warm three.quarks particle systems (blood & dust) with an off-screen tick
+      // This forces the WebGL driver to link the StretchedBillboard and Billboard programs upfront!
+      const dummyOffscreen = new THREE.Vector3(0, -9999, 0);
+      const dummyDir = new THREE.Vector3(0, 1, 0);
+      this.bloodVFX.emit(dummyOffscreen, dummyDir, false);
+      this.spawnFootDustKickup(dummyOffscreen, 2);
+      this.batchRenderer.update(0.016);
+      renderer.render(this.scene, camera);
     } catch {
       // Best-effort pre-warming
     } finally {
@@ -309,13 +343,9 @@ export class VFXSystem {
         arc.mesh.visible = false;
       }
       for (const burst of this.sparkPool) {
-        (burst as unknown as { points: THREE.Points }).points.visible = false;
+        burst.points.visible = false;
       }
     }
-  }
-
-  public setGroundTarget(mesh: THREE.Mesh): void {
-    this.groundSlamVFX.setGroundTarget(mesh);
   }
 
   /**
@@ -323,6 +353,8 @@ export class VFXSystem {
    * using three.quarks GPU instanced particles.
    */
   public spawnFootDustKickup(position: THREE.Vector3, _count = 10): void {
+    if (!SettingsManager.getInstance().data.vfx.groundDust) return;
+
     const ps = this.footDustPool[this.footDustIndex];
     this.footDustIndex = (this.footDustIndex + 1) % this.footDustPoolSize;
 
@@ -335,6 +367,7 @@ export class VFXSystem {
    * Spawns peak velocity sparks at weapon/hand bone.
    */
   public spawnPeakVelocitySparks(origin: THREE.Vector3, _count = 25, isHeavy = false): void {
+    if (!SettingsManager.getInstance().data.vfx.hitSparks) return;
     this.spawnHitSparks(origin, new THREE.Vector3(0, 0.8, 0).normalize(), isHeavy);
   }
 
@@ -350,6 +383,8 @@ export class VFXSystem {
     expansion = 0.22,
     intensity = 2.4,
   ): void {
+    if (!SettingsManager.getInstance().data.vfx.slashArcs) return;
+
     const arc = this.slashArcPool[this.slashArcIndex];
     this.slashArcIndex = (this.slashArcIndex + 1) % this.slashArcPoolSize;
     arc.activate(origin, rotation, scale, colorHex, duration, expansion, intensity);
@@ -365,6 +400,8 @@ export class VFXSystem {
     isHeavy = false,
     isBoss = false,
   ): void {
+    if (!SettingsManager.getInstance().data.vfx.slashArcs) return;
+
     const fwd = new THREE.Vector3(-Math.sin(rotationY), 0, -Math.cos(rotationY));
     const origin = characterPos
       .clone()
@@ -380,18 +417,14 @@ export class VFXSystem {
 
     const nameLower = attackName.toLowerCase();
     if (nameLower.includes('heavy') || nameLower.includes('downward') || nameLower.includes('jump')) {
-      // Downward cleave vertical arc
       rot.set(0.3, rotationY, Math.PI * 0.45);
       scale *= 1.25;
     } else if (nameLower.includes('360') || nameLower.includes('spin') || nameLower.includes('maelstrom')) {
-      // 360 sweeping circle
       scale *= 1.45;
       duration = 0.28;
     } else if (nameLower.includes('light2') || nameLower.includes('combo')) {
-      // Diagonal reverse slash
       rot.set(-0.25, rotationY, -Math.PI * 0.18);
     } else {
-      // Horizontal cleave
       rot.set(0.08, rotationY, -0.05);
     }
 
@@ -407,6 +440,8 @@ export class VFXSystem {
     colorHex: number | string | THREE.Color = 0xffe066,
     scale = 1.0,
   ): void {
+    if (!SettingsManager.getInstance().data.vfx.slashArcs) return;
+
     const worldPos = new THREE.Vector3();
     bone.getWorldPosition(worldPos);
 
@@ -414,18 +449,19 @@ export class VFXSystem {
     bone.getWorldQuaternion(worldQuat);
     const rot = new THREE.Euler().setFromQuaternion(worldQuat);
 
-    // Elevate or angle arc ribbon to match natural blade sweep plane
     this.spawnSlashArc(worldPos, rot, scale, colorHex, duration, 0.24, 2.5);
   }
 
   /**
    * Spawns a visceral directional blood impact burst using three.quarks.
+   * Spawned at the exact collision contact point, spreading outward with natural gravity.
    */
   public spawnBloodBurst(
     contactPoint: THREE.Vector3,
     hitDirection: THREE.Vector3,
     isHeavy = false,
   ): void {
+    if (!SettingsManager.getInstance().data.vfx.bloodBursts) return;
     this.bloodVFX.emit(contactPoint, hitDirection, isHeavy);
   }
 
@@ -443,59 +479,13 @@ export class VFXSystem {
    * Spawns high-energy hit spark burst at the impact contact point.
    */
   public spawnHitSparks(origin: THREE.Vector3, direction: THREE.Vector3, isHeavy = false): void {
+    if (!SettingsManager.getInstance().data.vfx.hitSparks) return;
+
     let burst = this.sparkPool.find((b) => !b.active);
     if (!burst) {
       burst = this.sparkPool[0]; // Recycle oldest
     }
     burst.emit(origin, direction, isHeavy);
-  }
-
-  /**
-   * Emits brief visual flash feedback on a character's mesh materials upon receiving damage.
-   */
-  public triggerHitFlash(
-    root: THREE.Object3D,
-    isHeavy = false,
-    flashColorHex = 0xffffff,
-    duration = 0.12,
-  ): void {
-    const flashColor = new THREE.Color(flashColorHex);
-    const flashIntensity = isHeavy ? 2.5 : 1.4;
-
-    root.traverse((obj) => {
-      if (obj.name.toLowerCase().includes('sword') || obj.name.toLowerCase().includes('hitbox')) {
-        return;
-      }
-
-      if (obj instanceof THREE.Mesh && obj.material) {
-        const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
-        for (const mat of mats) {
-          if (mat instanceof THREE.MeshStandardMaterial) {
-            let record = this.flashingMaterials.get(mat);
-            if (!record) {
-              record = {
-                material: mat,
-                origEmissive: mat.emissive.clone(),
-                origIntensity: mat.emissiveIntensity,
-                timer: duration,
-                duration,
-                flashColor,
-                flashIntensity,
-              };
-              this.flashingMaterials.set(mat, record);
-            } else {
-              record.timer = duration;
-              record.duration = duration;
-              record.flashColor = flashColor;
-              record.flashIntensity = flashIntensity;
-            }
-
-            mat.emissive.copy(flashColor);
-            mat.emissiveIntensity = flashIntensity;
-          }
-        }
-      }
-    });
   }
 
   public update(delta: number): void {
@@ -516,20 +506,6 @@ export class VFXSystem {
     for (const burst of this.sparkPool) {
       if (burst.active) {
         burst.update(delta);
-      }
-    }
-
-    // 5. Update Mesh Hit Flashes
-    for (const [mat, record] of this.flashingMaterials.entries()) {
-      record.timer -= delta;
-      if (record.timer <= 0) {
-        mat.emissive.copy(record.origEmissive);
-        mat.emissiveIntensity = record.origIntensity;
-        this.flashingMaterials.delete(mat);
-      } else {
-        const t = record.timer / record.duration;
-        mat.emissive.lerpColors(record.origEmissive, record.flashColor, t);
-        mat.emissiveIntensity = record.origIntensity + (record.flashIntensity - record.origIntensity) * t;
       }
     }
   }
@@ -611,12 +587,6 @@ export class VFXSystem {
 
     this.sparkTexture.dispose();
     this.dustTexture.dispose();
-
-    for (const [mat, record] of this.flashingMaterials.entries()) {
-      mat.emissive.copy(record.origEmissive);
-      mat.emissiveIntensity = record.origIntensity;
-    }
-    this.flashingMaterials.clear();
 
     this.bloodVFX.dispose();
     this.groundSlamVFX.dispose();

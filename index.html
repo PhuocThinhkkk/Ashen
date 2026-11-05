@@ -31,31 +31,22 @@
         <div id="fps-display" class="fps-display" aria-label="Frames Per Second">FPS: --</div>
       </section>
 
-      <!-- Model Selection HUD Panel (Top Right) -->
-      <section id="model-select-panel" aria-label="Character Model Selection">
-        <div class="model-select-header">
-          <span class="model-select-badge">3D REGISTRY</span>
-          <h3 class="model-select-title">MODEL SELECT</h3>
-          <button id="game-settings-btn" class="model-select-toggle" type="button" title="Toggle Game Settings & Debug Tools">⚙️ Settings</button>
-          <button id="model-select-toggle" class="model-select-toggle" type="button" aria-expanded="true">Hide</button>
-        </div>
-        <div id="model-select-body" class="model-select-body">
-          <div class="model-select-row">
-            <label for="player-model-select">Player Body</label>
-            <select id="player-model-select" class="model-dropdown">
-              <option value="knight">Knight (Default)</option>
-              <option value="samurai">Samurai</option>
-            </select>
+      <!-- Single Unified Settings Trigger Button (Top-Right) -->
+      <button id="game-settings-btn" class="unified-settings-trigger" type="button" title="Game Settings, Models & Performance Diagnostics">
+        <span class="gear-icon">⚙️</span> Settings
+      </button>
+
+      <!-- Pre-Match Preparation Loading Screen -->
+      <div id="prewarm-loading-screen" class="prewarm-loading-screen">
+        <div class="prewarm-modal">
+          <span class="prewarm-badge">SANCTUARY TRIAL</span>
+          <h1 class="prewarm-title">PREPARING ENCOUNTER</h1>
+          <div class="prewarm-bar-track">
+            <div id="prewarm-progress-fill" class="prewarm-progress-fill"></div>
           </div>
-          <div class="model-select-row">
-            <label for="boss-model-select">Boss Body</label>
-            <select id="boss-model-select" class="model-dropdown">
-              <option value="titan">Titan (Ashen Knight)</option>
-            </select>
-          </div>
-          <div id="model-select-status" class="model-select-status">Active: Knight vs Titan</div>
+          <p id="prewarm-status-text" class="prewarm-status">Preparing 3D Armatures & Textures...</p>
         </div>
-      </section>
+      </div>
 
       <!-- Lock-On Reticle -->
       <div id="lockon-reticle" class="hidden">

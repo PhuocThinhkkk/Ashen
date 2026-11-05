@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { SettingsManager } from './SettingsManager';
 
 export interface HudModelControls {
   playerModels: { id: string; name: string }[];
@@ -217,6 +218,8 @@ export class Hud {
   }
 
   public spawnDamageNumber(amount: number, screenX: number, screenY: number, isPlayerDamage = false): void {
+    if (!SettingsManager.getInstance().data.vfx.damageNumbers) return;
+
     const el = document.createElement('div');
     el.className = `damage-number ${isPlayerDamage ? 'player-damage' : ''}`;
     el.textContent = `${Math.round(amount)}`;

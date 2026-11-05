@@ -7,11 +7,13 @@ import { createRenderer, resizeRenderer } from '../core/Renderer';
 import { BossCharacter } from '../entities/BossCharacter';
 import { PlayerCharacter } from '../entities/PlayerCharacter';
 import { AudioSystem } from '../systems/AudioSystem';
-import { DebugTools, type DebugTuning } from '../systems/DebugTools';
 import { Hud } from '../systems/Hud';
 import { SoulslikeCamera } from '../systems/SoulslikeCamera';
 import { VFXSystem } from '../systems/VFXSystem';
 import { Arena } from '../world/Arena';
+import { SettingsManager, type ShadowQuality } from '../systems/SettingsManager';
+import { PerformanceProfiler } from '../systems/PerformanceProfiler';
+import { UnifiedSettingsModal } from '../ui/UnifiedSettingsModal';
 
 export const AVAILABLE_PLAYER_MODELS = [
   { id: 'knight', name: 'Knight' },
@@ -36,7 +38,12 @@ export class Game {
   private readonly audio = new AudioSystem();
   private readonly vfx: VFXSystem;
   private readonly hud: Hud;
-  private readonly debugTools: DebugTools;
+  private readonly settingsModal: UnifiedSettingsModal;
+
+  private readonly settingsManager = SettingsManager.getInstance();
+  private readonly profiler = PerformanceProfiler.getInstance();
+
+  private moonLight!: THREE.DirectionalLight;
 
   private readonly loop = new Loop(
     (delta, elapsed) => this.update(delta, elapsed),
@@ -55,27 +62,26 @@ export class Game {
 
   private readonly mouseDelta = new THREE.Vector2();
 
-  private readonly tuning: DebugTuning = {
+  private readonly tuning = {
     speed: 4.8,
     dashMultiplier: 1.6,
     acceleration: 14,
     cameraLag: 0.12,
-    exposure: 1.1,
-    maxDpr: 2,
   };
 
   private frame = 0;
   private elapsed = 0;
   private hitstopTimer = 0;
   private pausedForScreenshot = false;
+  public isReady = false;
 
-  // Previous states for audio triggers
+  // Previous states for audio & profiler triggers
   private prevPlayerState = 'idle';
   private prevBossState = 'idle';
 
   constructor(private readonly canvas: HTMLCanvasElement) {
     this.renderer = createRenderer(canvas);
-    this.renderer.toneMappingExposure = this.tuning.exposure;
+    this.renderer.toneMappingExposure = this.settingsManager.data.graphics.exposure;
 
     this.input = new InputController(canvas);
     this.cameraRig = new SoulslikeCamera(this.camera);
@@ -84,8 +90,11 @@ export class Game {
 
     this.player.setVfxAndAudio(this.vfx, this.audio);
     this.boss.setVfxAndAudio(this.vfx, this.audio);
-    this.boss.onGroundSlamImpact = () => {
-      this.cameraRig.addShake(0.55);
+    this.boss.onGroundSlamImpact = (pos) => {
+      this.profiler.markCombatEvent('BOSS_GROUND_SLAM', { x: pos.x, z: pos.z });
+      if (this.settingsManager.data.vfx.cameraShake) {
+        this.cameraRig.addShake(0.55);
+      }
       this.hitstopTimer = 0.06;
     };
 
@@ -102,55 +111,136 @@ export class Game {
       },
     });
 
-    this.debugTools = new DebugTools(
-      this.tuning,
-      () => {
-        this.renderer.toneMappingExposure = this.tuning.exposure;
-        resizeRenderer(this.renderer, this.camera, this.tuning.maxDpr);
+    // Unified Dark Fantasy Settings Modal & Tabbed UI (Replaces lil-gui)
+    this.settingsModal = new UnifiedSettingsModal({
+      playerModels: AVAILABLE_PLAYER_MODELS,
+      currentPlayerModel: this.player.modelId,
+      onPlayerModelChange: async (id: string) => {
+        await this.setPlayerModel(id);
       },
-      {
-        playerModels: AVAILABLE_PLAYER_MODELS.map((m) => m.id),
-        currentPlayerModel: this.player.modelId,
-        onPlayerModelChange: async (id: string) => {
-          await this.setPlayerModel(id);
-        },
-        bossModels: AVAILABLE_BOSS_MODELS.map((m) => m.id),
-        currentBossModel: this.boss.modelId,
-        onBossModelChange: async (id: string) => {
-          await this.setBossModel(id);
-        },
+      bossModels: AVAILABLE_BOSS_MODELS,
+      currentBossModel: this.boss.modelId,
+      onBossModelChange: async (id: string) => {
+        await this.setBossModel(id);
       },
-    );
-
-    this.buildScene();
-    this.vfx.prewarm(this.renderer, this.camera);
-    this.resetRun();
-
-    // Wire up HUD Settings button to toggle DebugTools & Tuning panel
-    const gameSettingsBtn = document.querySelector<HTMLButtonElement>('#game-settings-btn');
-    let isSettingsOpen = true;
-    gameSettingsBtn?.addEventListener('click', () => {
-      isSettingsOpen = !isSettingsOpen;
-      this.debugTools.setHidden(!isSettingsOpen);
-      gameSettingsBtn.classList.toggle('active');
+      onResetTrial: () => {
+        this.resetRun();
+      },
+      onToggleHitboxDebug: (visible?: boolean) => {
+        return this.toggleHitboxDebug(visible);
+      },
     });
 
-    // Hotkey 'H' toggles visual hitbox debugging in real-time
+    this.buildScene();
+    this.applySettings();
+
+    // Subscribe to Settings changes
+    this.settingsManager.subscribe(() => {
+      this.applySettings();
+    });
+
+    // Hotkey 'H' toggles visual hitbox debugging
     window.addEventListener('keydown', (e) => {
       if (e.code === 'KeyH' && !e.repeat) {
         this.toggleHitboxDebug();
       }
     });
 
-    resizeRenderer(this.renderer, this.camera, this.tuning.maxDpr);
+    this.resetRun();
     this.installTestHooks();
+
+    // Trigger Pre-match Preparation and Resource Warm-Up
+    void this.prepareMatch();
+  }
+
+  /**
+   * Pre-match loading & warm-up sequence:
+   * 1. Await models & weapons
+   * 2. Pre-tick animations to bind interpolants upfront
+   * 3. Pre-compile WebGL shaders and shadow depth maps
+   * 4. Pre-warm three.quarks particle systems and decal pools
+   * 5. Smoothly transition to match start
+   */
+  public async prepareMatch(): Promise<void> {
+    const screen = document.querySelector<HTMLElement>('#prewarm-loading-screen');
+    const fill = document.querySelector<HTMLElement>('#prewarm-progress-fill');
+    const statusText = document.querySelector<HTMLElement>('#prewarm-status-text');
+
+    const setProgress = (pct: number, msg: string) => {
+      if (fill) fill.style.width = `${pct}%`;
+      if (statusText) statusText.textContent = msg;
+    };
+
+    try {
+      setProgress(25, 'Loading 3D Armatures & Weapon Sockets...');
+      await Promise.all([this.player.loadPromise, this.boss.loadPromise]);
+
+      setProgress(60, 'Pre-warming WebGL Shaders, Shadows & VFX Pools...');
+      this.resetRun();
+      this.vfx.prewarm(this.renderer, this.camera);
+      this.renderer.compile(this.scene, this.camera);
+      this.render();
+
+      setProgress(100, 'Trial Prepared. Entering Sanctuary...');
+      await new Promise((r) => setTimeout(r, 60));
+
+      this.isReady = true;
+      if (screen) {
+        screen.classList.add('fade-out');
+        setTimeout(() => screen.remove(), 250);
+      }
+      this.canvas.focus();
+    } catch (err) {
+      console.warn('[Game] Preparation warning:', err);
+      this.isReady = true;
+      if (screen) screen.remove();
+    }
+
     this.publishDiagnostics();
+  }
+
+  private applySettings(): void {
+    const s = this.settingsManager.data;
+
+    // Graphics
+    this.renderer.toneMappingExposure = s.graphics.exposure;
+    this.applyShadowQuality(s.graphics.shadowQuality);
+    resizeRenderer(this.renderer, this.camera, s.graphics.maxDpr);
+
+    // Gameplay
+    this.tuning.speed = s.gameplay.speed;
+    this.tuning.dashMultiplier = s.gameplay.dashMultiplier;
+    this.tuning.acceleration = s.gameplay.acceleration;
+    this.tuning.cameraLag = s.gameplay.cameraLag;
+
+    // Controls guide
+    const guideEl = document.querySelector<HTMLElement>('#controls-guide');
+    if (guideEl) guideEl.style.display = s.general.showControlsGuide ? '' : 'none';
+  }
+
+  private applyShadowQuality(quality: ShadowQuality): void {
+    if (quality === 'off') {
+      this.renderer.shadowMap.enabled = false;
+      if (this.moonLight) this.moonLight.castShadow = false;
+    } else {
+      this.renderer.shadowMap.enabled = true;
+      if (this.moonLight) {
+        this.moonLight.castShadow = true;
+        const size = quality === 'low' ? 512 : quality === 'medium' ? 1024 : 2048;
+        this.moonLight.shadow.mapSize.set(size, size);
+        if (this.moonLight.shadow.map) {
+          this.moonLight.shadow.map.dispose();
+          (this.moonLight.shadow as unknown as { map: THREE.WebGLRenderTarget | null }).map = null;
+        }
+      }
+    }
   }
 
   public toggleHitboxDebug(visible?: boolean): boolean {
     const next = visible !== undefined ? visible : !this.player.hitboxDebugger.isVisible;
     this.player.toggleHitboxDebug(next);
     this.boss.toggleHitboxDebug(next);
+    this.settingsManager.updateGeneral({ showHitboxDebug: next });
     return next;
   }
 
@@ -158,7 +248,7 @@ export class Game {
     await this.player.loadModel(modelId);
     this.player.setVfxAndAudio(this.vfx, this.audio);
     this.hud.syncModels(this.player.modelId, this.boss.modelId);
-    this.debugTools.syncModels(this.player.modelId, this.boss.modelId);
+    this.settingsModal.syncModels(this.player.modelId, this.boss.modelId);
     this.render();
     this.publishDiagnostics();
   }
@@ -166,12 +256,15 @@ export class Game {
   public async setBossModel(modelId: string): Promise<void> {
     await this.boss.loadModel(modelId);
     this.boss.setVfxAndAudio(this.vfx, this.audio);
-    this.boss.onGroundSlamImpact = () => {
-      this.cameraRig.addShake(0.55);
+    this.boss.onGroundSlamImpact = (pos) => {
+      this.profiler.markCombatEvent('BOSS_GROUND_SLAM', { x: pos.x, z: pos.z });
+      if (this.settingsManager.data.vfx.cameraShake) {
+        this.cameraRig.addShake(0.55);
+      }
       this.hitstopTimer = 0.06;
     };
     this.hud.syncModels(this.player.modelId, this.boss.modelId);
-    this.debugTools.syncModels(this.player.modelId, this.boss.modelId);
+    this.settingsModal.syncModels(this.player.modelId, this.boss.modelId);
     this.render();
     this.publishDiagnostics();
   }
@@ -185,7 +278,7 @@ export class Game {
     this.input.dispose();
     this.audio.dispose();
     this.vfx.dispose();
-    this.debugTools.dispose();
+    this.settingsModal.dispose();
     this.arena.dispose();
     this.player.dispose();
     this.boss.dispose();
@@ -203,18 +296,18 @@ export class Game {
     const hemiLight = new THREE.HemisphereLight(0x506888, 0x222a36, 1.8);
     this.scene.add(hemiLight);
 
-    const moonLight = new THREE.DirectionalLight(0xbcd6ff, 2.8);
-    moonLight.position.set(-14, 24, 16);
-    moonLight.castShadow = true;
-    moonLight.shadow.mapSize.set(2048, 2048);
-    moonLight.shadow.bias = -0.0003;
-    moonLight.shadow.camera.near = 1;
-    moonLight.shadow.camera.far = 70;
-    moonLight.shadow.camera.left = -24;
-    moonLight.shadow.camera.right = 24;
-    moonLight.shadow.camera.top = 24;
-    moonLight.shadow.camera.bottom = -24;
-    this.scene.add(moonLight);
+    this.moonLight = new THREE.DirectionalLight(0xbcd6ff, 2.8);
+    this.moonLight.position.set(-14, 24, 16);
+    this.moonLight.castShadow = true;
+    this.moonLight.shadow.mapSize.set(2048, 2048);
+    this.moonLight.shadow.bias = -0.0003;
+    this.moonLight.shadow.camera.near = 1;
+    this.moonLight.shadow.camera.far = 70;
+    this.moonLight.shadow.camera.left = -24;
+    this.moonLight.shadow.camera.right = 24;
+    this.moonLight.shadow.camera.top = 24;
+    this.moonLight.shadow.camera.bottom = -24;
+    this.scene.add(this.moonLight);
 
     // Rim light from opposite angle
     const rimLight = new THREE.DirectionalLight(0x5577aa, 0.85);
@@ -228,20 +321,23 @@ export class Game {
   }
 
   private update(delta: number, elapsed: number): void {
+    this.profiler.beginFrame();
     this.frame += 1;
+
     if (this.pausedForScreenshot) {
+      this.profiler.markUpdateEnd();
       this.publishDiagnostics();
       return;
     }
 
     this.elapsed += delta;
-    resizeRenderer(this.renderer, this.camera, this.tuning.maxDpr);
+    resizeRenderer(this.renderer, this.camera, this.settingsManager.data.graphics.maxDpr);
 
     // Hitstop time dilation on impacts (visceral weight without halting browser rendering or dropping frames)
     let simDelta = delta;
     if (this.hitstopTimer > 0) {
       this.hitstopTimer -= delta;
-      simDelta = delta * 0.15;
+      simDelta = delta * this.settingsManager.data.gameplay.hitstopDilation;
     }
 
     // 1. Read Inputs
@@ -251,12 +347,14 @@ export class Game {
     // Restart check
     if (this.combatInputs.restart) {
       this.resetRun();
+      this.profiler.markUpdateEnd();
       return;
     }
 
     // Mouse look
     if (this.mouseDelta.lengthSq() > 0) {
-      this.cameraRig.handleMouseMove(this.mouseDelta.x, this.mouseDelta.y);
+      const pitchSign = this.settingsManager.data.general.invertCameraY ? -1 : 1;
+      this.cameraRig.handleMouseMove(this.mouseDelta.x, this.mouseDelta.y * pitchSign);
     }
 
     // 2. Lock-On Management
@@ -292,7 +390,7 @@ export class Game {
     this.boss.update(simDelta, elapsed, this.player.group.position, this.arena.radius);
     this.arena.update(simDelta, elapsed);
 
-    // Entity collision separation (prevent player clipping through boss)
+    // Entity collision separation
     const sepX = this.player.group.position.x - this.boss.group.position.x;
     const sepZ = this.player.group.position.z - this.boss.group.position.z;
     const sepDistSq = sepX * sepX + sepZ * sepZ;
@@ -307,16 +405,16 @@ export class Game {
     // 4. Combat Hit Resolution
     this.resolveCombatCollisions();
 
-    // 5. Update Visual Effects (Sparks & Hit Flashes)
+    // 5. Update Visual Effects
     this.vfx.update(delta);
 
     // 6. Audio State Transition Triggers
     this.updateAudioTriggers();
 
-    // 6. Update Camera
+    // 7. Update Camera
     this.cameraRig.update(delta, this.player.group.position, this.arena.radius);
 
-    // 7. Update HUD
+    // 8. Update HUD
     let screenReticle: THREE.Vector2 | null = null;
     if (this.cameraRig.isLockedOn) {
       screenReticle = this.projectToScreen(this.boss.group.position, 1.8);
@@ -336,6 +434,7 @@ export class Game {
       this.boss.state === 'dead',
     );
 
+    this.profiler.markUpdateEnd();
     this.publishDiagnostics();
   }
 
@@ -366,20 +465,25 @@ export class Game {
         const screenPos = this.projectToScreen(this.boss.group.position, 1.5);
         this.hud.spawnDamageNumber(hit.damage, screenPos.x, screenPos.y, false);
 
-        // Combat VFX: Hit sparks, visceral blood splatter, and mesh flash
+        // Combat VFX: Hit sparks and VISCERAL BLOOD SPLATTER (No Hit Flash)
         const hitPoint = hit.contactPoint || this.player.getHitboxWorldPosition();
         const fwdAngle = this.player.group.rotation.y;
         const hitDir = new THREE.Vector3(-Math.sin(fwdAngle), 0.25, -Math.cos(fwdAngle)).normalize();
+
         this.vfx.spawnHitSparks(hitPoint, hitDir, hit.isHeavy);
         this.vfx.spawnBloodBurst(hitPoint, hitDir, hit.isHeavy);
-        this.vfx.triggerHitFlash(this.boss.group, hit.isHeavy, 0xffeedd, hit.isHeavy ? 0.14 : 0.09);
+
+        this.profiler.markCombatEvent('PLAYER_HIT_BOSS', { damage: hit.damage, isHeavy: hit.isHeavy });
 
         this.audio.hitConfirm(hit.isHeavy);
         this.audio.damageTaken(hit.isHeavy, true);
-        this.cameraRig.addShake(hit.isHeavy ? 0.32 : 0.16);
+
+        if (this.settingsManager.data.vfx.cameraShake) {
+          this.cameraRig.addShake(hit.isHeavy ? 0.32 : 0.16);
+        }
 
         if (hit.isHeavy) {
-          this.hitstopTimer = 0.05; // 50ms freeze frame
+          this.hitstopTimer = 0.05;
         }
 
         if ((this.boss.state as string) === 'dead') {
@@ -399,7 +503,6 @@ export class Game {
       !this.boss.hasHitCurrentSwing &&
       this.player.state !== 'dead'
     ) {
-      // Precise blade collision registered directly via the weapon hitbox parented to sword mesh
       const bladeHitboxPos = this.boss.getBladeHitboxWorldPosition();
       const distToBlade = this.player.group.position.distanceTo(bladeHitboxPos);
       const bladeHit = distToBlade <= (this.player.radius + 2.0);
@@ -410,7 +513,7 @@ export class Game {
         this.boss.currentAttack,
         this.player.group.position,
         this.player.radius,
-        this.player.isInvulnerable, // Protected by dodge i-frames!
+        this.player.isInvulnerable,
       );
 
       if ((bladeHit || hit.hit) && !this.player.isInvulnerable) {
@@ -421,17 +524,22 @@ export class Game {
           const screenPos = this.projectToScreen(this.player.group.position, 1.2);
           this.hud.spawnDamageNumber(hit.damage, screenPos.x, screenPos.y, true);
 
-          // Combat VFX: Hit sparks, visceral blood splatter, and mesh flash on player
+          // Combat VFX: Hit sparks and VISCERAL BLOOD SPLATTER (No Hit Flash)
           const hitPoint = hit.contactPoint || this.player.group.position.clone().add(new THREE.Vector3(0, 1.1, 0));
           const fwdAngle = this.boss.group.rotation.y;
           const hitDir = new THREE.Vector3(-Math.sin(fwdAngle), 0.25, -Math.cos(fwdAngle)).normalize();
+
           this.vfx.spawnHitSparks(hitPoint, hitDir, true);
           this.vfx.spawnBloodBurst(hitPoint, hitDir, true);
-          this.vfx.triggerHitFlash(this.player.group, true, 0xff2200, 0.16);
+
+          this.profiler.markCombatEvent('BOSS_HIT_PLAYER', { damage: hit.damage });
 
           this.audio.hitConfirm(true);
           this.audio.damageTaken(true, false);
-          this.cameraRig.addShake(0.42);
+
+          if (this.settingsManager.data.vfx.cameraShake) {
+            this.cameraRig.addShake(0.42);
+          }
           this.hitstopTimer = 0.06;
 
           if ((this.player.state as string) === 'dead') {
@@ -443,22 +551,24 @@ export class Game {
   }
 
   private updateAudioTriggers(): void {
-    // Player action sounds
     if (this.player.state === 'dodge' && this.prevPlayerState !== 'dodge') {
       this.audio.dodgeWhoosh();
+      this.profiler.markCombatEvent('PLAYER_DODGE');
     } else if (this.player.state === 'attack' && this.prevPlayerState !== 'attack') {
       this.audio.attackSwing(this.player.currentAttack?.isHeavy);
+      this.profiler.markCombatEvent('PLAYER_ATTACK', { attack: this.player.currentAttack?.name });
     }
     this.prevPlayerState = this.player.state;
 
-    // Boss telegraph & attack sounds
     if (this.boss.state === 'windup' && this.prevBossState !== 'windup') {
       this.audio.bossTelegraph();
+      this.profiler.markCombatEvent('BOSS_WINDUP', { attack: this.boss.currentAttack?.name });
     } else if (this.boss.state === 'active' && this.prevBossState !== 'active') {
       this.audio.attackSwing(true);
       if (this.boss.currentAttack?.isHeavy) {
         this.audio.bossSmash();
       }
+      this.profiler.markCombatEvent('BOSS_ATTACK', { attack: this.boss.currentAttack?.name });
     }
     this.prevBossState = this.boss.state;
   }
@@ -475,6 +585,7 @@ export class Game {
 
   private render(): void {
     this.renderer.render(this.scene, this.camera);
+    this.profiler.endFrame(this.renderer, this.vfx.getActiveCounts());
   }
 
   public resetRun(): void {
@@ -522,44 +633,47 @@ export class Game {
         this.render();
         this.publishDiagnostics();
       },
-      hideDebugUi: (hidden: boolean) => {
-        this.debugTools.setHidden(hidden);
-        this.hud.setSelectionHidden(hidden);
+      hideDebugUi: (_hidden: boolean) => {
+        this.settingsModal.close();
+      },
+      toggleHitboxDebug: (visible?: boolean) => {
+        return this.toggleHitboxDebug(visible);
+      },
+      isHitboxDebugVisible: () => {
+        return this.player.hitboxDebugger.isVisible;
       },
       setPlayerModel: async (modelId: string) => {
         await this.setPlayerModel(modelId);
-        return { playerModel: this.player.modelId };
+        return { playerModel: modelId };
       },
       setBossModel: async (modelId: string) => {
         await this.setBossModel(modelId);
-        return { bossModel: this.boss.modelId };
+        return { bossModel: modelId };
       },
       getPlayerWeaponDistanceToHand: () => {
         if (!this.player.handBone || !this.player.swordObject) return 999;
+        const handPos = new THREE.Vector3();
+        const swordPos = new THREE.Vector3();
         this.player.handBone.updateMatrixWorld(true);
         this.player.swordObject.updateMatrixWorld(true);
-        const handWorld = new THREE.Vector3();
-        const swordWorld = new THREE.Vector3();
-        this.player.handBone.getWorldPosition(handWorld);
-        this.player.swordObject.getWorldPosition(swordWorld);
-        return handWorld.distanceTo(swordWorld);
+        this.player.handBone.getWorldPosition(handPos);
+        this.player.swordObject.getWorldPosition(swordPos);
+        return handPos.distanceTo(swordPos);
       },
       getBossWeaponDistanceToHand: () => {
         if (!this.boss.handBone || !this.boss.greatswordGroup) return 999;
+        const handPos = new THREE.Vector3();
+        const swordPos = new THREE.Vector3();
         this.boss.handBone.updateMatrixWorld(true);
         this.boss.greatswordGroup.updateMatrixWorld(true);
-        const handWorld = new THREE.Vector3();
-        const swordWorld = new THREE.Vector3();
-        this.boss.handBone.getWorldPosition(handWorld);
-        this.boss.greatswordGroup.getWorldPosition(swordWorld);
-        return handWorld.distanceTo(swordWorld);
+        this.boss.handBone.getWorldPosition(handPos);
+        this.boss.greatswordGroup.getWorldPosition(swordPos);
+        return handPos.distanceTo(swordPos);
       },
-      toggleHitboxDebug: (visible?: boolean) => this.toggleHitboxDebug(visible),
-      isHitboxDebugVisible: () => this.player.hitboxDebugger.isVisible,
       triggerBossAttack: (attackKey: string) => {
         const atk = BOSS_ATTACKS[attackKey];
         if (atk) {
-          (this.boss as any).chooseAttack(atk);
+          (this.boss as unknown as { chooseAttack: (a: unknown) => void }).chooseAttack(atk);
         }
       },
       triggerGroundSlam: (pos?: THREE.Vector3) => {
@@ -581,9 +695,14 @@ export class Game {
 
   private publishDiagnostics(): void {
     const info = this.renderer.info;
+    const snap = this.profiler.getSnapshot();
+
     window.__THREE_GAME_DIAGNOSTICS__ = {
       frame: this.frame,
       elapsed: this.elapsed,
+      fps: snap.fps,
+      onePercentLowFps: snap.onePercentLowFps,
+      frameTimeMs: snap.frameTimeMs,
       player: {
         position: {
           x: this.player.group.position.x,
@@ -625,7 +744,7 @@ export class Game {
         clientHeight: this.canvas.clientHeight,
         width: this.canvas.width,
         height: this.canvas.height,
-        dpr: Math.min(window.devicePixelRatio || 1, this.tuning.maxDpr),
+        dpr: Math.min(window.devicePixelRatio || 1, this.settingsManager.data.graphics.maxDpr),
       },
     };
   }

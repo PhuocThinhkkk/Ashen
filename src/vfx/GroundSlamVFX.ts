@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { DecalGeometry } from 'three/examples/jsm/geometries/DecalGeometry.js';
 import {
   BatchedRenderer,
   ParticleSystem,
@@ -16,12 +15,14 @@ import {
   Vector3,
   Vector4,
 } from 'three.quarks';
+import { SettingsManager } from '../systems/SettingsManager';
 
-interface ActiveDecal {
+interface PooledDecal {
   mesh: THREE.Mesh;
+  material: THREE.MeshBasicMaterial;
+  active: boolean;
   timer: number;
   duration: number;
-  material: THREE.MeshBasicMaterial;
 }
 
 interface ActiveShockwave {
@@ -38,11 +39,10 @@ export class GroundSlamVFX {
   private crackTexture: THREE.Texture;
   private dustTexture: THREE.Texture;
   private shockwaveTexture: THREE.Texture;
-  private groundTarget: THREE.Mesh | null = null;
-
-  // 1. Decal pool
-  private activeDecals: ActiveDecal[] = [];
+  private decalPool: PooledDecal[] = [];
+  private decalIndex = 0;
   private readonly maxDecals = 6;
+  private decalGeometry: THREE.BufferGeometry;
 
   // 2. Shockwave ring pool
   private shockwaves: ActiveShockwave[] = [];
@@ -59,7 +59,36 @@ export class GroundSlamVFX {
     this.dustTexture = this.createDustTexture();
     this.shockwaveTexture = this.createShockwaveTexture();
 
-    // Initialize Shockwave Rings
+    // 1. Initialize Pre-allocated Planar Decal Pool
+    this.decalGeometry = new THREE.PlaneGeometry(4.8, 4.8);
+    this.decalGeometry.rotateX(-Math.PI / 2);
+
+    for (let i = 0; i < this.maxDecals; i++) {
+      const decalMat = new THREE.MeshBasicMaterial({
+        map: this.crackTexture,
+        transparent: true,
+        opacity: 0,
+        depthTest: true,
+        depthWrite: false,
+        polygonOffset: true,
+        polygonOffsetFactor: -4,
+      });
+
+      const decalMesh = new THREE.Mesh(this.decalGeometry, decalMat);
+      decalMesh.visible = false;
+      decalMesh.frustumCulled = false;
+      this.scene.add(decalMesh);
+
+      this.decalPool.push({
+        mesh: decalMesh,
+        material: decalMat,
+        active: false,
+        timer: 0,
+        duration: 4.5,
+      });
+    }
+
+    // 2. Initialize Shockwave Rings
     const ringGeo = new THREE.RingGeometry(0.82, 1.0, 54);
     for (let i = 0; i < this.shockwavePoolSize; i++) {
       const mat = new THREE.MeshBasicMaterial({
@@ -86,7 +115,7 @@ export class GroundSlamVFX {
       });
     }
 
-    // Initialize Rolling Ground Dust with three.quarks
+    // 3. Initialize Rolling Ground Dust with three.quarks
     const dustMat = new THREE.MeshBasicMaterial({
       map: this.dustTexture,
       transparent: true,
@@ -95,14 +124,12 @@ export class GroundSlamVFX {
     });
 
     for (let i = 0; i < this.dustPoolSize; i++) {
-      // Donut/circle emitter placed on floor plane
       const donut = new DonutEmitter({
         radius: 0.6,
         donutRadius: 0.4,
         arc: Math.PI * 2,
       });
 
-      // Dust smoke color ramp: warm sandy stone dust fading to zero alpha
       const dustGradient = new Gradient(
         [
           [new Vector3(0.76, 0.68, 0.54), 0],
@@ -115,7 +142,6 @@ export class GroundSlamVFX {
       );
       const colorRamp = new ColorOverLife(dustGradient);
 
-      // Dust particles billow and swell outwards (scale increase 1.0 -> 3.2 over 0.6s)
       const sizeCurve = new SizeOverLife(
         new PiecewiseBezier([[new Bezier(1.0, 1.8, 2.6, 3.4), 0]]),
       );
@@ -149,87 +175,86 @@ export class GroundSlamVFX {
     }
   }
 
-  public setGroundTarget(mesh: THREE.Mesh): void {
-    this.groundTarget = mesh;
+  public setGroundTarget(_mesh: THREE.Mesh): void {
+    // Retained for interface compatibility
+  }
+
+  public getActiveDecalCount(): number {
+    return this.decalPool.filter((d) => d.active).length;
+  }
+
+  public getActiveShockwaveCount(): number {
+    return this.shockwaves.filter((s) => s.active).length;
   }
 
   /**
-   * Triggers the 3-part heavy colossal ground slam:
-   * 1. Ground Crack Decal (DecalGeometry)
-   * 2. Expanding Shockwave Ring (radius 0 -> 5+ meters over 0.2s)
+   * Pre-warms decal and shockwave materials with WebGLRenderer to compile upfront.
+   */
+  public prewarm(renderer: THREE.WebGLRenderer, camera: THREE.Camera): void {
+    if (typeof window === 'undefined' || !renderer) return;
+    try {
+      if (this.decalPool[0]) this.decalPool[0].mesh.visible = true;
+      if (this.shockwaves[0]) this.shockwaves[0].mesh.visible = true;
+      renderer.compile(this.scene, camera);
+    } catch {
+      // Best-effort warm up
+    } finally {
+      if (this.decalPool[0]) this.decalPool[0].mesh.visible = false;
+      if (this.shockwaves[0]) this.shockwaves[0].mesh.visible = false;
+    }
+  }
+
+  /**
+   * Triggers the 3-part colossal ground slam:
+   * 1. Ground Crack Decal (Pre-allocated planar decal from pool)
+   * 2. Expanding Shockwave Ring (radius 0 -> 5.6m over 0.2s)
    * 3. Rolling Ground Dust (three.quarks DonutEmitter over 0.6s)
    */
   public triggerGroundSlam(
     impactPoint: THREE.Vector3,
-    customGroundMesh?: THREE.Mesh,
+    _customGroundMesh?: THREE.Mesh,
   ): void {
-    const targetMesh = customGroundMesh || this.groundTarget;
+    const vfxSettings = SettingsManager.getInstance().data.vfx;
 
-    // 1. Ground Decal Projection
-    if (targetMesh) {
-      try {
-        const decalPos = new THREE.Vector3(impactPoint.x, 0.04, impactPoint.z);
-        const decalRot = new THREE.Euler(-Math.PI / 2, Math.random() * Math.PI * 2, 0);
-        const decalSize = new THREE.Vector3(4.8, 4.8, 2.2);
+    // 1. Ground Decal from Pre-allocated Pool (Zero runtime allocations!)
+    if (vfxSettings.groundDecals) {
+      const decal = this.decalPool[this.decalIndex];
+      this.decalIndex = (this.decalIndex + 1) % this.maxDecals;
 
-        const decalGeo = new DecalGeometry(targetMesh, decalPos, decalRot, decalSize);
-        const decalMat = new THREE.MeshBasicMaterial({
-          map: this.crackTexture,
-          transparent: true,
-          opacity: 0.95,
-          depthTest: true,
-          depthWrite: false,
-          polygonOffset: true,
-          polygonOffsetFactor: -4,
-        });
+      decal.active = true;
+      decal.timer = 0;
+      decal.duration = 4.5;
+      decal.mesh.position.set(impactPoint.x, 0.04, impactPoint.z);
+      decal.mesh.rotation.y = Math.random() * Math.PI * 2;
+      decal.material.opacity = 0.95;
+      decal.mesh.visible = true;
+    }
 
-        const decalMesh = new THREE.Mesh(decalGeo, decalMat);
-        this.scene.add(decalMesh);
-
-        // Cap decal pool size
-        if (this.activeDecals.length >= this.maxDecals) {
-          const oldest = this.activeDecals.shift();
-          if (oldest) {
-            this.scene.remove(oldest.mesh);
-            oldest.mesh.geometry.dispose();
-            oldest.material.dispose();
-          }
-        }
-
-        this.activeDecals.push({
-          mesh: decalMesh,
-          material: decalMat,
-          timer: 0,
-          duration: 4.5,
-        });
-      } catch (err) {
-        console.warn('[GroundSlamVFX] Decal projection error:', err);
+    // 2. Expanding Shockwave Ring
+    if (vfxSettings.groundSlamShockwave) {
+      let wave = this.shockwaves.find((w) => !w.active);
+      if (!wave) {
+        wave = this.shockwaves[0]; // Recycle oldest
       }
+      wave.active = true;
+      wave.timer = 0;
+      wave.duration = 0.20;
+      wave.maxRadius = 5.6;
+      wave.mesh.position.set(impactPoint.x, 0.06, impactPoint.z);
+      wave.mesh.scale.set(0.1, 0.1, 0.1);
+      wave.mesh.visible = true;
+      wave.material.opacity = 1.0;
     }
-
-    // 2. Expanding Shockwave Ring (radius 0 to 5.6m over 0.20s)
-    let wave = this.shockwaves.find((w) => !w.active);
-    if (!wave) {
-      wave = this.shockwaves[0]; // Recycle oldest
-    }
-    wave.active = true;
-    wave.timer = 0;
-    wave.duration = 0.20;
-    wave.maxRadius = 5.6;
-    wave.mesh.position.set(impactPoint.x, 0.06, impactPoint.z);
-    wave.mesh.scale.set(0.1, 0.1, 0.1);
-    wave.mesh.visible = true;
-    wave.material.opacity = 1.0;
 
     // 3. Rolling Ground Dust (three.quarks flat floor emitter)
-    const dustPs = this.dustPool[this.dustIndex];
-    this.dustIndex = (this.dustIndex + 1) % this.dustPoolSize;
+    if (vfxSettings.groundDust) {
+      const dustPs = this.dustPool[this.dustIndex];
+      this.dustIndex = (this.dustIndex + 1) % this.dustPoolSize;
 
-    // Position at floor contact
-    dustPs.emitter.position.set(impactPoint.x, 0.08, impactPoint.z);
-    // Orient flat against XZ floor plane so donut expands along ground
-    dustPs.emitter.rotation.set(-Math.PI / 2, 0, 0);
-    dustPs.restart();
+      dustPs.emitter.position.set(impactPoint.x, 0.08, impactPoint.z);
+      dustPs.emitter.rotation.set(-Math.PI / 2, 0, 0);
+      dustPs.restart();
+    }
   }
 
   public update(delta: number): void {
@@ -239,11 +264,8 @@ export class GroundSlamVFX {
         wave.timer += delta;
         const progress = Math.min(1.0, wave.timer / wave.duration);
 
-        // Scale outward horizontally from ~0.1m to 5.6m
         const r = 0.1 + progress * (wave.maxRadius - 0.1);
         wave.mesh.scale.set(r, r, r);
-
-        // Alpha fade 1.0 -> 0.0 over 0.2s
         wave.material.opacity = Math.max(0, 1.0 - progress);
 
         if (wave.timer >= wave.duration) {
@@ -254,17 +276,16 @@ export class GroundSlamVFX {
     }
 
     // 2. Update Active Decals (fade out and recycle)
-    for (let i = this.activeDecals.length - 1; i >= 0; i--) {
-      const item = this.activeDecals[i];
-      item.timer += delta;
-      if (item.timer >= item.duration) {
-        this.scene.remove(item.mesh);
-        item.mesh.geometry.dispose();
-        item.material.dispose();
-        this.activeDecals.splice(i, 1);
-      } else if (item.timer > item.duration * 0.65) {
-        const fade = 1.0 - (item.timer - item.duration * 0.65) / (item.duration * 0.35);
-        item.material.opacity = Math.max(0, fade * 0.95);
+    for (const decal of this.decalPool) {
+      if (decal.active) {
+        decal.timer += delta;
+        if (decal.timer >= decal.duration) {
+          decal.active = false;
+          decal.mesh.visible = false;
+        } else if (decal.timer > decal.duration * 0.65) {
+          const fade = 1.0 - (decal.timer - decal.duration * 0.65) / (decal.duration * 0.35);
+          decal.material.opacity = Math.max(0, fade * 0.95);
+        }
       }
     }
   }
@@ -415,12 +436,12 @@ export class GroundSlamVFX {
   }
 
   public dispose(): void {
-    for (const d of this.activeDecals) {
+    for (const d of this.decalPool) {
       this.scene.remove(d.mesh);
-      d.mesh.geometry.dispose();
       d.material.dispose();
     }
-    this.activeDecals = [];
+    this.decalPool = [];
+    this.decalGeometry.dispose();
 
     for (const w of this.shockwaves) {
       this.scene.remove(w.mesh);

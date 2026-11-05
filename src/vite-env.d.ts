@@ -3,6 +3,9 @@
 interface ThreeGameDiagnostics {
   frame: number;
   elapsed: number;
+  fps?: number;
+  onePercentLowFps?: number;
+  frameTimeMs?: number;
   player: {
     position: { x: number; y: number; z: number };
     speed: number;
