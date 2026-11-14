@@ -175,6 +175,23 @@ export class KinematicCombatController {
   }
 
   /**
+   * Deterministically purges all kinematic state, root motion deltas, triggers, and active sockets.
+   */
+  public reset(): void {
+    this.isAttacking = false;
+    this.currentAction = null;
+    this.currentActionId = null;
+    this.currentConfig = null;
+    this.currentFrame = 1;
+    this.currentPhase = 'None';
+    this.prevPhase = 'None';
+    this.prevTime = 0;
+    this.firedTriggers.clear();
+    this.pendingRootMotionDelta.set(0, 0, 0);
+    this.activeHitboxBone = this.rightHandBone;
+  }
+
+  /**
    * Ticks kinematic frame data, updates hitbox state, extracts root motion,
    * and fires VFX/Audio triggers.
    */

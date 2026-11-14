@@ -171,7 +171,7 @@ export class WeaponSocketGUI {
     saveSocketConfig('boss', this.stage.bossSocket);
     const code = this.generateExportCode();
 
-    console.log('%c⚔️ CURRENT WEAPON SOCKET CONFIG', 'color: #ffaa33; font-weight: bold;');
+    console.log('%cCURRENT WEAPON SOCKET CONFIG', 'color: #ffaa33; font-weight: bold;');
     console.log(code);
 
     if (navigator.clipboard) {

@@ -130,7 +130,7 @@ export class CombatDuelUI {
     if (this.dom.telReach) {
       const inReach = data.distance <= data.bossReach;
       this.dom.telReach.textContent = inReach
-        ? `⚠️ IN REACH (${data.bossReach.toFixed(1)}m)`
+        ? `IN REACH (${data.bossReach.toFixed(1)}m)`
         : `Safe (${data.distance.toFixed(1)}m > ${data.bossReach.toFixed(1)}m)`;
       this.dom.telReach.style.color = inReach ? '#ff5555' : '#38d665';
     }
@@ -149,7 +149,7 @@ export class CombatDuelUI {
       }
       if (this.dom.telDmgBadge) {
         if (data.isDamageActive) {
-          this.dom.telDmgBadge.textContent = '⚔️ DAMAGE ACTIVE NOW';
+          this.dom.telDmgBadge.textContent = 'DAMAGE ACTIVE NOW';
           this.dom.telDmgBadge.style.color = '#ffff00';
           this.dom.telDmgBadge.style.borderColor = '#ffff00';
           this.dom.telDmgBadge.style.boxShadow = '0 0 8px rgba(255, 255, 0, 0.6)';

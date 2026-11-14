@@ -17,6 +17,14 @@ export interface UnifiedSettingsModalConfig {
   onToggleHitboxDebug: (visible?: boolean) => boolean;
 }
 
+const ICONS = {
+  GEAR: `<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>`,
+  CLOSE: `<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`,
+  RECORD: `<svg class="ui-icon rec-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="5" fill="currentColor"></circle></svg>`,
+  CLEAR: `<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>`,
+  EXPORT: `<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>`,
+};
+
 export class UnifiedSettingsModal {
   private container: HTMLElement;
   private isOpen = false;
@@ -45,7 +53,7 @@ export class UnifiedSettingsModal {
       this.triggerBtn = document.createElement('button');
       this.triggerBtn.id = 'game-settings-btn';
       this.triggerBtn.className = 'unified-settings-btn';
-      this.triggerBtn.innerHTML = '<span class="gear-icon">⚙️</span> Settings';
+      this.triggerBtn.innerHTML = `${ICONS.GEAR} <span>SETTINGS</span>`;
       this.container.appendChild(this.triggerBtn);
     }
 
@@ -66,18 +74,18 @@ export class UnifiedSettingsModal {
         <header class="settings-modal-header">
           <div class="settings-title-group">
             <span class="settings-badge">SANCTUARY ARCHITECTURE</span>
-            <h2 class="settings-main-title">GAME SETTINGS & PROFILER</h2>
+            <h2 class="settings-main-title">SETTINGS & TELEMETRY</h2>
           </div>
-          <button id="settings-close-btn" class="settings-close-btn" aria-label="Close Settings">&times;</button>
+          <button id="settings-close-btn" class="settings-close-btn" aria-label="Close Settings">${ICONS.CLOSE}</button>
         </header>
 
         <nav class="settings-tabs" role="tablist">
-          <button class="settings-tab-btn" data-tab="vfx">⚔️ VFX Toggles</button>
-          <button class="settings-tab-btn" data-tab="performance">📊 Diagnostics</button>
-          <button class="settings-tab-btn" data-tab="graphics">🎨 Graphics</button>
-          <button class="settings-tab-btn" data-tab="models">👤 Models</button>
-          <button class="settings-tab-btn" data-tab="gameplay">🎮 Gameplay</button>
-          <button class="settings-tab-btn" data-tab="general">⚙️ General</button>
+          <button class="settings-tab-btn" data-tab="vfx"><span class="tab-num">I</span> VFX CONFIG</button>
+          <button class="settings-tab-btn" data-tab="performance"><span class="tab-num">II</span> DIAGNOSTICS</button>
+          <button class="settings-tab-btn" data-tab="graphics"><span class="tab-num">III</span> GRAPHICS</button>
+          <button class="settings-tab-btn" data-tab="models"><span class="tab-num">IV</span> COMBATANTS</button>
+          <button class="settings-tab-btn" data-tab="gameplay"><span class="tab-num">V</span> KINEMATICS</button>
+          <button class="settings-tab-btn" data-tab="general"><span class="tab-num">VI</span> SYSTEM</button>
         </nav>
 
         <main id="settings-tab-content" class="settings-tab-content"></main>
@@ -194,10 +202,10 @@ export class UnifiedSettingsModal {
         <h3 class="section-title">COMBAT VFX PRESETS</h3>
         <p class="section-desc">Instantly configure all combat visual effects or isolate individual systems.</p>
         <div class="preset-buttons-group">
-          <button class="btn-preset ${s.preset === 'full' ? 'active' : ''}" data-preset="full">🌟 Full Quality</button>
-          <button class="btn-preset ${s.preset === 'balanced' ? 'active' : ''}" data-preset="balanced">⚖️ Balanced</button>
-          <button class="btn-preset ${s.preset === 'performance' ? 'active' : ''}" data-preset="performance">⚡ Performance Mode</button>
-          <button class="btn-preset ${s.preset === 'custom' ? 'active' : ''}" data-preset="custom" disabled>🛠️ Custom</button>
+          <button class="btn-preset ${s.preset === 'full' ? 'active' : ''}" data-preset="full">FULL FIDELITY</button>
+          <button class="btn-preset ${s.preset === 'balanced' ? 'active' : ''}" data-preset="balanced">BALANCED</button>
+          <button class="btn-preset ${s.preset === 'performance' ? 'active' : ''}" data-preset="performance">PERFORMANCE</button>
+          <button class="btn-preset ${s.preset === 'custom' ? 'active' : ''}" data-preset="custom" disabled>CUSTOM</button>
         </div>
       </div>
 
@@ -209,9 +217,9 @@ export class UnifiedSettingsModal {
           <!-- Blood Burst -->
           <label class="toggle-card">
             <div class="toggle-info">
-              <span class="toggle-title">🩸 Visceral Blood Burst</span>
-              <span class="toggle-badge permanent">Elden Ring Style</span>
-              <span class="toggle-desc">Directional arterial spray at weapon impact with realistic gravity.</span>
+              <span class="toggle-title">ARTERIAL BLOOD SPRAY</span>
+              <span class="toggle-badge permanent">ELDEN RING VISCERAL FEEDBACK</span>
+              <span class="toggle-desc">Directional arterial spray at weapon collision point with realistic gravity.</span>
             </div>
             <input type="checkbox" id="vfx-blood" ${s.bloodBursts ? 'checked' : ''} />
             <span class="toggle-switch"></span>
@@ -220,8 +228,8 @@ export class UnifiedSettingsModal {
           <!-- Slash Arcs -->
           <label class="toggle-card">
             <div class="toggle-info">
-              <span class="toggle-title">⚔️ Sword Slash Arcs</span>
-              <span class="toggle-desc">Dynamic noise-dissolving blade ribbons on light & heavy swings.</span>
+              <span class="toggle-title">BLADE SWEEP ARCS</span>
+              <span class="toggle-desc">Dynamic noise-dissolving blade ribbons along attack cut planes.</span>
             </div>
             <input type="checkbox" id="vfx-slash" ${s.slashArcs ? 'checked' : ''} />
             <span class="toggle-switch"></span>
@@ -230,7 +238,7 @@ export class UnifiedSettingsModal {
           <!-- Hit Sparks -->
           <label class="toggle-card">
             <div class="toggle-info">
-              <span class="toggle-title">✨ Contact Hit Sparks</span>
+              <span class="toggle-title">COLLISION IMPACT SPARKS</span>
               <span class="toggle-desc">High-energy spark particle bursts at blade collision contact points.</span>
             </div>
             <input type="checkbox" id="vfx-sparks" ${s.hitSparks ? 'checked' : ''} />
@@ -240,7 +248,7 @@ export class UnifiedSettingsModal {
           <!-- Colossal Ground Slam -->
           <label class="toggle-card">
             <div class="toggle-info">
-              <span class="toggle-title">💥 Ground Slam Shockwave</span>
+              <span class="toggle-title">COLOSSAL SLAM SHOCKWAVE</span>
               <span class="toggle-desc">Expanding energy shockwave ring during boss jump & downward smashes.</span>
             </div>
             <input type="checkbox" id="vfx-shockwave" ${s.groundSlamShockwave ? 'checked' : ''} />
@@ -250,7 +258,7 @@ export class UnifiedSettingsModal {
           <!-- Ground Decals -->
           <label class="toggle-card">
             <div class="toggle-info">
-              <span class="toggle-title">🪨 Ground Crack Decals</span>
+              <span class="toggle-title">GROUND CRATER FISSURES</span>
               <span class="toggle-desc">Stone fissure decals pre-pooled on floor at ground impact locations.</span>
             </div>
             <input type="checkbox" id="vfx-decals" ${s.groundDecals ? 'checked' : ''} />
@@ -260,7 +268,7 @@ export class UnifiedSettingsModal {
           <!-- Floor Dust -->
           <label class="toggle-card">
             <div class="toggle-info">
-              <span class="toggle-title">💨 Floor Dust & Footsteps</span>
+              <span class="toggle-title">LOCOMOTION DUST KICKUPS</span>
               <span class="toggle-desc">Rolling ground dust from jump attacks and running footstep kickups.</span>
             </div>
             <input type="checkbox" id="vfx-dust" ${s.groundDust ? 'checked' : ''} />
@@ -270,7 +278,7 @@ export class UnifiedSettingsModal {
           <!-- Arena Ambient Embers -->
           <label class="toggle-card">
             <div class="toggle-info">
-              <span class="toggle-title">🔥 Sanctuary Ambient Embers</span>
+              <span class="toggle-title">SANCTUARY AMBIENT EMBERS</span>
               <span class="toggle-desc">Atmospheric floating embers drifting upward across the arena floor.</span>
             </div>
             <input type="checkbox" id="vfx-arena-dust" ${s.arenaDust ? 'checked' : ''} />
@@ -280,8 +288,8 @@ export class UnifiedSettingsModal {
           <!-- Damage Numbers -->
           <label class="toggle-card">
             <div class="toggle-info">
-              <span class="toggle-title">🔢 Floating Damage Numbers</span>
-              <span class="toggle-desc">Floating screen-space damage numbers displayed upon hits.</span>
+              <span class="toggle-title">COMBAT DAMAGE FLOATERS</span>
+              <span class="toggle-desc">Screen-space floating damage numbers displayed upon hits.</span>
             </div>
             <input type="checkbox" id="vfx-damage-nums" ${s.damageNumbers ? 'checked' : ''} />
             <span class="toggle-switch"></span>
@@ -290,7 +298,7 @@ export class UnifiedSettingsModal {
           <!-- Camera Shake -->
           <label class="toggle-card">
             <div class="toggle-info">
-              <span class="toggle-title">📳 Impact Camera Shake</span>
+              <span class="toggle-title">TRAUMA CAMERA SHAKE</span>
               <span class="toggle-desc">Screen-space trauma shake on heavy impacts and colossal slams.</span>
             </div>
             <input type="checkbox" id="vfx-shake" ${s.cameraShake ? 'checked' : ''} />
@@ -342,43 +350,43 @@ export class UnifiedSettingsModal {
     el.innerHTML = `
       <div class="settings-section">
         <h3 class="section-title">REAL-TIME DIAGNOSTIC METRICS</h3>
-        <p class="section-desc">Independent CPU, GPU submission, memory, and stutter metrics.</p>
+        <p class="section-desc">Independent CPU, WebGL command submission, memory, and stutter metrics.</p>
 
         <div class="metrics-grid">
           <div class="metric-card">
-            <span class="metric-label">CURRENT FPS</span>
+            <span class="metric-label">CURRENT FRAMERATE</span>
             <span id="diag-fps" class="metric-val fps-${snap.fps >= 50 ? 'good' : snap.fps >= 30 ? 'warn' : 'bad'}">${snap.fps}</span>
-            <span class="metric-sub">Avg: <b id="diag-avg-fps">${snap.avgFps}</b> FPS</span>
+            <span class="metric-sub">Average: <b id="diag-avg-fps">${snap.avgFps}</b> FPS</span>
           </div>
 
           <div class="metric-card">
             <span class="metric-label">FRAME DURATION</span>
             <span id="diag-frametime" class="metric-val">${snap.frameTimeMs} ms</span>
-            <span class="metric-sub">Avg: <b id="diag-avg-frametime">${snap.avgFrameTimeMs}</b> ms</span>
+            <span class="metric-sub">Average: <b id="diag-avg-frametime">${snap.avgFrameTimeMs}</b> ms</span>
           </div>
 
           <div class="metric-card">
-            <span class="metric-label">1% LOW FPS (STUTTER)</span>
+            <span class="metric-label">1% LOW FRAMERATE</span>
             <span id="diag-1pct-low" class="metric-val fps-${snap.onePercentLowFps >= 45 ? 'good' : snap.onePercentLowFps >= 25 ? 'warn' : 'bad'}">${snap.onePercentLowFps}</span>
             <span class="metric-sub">99th percentile worst frames</span>
           </div>
 
           <div class="metric-card">
-            <span class="metric-label">FRAME SPIKES (&gt;25ms)</span>
+            <span class="metric-label">SPIKES (&gt;25ms)</span>
             <span id="diag-spikes" class="metric-val ${snap.spikeCount25ms > 5 ? 'bad' : 'good'}">${snap.spikeCount25ms}</span>
-            <span class="metric-sub">&gt;33ms: <b id="diag-spikes33">${snap.spikeCount33ms}</b></span>
+            <span class="metric-sub">&gt;33.3ms: <b id="diag-spikes33">${snap.spikeCount33ms}</b></span>
           </div>
 
           <div class="metric-card">
             <span class="metric-label">CPU LOGIC TIME</span>
             <span id="diag-cputime" class="metric-val">${snap.cpuTimeMs} ms</span>
-            <span class="metric-sub">Entities, Physics & Transforms</span>
+            <span class="metric-sub">Transforms, Physics & Kinematics</span>
           </div>
 
           <div class="metric-card">
-            <span class="metric-label">WEBGL RENDER TIME</span>
+            <span class="metric-label">WEBGL SUBMISSION</span>
             <span id="diag-rendertime" class="metric-val">${snap.renderTimeMs} ms</span>
-            <span class="metric-sub">WebGL Command Submission</span>
+            <span class="metric-sub">Driver Draw Command Buffer</span>
           </div>
 
           <div class="metric-card">
@@ -390,7 +398,7 @@ export class UnifiedSettingsModal {
           <div class="metric-card">
             <span class="metric-label">JS HEAP MEMORY</span>
             <span id="diag-memory" class="metric-val">${snap.usedHeapMb !== null ? `${snap.usedHeapMb} MB` : 'N/A'}</span>
-            <span class="metric-sub">V8 Garbage Collection</span>
+            <span class="metric-sub">Garbage Collection Space</span>
           </div>
         </div>
       </div>
@@ -401,21 +409,21 @@ export class UnifiedSettingsModal {
 
         <div class="profiler-controls">
           <button id="btn-toggle-record" class="btn-action ${snap.isRecording ? 'recording' : ''}">
-            ${snap.isRecording ? '🔴 Stop Recording' : '⏺️ Start Recording'}
+            ${ICONS.RECORD} <span>${snap.isRecording ? 'HALT RECORDING' : 'RECORD SESSION'}</span>
           </button>
-          <button id="btn-clear-stats" class="btn-util">🔄 Clear Stats</button>
-          <button id="btn-export-json" class="btn-util">💾 Export Report (JSON)</button>
+          <button id="btn-clear-stats" class="btn-util">${ICONS.CLEAR} <span>PURGE STATS</span></button>
+          <button id="btn-export-json" class="btn-util">${ICONS.EXPORT} <span>EXPORT JSON</span></button>
         </div>
 
         <div id="profiler-status-banner" class="profiler-banner ${snap.isRecording ? 'active' : ''}">
-          ${snap.isRecording ? 'RECORDING IN PROGRESS — Perform attacks and hits in combat...' : 'Ready to record combat performance session.'}
+          ${snap.isRecording ? 'TELEMETRY SESSION ACTIVE — Perform attacks, clashes and rolls in arena...' : 'Ready to capture combat performance session.'}
         </div>
       </div>
 
       <div class="settings-section diagnostic-notes">
-        <h4 class="notes-title">ℹ️ Technical Diagnostic Architecture</h4>
-        <p>• <b>CPU vs GPU Timings:</b> In standard WebGL 2.0, precise on-chip GPU rasterization timestamps (<code>EXT_disjoint_timer_query</code>) are disabled across modern browsers for Spectre side-channel security. The metric above measures exact JavaScript main-thread CPU time and WebGL driver command submission.</p>
-        <p>• <b>Hitstop Time Dilation:</b> Hits against the boss trigger intentional gameplay time-dilation (0.15x) for visceral impact weight. The renderer and camera continue running at full 60 FPS without halting browser updates.</p>
+        <h4 class="notes-title">DIAGNOSTIC ARCHITECTURE & HARDWARE CONSTRAINTS</h4>
+        <p>• <b>CPU vs GPU Timings:</b> In WebGL 2.0, direct on-chip GPU rasterization timestamps (EXT_disjoint_timer_query) are disabled across modern browsers for security reasons. Metrics above reflect precise JavaScript CPU time and WebGL driver submission.</p>
+        <p>• <b>Hitstop Time Dilation:</b> Clashes trigger intentional simulation time dilation (0.15x) for visceral impact weight. The renderer and camera continue updating at full framerate.</p>
       </div>
     `;
 
@@ -503,8 +511,8 @@ export class UnifiedSettingsModal {
 
         <div class="control-row">
           <div class="control-info">
-            <span class="control-label">Max Resolution Scale (DPR)</span>
-            <span class="control-sub">Current: <b id="dpr-val">${g.maxDpr}x</b></span>
+            <span class="control-label">Resolution Scale (DPR)</span>
+            <span class="control-sub">Current Scale: <b id="dpr-val">${g.maxDpr}x</b></span>
           </div>
           <div class="button-selector" id="dpr-selector">
             <button class="btn-choice ${g.maxDpr === 0.75 ? 'active' : ''}" data-val="0.75">0.75x</button>
@@ -518,20 +526,20 @@ export class UnifiedSettingsModal {
         <div class="control-row">
           <div class="control-info">
             <span class="control-label">Shadow Quality</span>
-            <span class="control-sub">Static arena geometry shadow casting is disabled for optimal performance.</span>
+            <span class="control-sub">Static sanctuary geometry shadow casting is disabled for optimal performance.</span>
           </div>
           <select id="shadow-quality-select" class="settings-select">
-            <option value="off" ${g.shadowQuality === 'off' ? 'selected' : ''}>Off (Maximum Performance)</option>
-            <option value="low" ${g.shadowQuality === 'low' ? 'selected' : ''}>Low (512x512)</option>
-            <option value="medium" ${g.shadowQuality === 'medium' ? 'selected' : ''}>Medium (1024x1024)</option>
-            <option value="high" ${g.shadowQuality === 'high' ? 'selected' : ''}>High (2048x2048 Default)</option>
+            <option value="off" ${g.shadowQuality === 'off' ? 'selected' : ''}>OFF (Max Framerate)</option>
+            <option value="low" ${g.shadowQuality === 'low' ? 'selected' : ''}>LOW (512x512)</option>
+            <option value="medium" ${g.shadowQuality === 'medium' ? 'selected' : ''}>MEDIUM (1024x1024)</option>
+            <option value="high" ${g.shadowQuality === 'high' ? 'selected' : ''}>HIGH (2048x2048)</option>
           </select>
         </div>
 
         <div class="control-row">
           <div class="control-info">
-            <span class="control-label">Exposure / Tone Mapping</span>
-            <span class="control-sub">ACES Filmic Exposure: <b id="exposure-val">${g.exposure.toFixed(2)}</b></span>
+            <span class="control-label">ACES Filmic Exposure</span>
+            <span class="control-sub">Exposure Value: <b id="exposure-val">${g.exposure.toFixed(2)}</b></span>
           </div>
           <input type="range" id="exposure-slider" class="settings-slider" min="0.6" max="1.8" step="0.05" value="${g.exposure}" />
         </div>
@@ -581,19 +589,19 @@ export class UnifiedSettingsModal {
     el.innerHTML = `
       <div id="model-select-panel" class="settings-section">
         <div class="model-select-header">
-          <span class="model-select-badge">3D REGISTRY</span>
-          <h3 class="model-select-title">MODEL SELECT</h3>
+          <span class="model-select-badge">REGISTRY</span>
+          <h3 class="model-select-title">COMBATANTS</h3>
           <button id="model-select-toggle" class="model-select-toggle" type="button">Hide</button>
         </div>
 
         <div id="model-select-body" class="model-select-body">
-          <h3 class="section-title">3D CHARACTER MODEL REGISTRY</h3>
+          <h3 class="section-title">3D CHARACTER ARMATURES</h3>
           <p class="section-desc">Hot-swap rigged humanoid player and boss armatures at runtime.</p>
 
           <div class="control-row">
             <div class="control-info">
-              <span class="control-label">Player Body Model</span>
-              <span class="control-sub">Rebinds hand sockets, weapon transforms, and animation tracks.</span>
+              <span class="control-label">Player Armature</span>
+              <span class="control-sub">Rebinds hand sockets, weapon offsets, and combat animation clips.</span>
             </div>
             <select id="player-model-select" class="settings-select model-dropdown">
               ${pOptions}
@@ -602,7 +610,7 @@ export class UnifiedSettingsModal {
 
           <div class="control-row">
             <div class="control-info">
-              <span class="control-label">Boss Body Model</span>
+              <span class="control-label">Boss Armature</span>
               <span class="control-sub">Rebinds greatsword sockets and colossal boss animations.</span>
             </div>
             <select id="boss-model-select" class="settings-select model-dropdown">
@@ -658,7 +666,7 @@ export class UnifiedSettingsModal {
         <div class="control-row">
           <div class="control-info">
             <span class="control-label">Base Move Speed</span>
-            <span class="control-sub">Value: <b id="speed-val">${gp.speed.toFixed(1)}</b> m/s</span>
+            <span class="control-sub">Velocity: <b id="speed-val">${gp.speed.toFixed(1)}</b> m/s</span>
           </div>
           <input type="range" id="speed-slider" class="settings-slider" min="2" max="12" step="0.2" value="${gp.speed}" />
         </div>
@@ -666,7 +674,7 @@ export class UnifiedSettingsModal {
         <div class="control-row">
           <div class="control-info">
             <span class="control-label">Sprint Dash Multiplier</span>
-            <span class="control-sub">Multiplier: <b id="dash-val">${gp.dashMultiplier.toFixed(2)}x</b></span>
+            <span class="control-sub">Ratio: <b id="dash-val">${gp.dashMultiplier.toFixed(2)}x</b></span>
           </div>
           <input type="range" id="dash-slider" class="settings-slider" min="1.0" max="2.5" step="0.05" value="${gp.dashMultiplier}" />
         </div>
@@ -674,7 +682,7 @@ export class UnifiedSettingsModal {
         <div class="control-row">
           <div class="control-info">
             <span class="control-label">Locomotion Acceleration</span>
-            <span class="control-sub">Value: <b id="accel-val">${gp.acceleration.toFixed(0)}</b></span>
+            <span class="control-sub">Factor: <b id="accel-val">${gp.acceleration.toFixed(0)}</b></span>
           </div>
           <input type="range" id="accel-slider" class="settings-slider" min="4" max="22" step="1" value="${gp.acceleration}" />
         </div>
@@ -682,7 +690,7 @@ export class UnifiedSettingsModal {
         <div class="control-row">
           <div class="control-info">
             <span class="control-label">Camera Follow Lag</span>
-            <span class="control-sub">Smoothing: <b id="camlag-val">${gp.cameraLag.toFixed(2)}s</b></span>
+            <span class="control-sub">Damping: <b id="camlag-val">${gp.cameraLag.toFixed(2)}s</b></span>
           </div>
           <input type="range" id="camlag-slider" class="settings-slider" min="0.02" max="0.5" step="0.01" value="${gp.cameraLag}" />
         </div>
@@ -690,12 +698,12 @@ export class UnifiedSettingsModal {
         <div class="control-row">
           <div class="control-info">
             <span class="control-label">Hitstop Simulation Dilation</span>
-            <span class="control-sub">Impact Dilation: <b id="hitstop-val">${gp.hitstopDilation.toFixed(2)}x</b> (0.15 recommended)</span>
+            <span class="control-sub">Impact Dilation: <b id="hitstop-val">${gp.hitstopDilation.toFixed(2)}x</b></span>
           </div>
           <input type="range" id="hitstop-slider" class="settings-slider" min="0.05" max="0.50" step="0.05" value="${gp.hitstopDilation}" />
         </div>
 
-        <button id="btn-reset-tuning" class="btn-util">🔄 Reset to Default Tuning</button>
+        <button id="btn-reset-tuning" class="btn-util">RESTORE DEFAULT KINEMATICS</button>
       </div>
     `;
 
@@ -737,39 +745,39 @@ export class UnifiedSettingsModal {
 
     el.innerHTML = `
       <div class="settings-section">
-        <h3 class="section-title">GENERAL CONTROLS & DISPLAY</h3>
-        <p class="section-desc">Toggle on-screen HUD elements and debug visualizers.</p>
+        <h3 class="section-title">SYSTEM & OVERLAYS</h3>
+        <p class="section-desc">Configure collision wireframes, trial state, and viewport controls.</p>
 
         <div class="control-row">
           <div class="control-info">
             <span class="control-label">Hitbox Wireframe Debugger</span>
-            <span class="control-sub">Hot-swap yellow wireframe volume attachment on weapon bones (Key: H)</span>
+            <span class="control-sub">Direct volumetric bone attachment visualization (Key: H)</span>
           </div>
           <button id="btn-toggle-hitbox" class="btn-util ${gen.showHitboxDebug ? 'active' : ''}">
-            ${gen.showHitboxDebug ? '🟡 Hitbox Debug (ON)' : '⚪ Hitbox Debug (OFF)'}
+            WIREFRAMES: ${gen.showHitboxDebug ? 'ENABLED' : 'DISABLED'}
           </button>
         </div>
 
         <div class="control-row">
           <div class="control-info">
             <span class="control-label">Reset Combat Trial</span>
-            <span class="control-sub">Instantly respawns player and boss at neutral arena positions (Key: R)</span>
+            <span class="control-sub">Cleanly purges all combat states and respawns combatants (Key: R)</span>
           </div>
-          <button id="btn-reset-trial" class="btn-action">Rise Again (Key: R)</button>
+          <button id="btn-reset-trial" class="btn-action">RESTORE TRIAL (KEY: R)</button>
         </div>
 
         <div class="control-row">
           <div class="control-info">
-            <span class="control-label">Invert Camera Vertical Axis</span>
-            <span class="control-sub">Invert mouse pitch control direction</span>
+            <span class="control-label">Invert Pitch Axis</span>
+            <span class="control-sub">Invert mouse vertical look orientation</span>
           </div>
           <input type="checkbox" id="check-invert-y" ${gen.invertCameraY ? 'checked' : ''} />
         </div>
 
         <div class="control-row">
           <div class="control-info">
-            <span class="control-label">Show Controls Guide Overlay</span>
-            <span class="control-sub">WASD / Space / Combat key bindings in bottom-left</span>
+            <span class="control-label">Keybinding Guide Overlay</span>
+            <span class="control-sub">Display combat key legend in bottom-left viewport</span>
           </div>
           <input type="checkbox" id="check-controls-guide" ${gen.showControlsGuide ? 'checked' : ''} />
         </div>

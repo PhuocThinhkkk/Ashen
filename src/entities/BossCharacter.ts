@@ -742,16 +742,53 @@ export class BossCharacter {
     this.attackTimer = 0;
     this.hasHitCurrentSwing = false;
     this.hasSpawnedSlashArc = false;
+    this.hasTriggeredGroundSlam = false;
     this.telegraphGlow = 0;
 
+    // 1. Hard purge kinematic controller
+    this.kinematicController?.reset();
+
+    // 2. Hard stop & purge all AnimationMixer actions
+    if (this.mixer) {
+      this.mixer.stopAllAction();
+    }
+    for (const action of this.actions.values()) {
+      action.stop();
+      action.reset();
+      action.setEffectiveWeight(0);
+      action.setEffectiveTimeScale(1.0);
+      action.clampWhenFinished = false;
+      action.paused = false;
+    }
+
+    this.currentAction = null;
+    this.currentActionName = '';
+
+    // 3. Hard bind Idle state without crossfade interpolant leakage
+    let idleAction = this.actions.get('idle');
+    if (!idleAction) {
+      const clip = ModelLoader.findClip(this.rawClips, 'idle');
+      if (clip) idleAction = this.actions.get(clip.name);
+    }
+    if (idleAction) {
+      idleAction.reset();
+      idleAction.setLoop(THREE.LoopRepeat, Infinity);
+      idleAction.setEffectiveWeight(1.0);
+      idleAction.setEffectiveTimeScale(1.0);
+      idleAction.play();
+      this.currentAction = idleAction;
+      this.currentActionName = 'idle';
+    }
+    this.mixer?.update(0);
+
+    // 4. Coordinates, rotation & material reset
     this.group.position.copy(spawnPos);
     this.group.position.y = 0;
     this.group.rotation.set(0, Math.PI, 0);
+    this.group.updateMatrixWorld(true);
 
     this.bladeMaterial.color.setHex(0x222428);
     this.bladeMaterial.emissive.setHex(0xff4400);
-
-    this.playAction('idle', 0.1);
   }
 
   public dispose(): void {

@@ -159,6 +159,16 @@ class SparkBurst {
     return this.active;
   }
 
+  public reset(): void {
+    this.active = false;
+    this.points.visible = false;
+    for (let i = 0; i < this.maxParticles; i++) {
+      this.particles[i].life = 0;
+      this.sizes[i] = 0;
+    }
+    this.geometry.attributes.size.needsUpdate = true;
+  }
+
   public dispose(): void {
     this.geometry.dispose();
     if (this.points.material instanceof THREE.Material) {
@@ -280,6 +290,24 @@ export class VFXSystem {
 
   public setGroundTarget(mesh: THREE.Mesh): void {
     this.groundSlamVFX.setGroundTarget(mesh);
+  }
+
+  /**
+   * Deterministically purges and recycles all active visual effects, ribbons, sparks, and decals.
+   */
+  public reset(): void {
+    for (const arc of this.slashArcPool) {
+      arc.active = false;
+      arc.mesh.visible = false;
+      arc.timer = 0;
+    }
+    this.slashArcIndex = 0;
+
+    for (const burst of this.sparkPool) {
+      burst.reset();
+    }
+
+    this.groundSlamVFX.reset();
   }
 
   /**

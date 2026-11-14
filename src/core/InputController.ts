@@ -134,6 +134,19 @@ export class InputController {
     this.mouseDeltaY = 0;
   }
 
+  public reset(): void {
+    this.keys.clear();
+    this.pointer.set(0, 0);
+    this.keyVector.set(0, 0);
+    this.dodgeTriggered = false;
+    this.lightAttackTriggered = false;
+    this.heavyAttackTriggered = false;
+    this.lockOnTriggered = false;
+    this.restartTriggered = false;
+    this.mouseDeltaX = 0;
+    this.mouseDeltaY = 0;
+  }
+
   public isDashHeld(): boolean {
     return this.keys.has('ShiftLeft') || this.keys.has('ShiftRight') || this.keys.has('Space');
   }

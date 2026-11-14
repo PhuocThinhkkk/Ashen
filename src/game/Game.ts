@@ -589,15 +589,18 @@ export class Game {
   }
 
   public resetRun(): void {
+    this.hitstopTimer = 0;
+    this.input.reset();
+    this.vfx.reset();
     this.player.reset(new THREE.Vector3(0, 0, 9));
     this.boss.reset(new THREE.Vector3(0, 0, -8));
-    this.cameraRig.setLockedTarget(null);
-    this.cameraRig.yaw = 0;
-    this.cameraRig.pitch = 0.26;
-    this.cameraRig.distance = 4.6;
+    this.cameraRig.reset();
     this.cameraRig.snapTo(this.player.group.position, this.arena.radius);
     this.hud.reset();
-    this.hitstopTimer = 0;
+    this.prevPlayerState = 'idle';
+    this.prevBossState = 'idle';
+    this.pausedForScreenshot = false;
+    this.profiler.markCombatEvent('TRIAL_RESET');
     this.render();
   }
 

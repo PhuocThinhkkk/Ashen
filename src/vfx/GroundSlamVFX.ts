@@ -188,6 +188,25 @@ export class GroundSlamVFX {
   }
 
   /**
+   * Immediately recycles all active shockwaves and ground crack decals.
+   */
+  public reset(): void {
+    for (const wave of this.shockwaves) {
+      wave.active = false;
+      wave.mesh.visible = false;
+      wave.timer = 0;
+    }
+    for (const decal of this.decalPool) {
+      decal.active = false;
+      decal.mesh.visible = false;
+      decal.timer = 0;
+      decal.material.opacity = 0;
+    }
+    this.decalIndex = 0;
+    this.dustIndex = 0;
+  }
+
+  /**
    * Pre-warms decal and shockwave materials with WebGLRenderer to compile upfront.
    */
   public prewarm(renderer: THREE.WebGLRenderer, camera: THREE.Camera): void {

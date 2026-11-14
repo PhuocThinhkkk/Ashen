@@ -51,6 +51,15 @@ export class SoulslikeCamera {
     this.isLockedOn = target !== null;
   }
 
+  public reset(): void {
+    this.isLockedOn = false;
+    this.lockedTarget = null;
+    this.shakeIntensity = 0;
+    this.yaw = 0;
+    this.pitch = 0.26;
+    this.distance = this.config.defaultDistance;
+  }
+
   public toggleLockOn(target: THREE.Vector3): boolean {
     if (this.isLockedOn) {
       this.isLockedOn = false;

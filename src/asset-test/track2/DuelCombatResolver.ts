@@ -44,7 +44,7 @@ export class DuelCombatResolver {
         boss.takeDamage(player.currentAttack.damage, player.currentAttack.poiseDamage);
         if (playerCol.contactPoint) onContact?.(playerCol.contactPoint);
         onCombatLog(
-          `🗡️ WEAPON HIT BOSS! DMG: ${player.currentAttack.damage} (Blade Dist: ${playerCol.distance.toFixed(2)}m) | Boss HP: ${Math.round(boss.hp)}`,
+          `[HIT] WEAPON HIT BOSS! DMG: ${player.currentAttack.damage} (Blade Dist: ${playerCol.distance.toFixed(2)}m) | Boss HP: ${Math.round(boss.hp)}`,
         );
       }
     }
@@ -82,13 +82,13 @@ export class DuelCombatResolver {
         boss.hasHitCurrentSwing = true;
         if (player.isInvulnerable) {
           onCombatLog(
-            `🛡️ WEAPON EVADED BY DODGE ROLL I-FRAMES! (Blade Dist: ${bossCol.distance.toFixed(2)}m)`,
+            `[EVADED] WEAPON EVADED BY DODGE ROLL I-FRAMES! (Blade Dist: ${bossCol.distance.toFixed(2)}m)`,
           );
         } else {
           player.takeDamage(boss.currentAttack.damage, !!boss.currentAttack.isHeavy);
           if (bossCol.contactPoint) onContact?.(bossCol.contactPoint);
           onCombatLog(
-            `💥 WEAPON HIT PLAYER! DMG: ${boss.currentAttack.damage} (Blade Dist: ${bossCol.distance.toFixed(2)}m) | Player HP: ${Math.round(player.hp)}`,
+            `[HIT] WEAPON HIT PLAYER! DMG: ${boss.currentAttack.damage} (Blade Dist: ${bossCol.distance.toFixed(2)}m) | Player HP: ${Math.round(player.hp)}`,
           );
         }
       }

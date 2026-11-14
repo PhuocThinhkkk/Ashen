@@ -146,8 +146,8 @@ function setGameFollowMode(enabled: boolean): void {
   );
   if (dom.btnModeToggle) {
     dom.btnModeToggle.textContent = enabled
-      ? '🚶 Mode: 3rd-Person Follow (Click to Orbit)'
-      : '🎮 Mode: Orbit (Click for 3rd-Person Follow)';
+      ? 'Mode: 3rd-Person Follow (Click to Orbit)'
+      : 'Mode: Orbit (Click for 3rd-Person Follow)';
     dom.btnModeToggle.classList.toggle('active', enabled);
   }
   if (dom.cameraButtons) {
