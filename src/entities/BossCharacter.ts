@@ -745,17 +745,18 @@ export class BossCharacter {
     this.hasTriggeredGroundSlam = false;
     this.telegraphGlow = 0;
 
-    // 1. Hard purge kinematic controller
+    // 1. Reset kinematic controller
     this.kinematicController?.reset();
 
-    // 2. Hard stop & purge all AnimationMixer actions
+    // 2. Stop all actions and restore enabled + baseline weight 1.0
     if (this.mixer) {
       this.mixer.stopAllAction();
     }
     for (const action of this.actions.values()) {
       action.stop();
       action.reset();
-      action.setEffectiveWeight(0);
+      action.enabled = true;
+      action.setEffectiveWeight(1.0);
       action.setEffectiveTimeScale(1.0);
       action.clampWhenFinished = false;
       action.paused = false;
@@ -764,21 +765,8 @@ export class BossCharacter {
     this.currentAction = null;
     this.currentActionName = '';
 
-    // 3. Hard bind Idle state without crossfade interpolant leakage
-    let idleAction = this.actions.get('idle');
-    if (!idleAction) {
-      const clip = ModelLoader.findClip(this.rawClips, 'idle');
-      if (clip) idleAction = this.actions.get(clip.name);
-    }
-    if (idleAction) {
-      idleAction.reset();
-      idleAction.setLoop(THREE.LoopRepeat, Infinity);
-      idleAction.setEffectiveWeight(1.0);
-      idleAction.setEffectiveTimeScale(1.0);
-      idleAction.play();
-      this.currentAction = idleAction;
-      this.currentActionName = 'idle';
-    }
+    // 3. Play Idle via playAction so kinematicController and mixer are unified
+    this.playAction('idle', 0.05);
     this.mixer?.update(0);
 
     // 4. Coordinates, rotation & material reset

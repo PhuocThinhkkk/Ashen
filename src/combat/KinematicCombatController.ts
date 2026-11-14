@@ -144,15 +144,22 @@ export class KinematicCombatController {
     }
 
     action.reset();
+    action.enabled = true;
     action.setLoop(
       options?.loop ?? THREE.LoopRepeat,
       options?.loop === THREE.LoopOnce ? 1 : Infinity,
     );
     action.clampWhenFinished = options?.clampWhenFinished ?? false;
-    action.timeScale = options?.timeScale ?? 1.0;
+    action.setEffectiveTimeScale(options?.timeScale ?? 1.0);
 
-    if (this.currentAction) {
+    if (this.currentAction && this.currentAction !== action) {
+      action.setEffectiveWeight(1.0);
       this.currentAction.crossFadeTo(action, crossfadeDuration, true);
+    } else {
+      action.setEffectiveWeight(1.0);
+      if (crossfadeDuration > 0) {
+        action.fadeIn(crossfadeDuration);
+      }
     }
     action.play();
 

@@ -1,8 +1,8 @@
 # Project Handoff: Browser-Based 3D Soulslike Boss Fight
 
-**Date:** Milestone 7 / Phase 1 Complete (AAA Minimalist UI, Deterministic Respawn & Telemetry Profiler)  
-**Engine & Tech Stack:** Three.js (`^0.184.0`), TypeScript (strict mode), Vite (`^8.0.13`), Playwright (`^1.60.0`), Web Audio API, `three.quarks` (`^0.17.1`)  
-**Status:** Unified base models, Mixamo combat kinematics, Elden Ring-style blood spray, pooled planar ground decals, AAA typography-driven dark-fantasy UI (0% emojis), deterministic respawn pipeline, and real-time performance profiler fully implemented and verified. All 34 Playwright automated tests passing with 100% success rate across desktop and mobile.
+**Date:** Milestone 8 / Phase 2 Complete (Lightweight Colyseus Multiplayer, T-Pose Fix & Animation Prewarm)  
+**Engine & Tech Stack:** Three.js (`^0.184.0`), TypeScript (strict mode), Vite (`^8.0.13`), Playwright (`^1.60.0`), Web Audio API, `three.quarks` (`^0.17.1`), Colyseus (`^0.18.12`), `colyseus.js` (`^0.16.22`)  
+**Status:** Unified base models, Mixamo combat kinematics, Elden Ring-style blood spray, pooled planar ground decals, AAA typography-driven dark-fantasy UI (0% emojis), deterministic respawn pipeline, and real-time performance profiler fully implemented and verified. Phase 2 lightweight client-authoritative online multiplayer room system (Create/Join via 6-character room codes) operational with zero T-pose and pre-warmed instant resets.
 
 ---
 
@@ -17,6 +17,7 @@ A single-boss combat experience inspired by Elden Ring's combat feel, running lo
 - **Elden Ring Combat VFX:** Directional arterial blood spray at exact collision points (`three.quarks`), custom GLSL Simplex-noise sword slash ribbons, collision contact sparks, and zero-allocation pooled planar ground crack decals.
 - **Minimalist AAA Dark-Fantasy Aesthetic:** 100% typography-driven (Cinzel serif, Inter body, JetBrains Mono numbers), sharp 1px hairline borders (`#D4AF37`), obsidian glassmorphism, and uniform thin-stroke custom SVGs with zero native emojis.
 - **Deterministic Respawn Pipeline:** Zero-allocation trial reset purging AnimationMixer action weights, kinematic accumulators, decals, ribbons, and camera trauma without page reloads.
+- **Online Multiplayer Duels (Phase 2):** Lightweight client-authoritative room relay with 6-character room codes (e.g., `ASH-402`), 30Hz state updates, and Hermite snapshot interpolation.
 
 ---
 
@@ -79,6 +80,21 @@ A single-boss combat experience inspired by Elden Ring's combat feel, running lo
    - Hard AnimationMixer action purge (`mixer.stopAllAction()`, weight zeroing, and idle bind with `mixer.update(0)`).
    - Zero-allocation VFX pool recycling (decal opacities, shockwaves, ribbons, and spark clouds).
    - Kinematic controller, input buffer, and camera rig trauma reset. Zero memory leaks across repeated respawns.
+
+### Milestone 8 / Phase 2: Lightweight Client-Authoritative Multiplayer & T-Pose Fix (Complete & Verified)
+1. **T-Pose & Animation Smoothness Fix:**
+   - Resolved root cause of T-Pose: eliminated destructive `setEffectiveWeight(0)` calls that zeroed action weights permanently.
+   - In `KinematicCombatController.playAction`, guaranteed `action.enabled = true` and `action.setEffectiveWeight(1.0)` on every playback.
+   - In `prepareMatch`, pre-ticks all action tracks on hidden models so Three.js compiles track interpolants upfront. Key `R` restarts now run at locked 60 FPS with zero T-Pose and zero loading delay.
+2. **Colyseus Multiplayer Relay Server (`server/index.mjs`):**
+   - Lightweight Node.js server with `@colyseus/ws-transport` on port 2567.
+   - 6-character room codes (e.g. `ASH-402`) for easy invite sharing.
+   - Manages Room lifecycle: `LOBBY`, `COMBAT`, `MATCH_OVER`.
+   - Client-authoritative state relay (`PLAYER_STATE` at 30Hz, `COMBAT_HIT` damage claim relay).
+3. **Client Network Systems (`src/network/`):**
+   - `NetworkManager.ts`: Room creation, code joining, ping telemetry, state dispatch.
+   - `RemotePlayerProxy.ts`: 3D interpolated opponent entity rendering full 65-bone armature, weapons, and Hermite/SLERP smoothing.
+   - `UnifiedSettingsModal.ts`: Added **VII. ONLINE DUEL** tab with real-time chamber lobby and status banners.
 
 ---
 

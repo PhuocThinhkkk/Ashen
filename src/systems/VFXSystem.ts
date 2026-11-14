@@ -21,161 +21,10 @@ import {
 } from '../vfx/SlashArcRibbon';
 import { BloodBurstVFX } from '../vfx/BloodBurstVFX';
 import { GroundSlamVFX } from '../vfx/GroundSlamVFX';
+import { SparkBurstVFX } from '../vfx/SparkBurstVFX';
+import { VFXTextureFactory } from '../vfx/VFXTextureFactory';
 import { SettingsManager } from './SettingsManager';
 import type { ActiveVFXCounts } from './PerformanceProfiler';
-
-interface SparkParticle {
-  pos: THREE.Vector3;
-  vel: THREE.Vector3;
-  life: number;
-  maxLife: number;
-  size: number;
-}
-
-class SparkBurst {
-  public active = false;
-  public points: THREE.Points;
-  private geometry: THREE.BufferGeometry;
-  private positions: Float32Array;
-  private colors: Float32Array;
-  private sizes: Float32Array;
-  private particles: SparkParticle[] = [];
-  private readonly maxParticles = 32;
-
-  constructor(scene: THREE.Scene, sparkTexture: THREE.Texture) {
-    this.geometry = new THREE.BufferGeometry();
-    this.positions = new Float32Array(this.maxParticles * 3);
-    this.colors = new Float32Array(this.maxParticles * 3);
-    this.sizes = new Float32Array(this.maxParticles);
-
-    this.geometry.setAttribute('position', new THREE.BufferAttribute(this.positions, 3));
-    this.geometry.setAttribute('color', new THREE.BufferAttribute(this.colors, 3));
-    this.geometry.setAttribute('size', new THREE.BufferAttribute(this.sizes, 1));
-
-    const material = new THREE.PointsMaterial({
-      size: 0.32,
-      map: sparkTexture,
-      transparent: true,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-      vertexColors: true,
-    });
-
-    this.points = new THREE.Points(this.geometry, material);
-    this.points.visible = false;
-    this.points.frustumCulled = false;
-    scene.add(this.points);
-
-    for (let i = 0; i < this.maxParticles; i++) {
-      this.particles.push({
-        pos: new THREE.Vector3(),
-        vel: new THREE.Vector3(),
-        life: 0,
-        maxLife: 0.3,
-        size: 0.22,
-      });
-    }
-  }
-
-  public emit(origin: THREE.Vector3, direction: THREE.Vector3, isHeavy: boolean): void {
-    this.active = true;
-    this.points.visible = true;
-    const count = isHeavy ? this.maxParticles : Math.floor(this.maxParticles * 0.65);
-
-    for (let i = 0; i < count; i++) {
-      const p = this.particles[i];
-      p.pos.copy(origin);
-      p.maxLife = (isHeavy ? 0.32 : 0.22) + Math.random() * 0.12;
-      p.life = p.maxLife;
-      p.size = (isHeavy ? 0.36 : 0.22) * (0.8 + Math.random() * 0.6);
-
-      const speed = (isHeavy ? 9.5 : 6.0) + Math.random() * 5.5;
-      const spreadX = (Math.random() - 0.5) * 1.6;
-      const spreadY = (Math.random() - 0.2) * 1.4;
-      const spreadZ = (Math.random() - 0.5) * 1.6;
-
-      p.vel
-        .copy(direction)
-        .add(new THREE.Vector3(spreadX, spreadY, spreadZ))
-        .normalize()
-        .multiplyScalar(speed);
-    }
-
-    for (let i = count; i < this.maxParticles; i++) {
-      this.particles[i].life = 0;
-      this.sizes[i] = 0;
-    }
-  }
-
-  public update(delta: number): boolean {
-    if (!this.active) return false;
-
-    let anyAlive = false;
-    for (let i = 0; i < this.maxParticles; i++) {
-      const p = this.particles[i];
-      if (p.life > 0) {
-        anyAlive = true;
-        p.life -= delta;
-        p.vel.y -= 9.8 * delta * 0.6;
-        p.pos.addScaledVector(p.vel, delta);
-
-        const progress = 1.0 - Math.max(0, p.life / p.maxLife);
-
-        this.positions[i * 3] = p.pos.x;
-        this.positions[i * 3 + 1] = p.pos.y;
-        this.positions[i * 3 + 2] = p.pos.z;
-
-        if (progress < 0.22) {
-          this.colors[i * 3] = 1.0;
-          this.colors[i * 3 + 1] = 0.98;
-          this.colors[i * 3 + 2] = 0.85;
-        } else if (progress < 0.65) {
-          const t = (progress - 0.22) / 0.43;
-          this.colors[i * 3] = 1.0;
-          this.colors[i * 3 + 1] = 0.88 - t * 0.5;
-          this.colors[i * 3 + 2] = 0.12;
-        } else {
-          const t = (progress - 0.65) / 0.35;
-          this.colors[i * 3] = 0.8 - t * 0.65;
-          this.colors[i * 3 + 1] = 0.2 - t * 0.2;
-          this.colors[i * 3 + 2] = 0.04;
-        }
-
-        this.sizes[i] = p.size * (1.0 - progress * 0.85);
-      } else {
-        this.sizes[i] = 0;
-      }
-    }
-
-    this.geometry.attributes.position.needsUpdate = true;
-    this.geometry.attributes.color.needsUpdate = true;
-    this.geometry.attributes.size.needsUpdate = true;
-
-    if (!anyAlive) {
-      this.active = false;
-      this.points.visible = false;
-    }
-
-    return this.active;
-  }
-
-  public reset(): void {
-    this.active = false;
-    this.points.visible = false;
-    for (let i = 0; i < this.maxParticles; i++) {
-      this.particles[i].life = 0;
-      this.sizes[i] = 0;
-    }
-    this.geometry.attributes.size.needsUpdate = true;
-  }
-
-  public dispose(): void {
-    this.geometry.dispose();
-    if (this.points.material instanceof THREE.Material) {
-      this.points.material.dispose();
-    }
-  }
-}
 
 export class VFXSystem {
   public readonly scene: THREE.Scene;
@@ -184,6 +33,7 @@ export class VFXSystem {
   // Sub-systems
   public readonly bloodVFX: BloodBurstVFX;
   public readonly groundSlamVFX: GroundSlamVFX;
+  public readonly sparkVFX: SparkBurstVFX;
 
   // Slash Arc Ribbon Pool
   private slashArcPool: SlashArcInstance[] = [];
@@ -195,28 +45,23 @@ export class VFXSystem {
   private footDustPool: ParticleSystem[] = [];
   private footDustIndex = 0;
   private readonly footDustPoolSize = 6;
-  private dustTexture: THREE.Texture;
-
-  // Spark burst pool
-  private sparkTexture: THREE.Texture;
-  private sparkPool: SparkBurst[] = [];
+  private footDustMaterial: THREE.MeshBasicMaterial;
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
+    const texFactory = VFXTextureFactory.getInstance();
 
     // 1. Initialize three.quarks BatchedRenderer
     this.batchRenderer = new BatchedRenderer();
+    this.batchRenderer.frustumCulled = false;
     this.scene.add(this.batchRenderer);
 
-    // 2. Shared procedural textures
-    this.sparkTexture = this.createSparkTexture();
-    this.dustTexture = this.createDustTexture();
-
-    // 3. Initialize Modular VFX
-    this.bloodVFX = new BloodBurstVFX(this.batchRenderer);
+    // 2. Initialize Modular Sub-systems
+    this.bloodVFX = new BloodBurstVFX(this.batchRenderer, this.scene);
     this.groundSlamVFX = new GroundSlamVFX(this.scene, this.batchRenderer);
+    this.sparkVFX = new SparkBurstVFX(this.batchRenderer, this.scene);
 
-    // 4. Initialize Elden Ring Sword Slash Arc Ribbon Pool
+    // 3. Initialize Elden Ring Sword Slash Arc Ribbon Pool
     this.slashGeometry = createSlashArcGeometry(0.7, 2.6, Math.PI * 0.8, 44, 4);
     for (let i = 0; i < this.slashArcPoolSize; i++) {
       const arc = new SlashArcInstance(this.slashGeometry);
@@ -224,9 +69,9 @@ export class VFXSystem {
       this.slashArcPool.push(arc);
     }
 
-    // 5. Initialize Foot Dust Kickup Pool with three.quarks
-    const footDustMat = new THREE.MeshBasicMaterial({
-      map: this.dustTexture,
+    // 4. Initialize Foot Dust Kickup Pool with three.quarks
+    this.footDustMaterial = new THREE.MeshBasicMaterial({
+      map: texFactory.getSmokeTexture(),
       transparent: true,
       depthWrite: false,
       blending: THREE.NormalBlending,
@@ -272,19 +117,15 @@ export class VFXSystem {
           },
         ],
         shape: cone,
-        material: footDustMat,
+        material: this.footDustMaterial,
         renderMode: RenderMode.BillBoard,
         worldSpace: true,
         behaviors: [colorRamp, sizeCurve],
       });
 
       this.batchRenderer.addSystem(ps);
+      this.scene.add(ps.emitter);
       this.footDustPool.push(ps);
-    }
-
-    // 6. Spark Burst Pool (GPU points)
-    for (let i = 0; i < 8; i++) {
-      this.sparkPool.push(new SparkBurst(this.scene, this.sparkTexture));
     }
   }
 
@@ -303,11 +144,13 @@ export class VFXSystem {
     }
     this.slashArcIndex = 0;
 
-    for (const burst of this.sparkPool) {
-      burst.reset();
-    }
-
+    this.bloodVFX.reset();
+    this.sparkVFX.reset();
     this.groundSlamVFX.reset();
+    for (const ps of this.footDustPool) {
+      ps.restart();
+    }
+    this.footDustIndex = 0;
   }
 
   /**
@@ -319,17 +162,19 @@ export class VFXSystem {
       if (arc.active) activeSlashArcs++;
     }
 
-    let activeSparks = 0;
-    for (const burst of this.sparkPool) {
-      if (burst.active) activeSparks++;
+    let activeParticles = 0;
+    if (this.batchRenderer && this.batchRenderer.systemToBatchIndex) {
+      for (const system of this.batchRenderer.systemToBatchIndex.keys()) {
+        activeParticles += (system as any).particleNum ?? 0;
+      }
     }
 
     return {
       slashArcs: activeSlashArcs,
-      sparks: activeSparks,
+      sparks: this.sparkVFX.getActiveCount(),
       decals: this.groundSlamVFX.getActiveDecalCount(),
       shockwaves: this.groundSlamVFX.getActiveShockwaveCount(),
-      particles: 0, // three.quarks maintains internal particle counts
+      particles: activeParticles,
     };
   }
 
@@ -345,23 +190,21 @@ export class VFXSystem {
         arc.mesh.visible = true;
       }
 
-      // 2. Spark Bursts
-      for (const burst of this.sparkPool) {
-        burst.points.visible = true;
-      }
-
-      // 3. Ground Slam Decals & Shockwaves
+      // 2. Ground Slam Decals & Shockwaves
       this.groundSlamVFX.prewarm(renderer, camera);
 
-      // 4. Force Three.js shader program compilation
+      // 3. Force Three.js shader program compilation
       renderer.compile(this.scene, camera);
 
-      // 5. Pre-warm three.quarks particle systems (blood & dust) with an off-screen tick
-      // This forces the WebGL driver to link the StretchedBillboard and Billboard programs upfront!
+      // 4. Pre-warm three.quarks particle systems with an off-screen tick
+      // Forces the WebGL driver to link StretchedBillboard, Billboard, Mesh, and HorizontalBillboard programs upfront!
       const dummyOffscreen = new THREE.Vector3(0, -9999, 0);
       const dummyDir = new THREE.Vector3(0, 1, 0);
       this.bloodVFX.emit(dummyOffscreen, dummyDir, false);
       this.spawnFootDustKickup(dummyOffscreen, 2);
+      this.sparkVFX.emit(dummyOffscreen, dummyDir, false);
+      this.triggerGroundSlam(dummyOffscreen);
+
       this.batchRenderer.update(0.016);
       renderer.render(this.scene, camera);
     } catch {
@@ -370,9 +213,7 @@ export class VFXSystem {
       for (const arc of this.slashArcPool) {
         arc.mesh.visible = false;
       }
-      for (const burst of this.sparkPool) {
-        burst.points.visible = false;
-      }
+      this.reset();
     }
   }
 
@@ -388,15 +229,15 @@ export class VFXSystem {
 
     ps.emitter.position.set(position.x, Math.max(0.04, position.y), position.z);
     ps.emitter.rotation.set(-Math.PI / 2 + (Math.random() - 0.5) * 0.2, 0, 0);
+    ps.emitter.updateMatrixWorld(true);
     ps.restart();
   }
 
   /**
-   * Spawns peak velocity sparks at weapon/hand bone.
+   * Spawns peak velocity sparks at weapon/hand bone (disabled for minimal realistic combat).
    */
-  public spawnPeakVelocitySparks(origin: THREE.Vector3, _count = 25, isHeavy = false): void {
-    if (!SettingsManager.getInstance().data.vfx.hitSparks) return;
-    this.spawnHitSparks(origin, new THREE.Vector3(0, 0.8, 0).normalize(), isHeavy);
+  public spawnPeakVelocitySparks(_origin: THREE.Vector3, _count = 25, _isHeavy = false): void {
+    // Disabled: User requested all spark clash VFX removed
   }
 
   /**
@@ -494,7 +335,7 @@ export class VFXSystem {
   }
 
   /**
-   * Spawns heavy colossal ground slam VFX (DecalGeometry crack + shockwave ring + rolling dust).
+   * Spawns heavy colossal ground slam VFX (Decal crack + shockwave + rolling dust + rock debris).
    */
   public triggerGroundSlam(
     impactPoint: THREE.Vector3,
@@ -504,107 +345,33 @@ export class VFXSystem {
   }
 
   /**
-   * Spawns high-energy hit spark burst at the impact contact point.
+   * Spawns high-energy hit spark burst at the impact contact point using three.quarks.
    */
   public spawnHitSparks(origin: THREE.Vector3, direction: THREE.Vector3, isHeavy = false): void {
     if (!SettingsManager.getInstance().data.vfx.hitSparks) return;
-
-    let burst = this.sparkPool.find((b) => !b.active);
-    if (!burst) {
-      burst = this.sparkPool[0]; // Recycle oldest
-    }
-    burst.emit(origin, direction, isHeavy);
+    this.sparkVFX.emit(origin, direction, isHeavy);
   }
 
   public update(delta: number): void {
     // 1. Update three.quarks BatchedRenderer (GPU particles)
     this.batchRenderer.update(delta);
 
-    // 2. Update Ground Slam VFX (shockwaves + decals)
+    // 2. Update Blood Burst VFX (Directional Liquid Whip)
+    this.bloodVFX.update(delta);
+
+    // 3. Update Ground Slam VFX (shockwaves + decals)
     this.groundSlamVFX.update(delta);
 
-    // 3. Update Slash Arc Ribbons
+    // 4. Update Slash Arc Ribbons
     for (const arc of this.slashArcPool) {
       if (arc.active) {
         arc.update(delta);
       }
     }
-
-    // 4. Update Spark Bursts
-    for (const burst of this.sparkPool) {
-      if (burst.active) {
-        burst.update(delta);
-      }
-    }
-  }
-
-  /**
-   * Generates a procedural radial circular glow spark texture in memory.
-   */
-  private createSparkTexture(): THREE.Texture {
-    if (typeof document === 'undefined') {
-      const data = new Uint8Array([255, 240, 180, 255]);
-      return new THREE.DataTexture(data, 1, 1);
-    }
-
-    const size = 64;
-    const canvas = document.createElement('canvas');
-    canvas.width = size;
-    canvas.height = size;
-    const ctx = canvas.getContext('2d')!;
-
-    const grad = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
-    grad.addColorStop(0, 'rgba(255, 255, 255, 1)');
-    grad.addColorStop(0.2, 'rgba(255, 240, 180, 0.95)');
-    grad.addColorStop(0.5, 'rgba(255, 140, 40, 0.45)');
-    grad.addColorStop(1, 'rgba(255, 40, 0, 0)');
-
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, size, size);
-
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.generateMipmaps = false;
-    texture.minFilter = THREE.LinearFilter;
-    texture.magFilter = THREE.LinearFilter;
-    return texture;
-  }
-
-  /**
-   * Generates a procedural soft circular smoke/dust texture in memory.
-   */
-  private createDustTexture(): THREE.Texture {
-    if (typeof document === 'undefined') {
-      const data = new Uint8Array([216, 202, 168, 255]);
-      return new THREE.DataTexture(data, 1, 1);
-    }
-
-    const size = 64;
-    const canvas = document.createElement('canvas');
-    canvas.width = size;
-    canvas.height = size;
-    const ctx = canvas.getContext('2d')!;
-
-    const grad = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
-    grad.addColorStop(0, 'rgba(216, 202, 168, 0.85)');
-    grad.addColorStop(0.35, 'rgba(180, 165, 135, 0.5)');
-    grad.addColorStop(0.7, 'rgba(120, 110, 90, 0.18)');
-    grad.addColorStop(1, 'rgba(60, 55, 45, 0)');
-
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, size, size);
-
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.generateMipmaps = false;
-    texture.minFilter = THREE.LinearFilter;
-    texture.magFilter = THREE.LinearFilter;
-    return texture;
   }
 
   public dispose(): void {
-    for (const burst of this.sparkPool) {
-      burst.dispose();
-    }
-    this.sparkPool = [];
+    this.sparkVFX.dispose();
 
     for (const arc of this.slashArcPool) {
       this.scene.remove(arc.mesh);
@@ -613,12 +380,17 @@ export class VFXSystem {
     this.slashArcPool = [];
     this.slashGeometry.dispose();
 
-    this.sparkTexture.dispose();
-    this.dustTexture.dispose();
+    for (const ps of this.footDustPool) {
+      this.batchRenderer.deleteSystem(ps);
+      if (ps.emitter.parent) ps.emitter.parent.remove(ps.emitter);
+    }
+    this.footDustPool = [];
+    this.footDustMaterial.dispose();
 
     this.bloodVFX.dispose();
     this.groundSlamVFX.dispose();
 
+    VFXTextureFactory.getInstance().dispose();
     this.scene.remove(this.batchRenderer);
   }
 }

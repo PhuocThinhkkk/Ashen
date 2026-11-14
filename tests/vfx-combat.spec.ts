@@ -6,6 +6,8 @@ import { VFXSystem } from '../src/systems/VFXSystem';
 import { createSlashArcGeometry, SlashArcInstance } from '../src/vfx/SlashArcRibbon';
 import { GroundSlamVFX } from '../src/vfx/GroundSlamVFX';
 import { BloodBurstVFX } from '../src/vfx/BloodBurstVFX';
+import { SparkBurstVFX } from '../src/vfx/SparkBurstVFX';
+import { VFXTextureFactory } from '../src/vfx/VFXTextureFactory';
 import { BatchedRenderer } from 'three.quarks';
 
 test.describe('Elden Ring Combat VFX & SFX Architecture', () => {
@@ -51,8 +53,10 @@ test.describe('Elden Ring Combat VFX & SFX Architecture', () => {
   });
 
   test('verifies BloodBurstVFX directional three.quarks particle system initialization', () => {
+    const scene = new THREE.Scene();
     const batchRenderer = new BatchedRenderer();
-    const bloodVfx = new BloodBurstVFX(batchRenderer);
+    scene.add(batchRenderer);
+    const bloodVfx = new BloodBurstVFX(batchRenderer, scene);
 
     // Verify emission along impact direction
     const contactPoint = new THREE.Vector3(0, 1.2, 0);
@@ -63,7 +67,21 @@ test.describe('Elden Ring Combat VFX & SFX Architecture', () => {
     bloodVfx.dispose();
   });
 
-  test('verifies GroundSlamVFX Decal projection, shockwave ring, and rolling dust', () => {
+  test('verifies SparkBurstVFX directional three.quarks needle sparks & embers', () => {
+    const scene = new THREE.Scene();
+    const batchRenderer = new BatchedRenderer();
+    scene.add(batchRenderer);
+    const sparkVfx = new SparkBurstVFX(batchRenderer, scene);
+
+    const origin = new THREE.Vector3(0, 1.0, 0);
+    const dir = new THREE.Vector3(1, 0.5, 0).normalize();
+    expect(() => sparkVfx.emit(origin, dir, true)).not.toThrow();
+
+    batchRenderer.update(0.016);
+    sparkVfx.dispose();
+  });
+
+  test('verifies GroundSlamVFX Decal projection, shockwave ring, rolling dust, and 3D pebble debris', () => {
     const scene = new THREE.Scene();
     const batchRenderer = new BatchedRenderer();
     scene.add(batchRenderer);
@@ -89,6 +107,34 @@ test.describe('Elden Ring Combat VFX & SFX Architecture', () => {
     floorGeo.dispose();
   });
 
+  test('verifies VFXTextureFactory generates valid textures', () => {
+    const factory = VFXTextureFactory.getInstance();
+    expect(factory.getSmokeTexture()).toBeDefined();
+    expect(factory.getDropletStreakTexture()).toBeDefined();
+    expect(factory.getBloodSplatTexture()).toBeDefined();
+    expect(factory.getBloodParticleTexture()).toBeDefined();
+    expect(factory.getSparkStreakTexture()).toBeDefined();
+    expect(factory.getShockwaveRingTexture()).toBeDefined();
+  });
+
+  test('verifies all 5 CC0 VFX texture assets exist in public/textures/vfx/', () => {
+    const vfxDir = path.resolve('public/textures/vfx');
+    const requiredTextures = [
+      'smoke_soft.png',
+      'droplet_streak.png',
+      'blood_splat.png',
+      'spark_streak.png',
+      'shockwave_ring.png',
+    ];
+
+    for (const name of requiredTextures) {
+      const full = path.join(vfxDir, name);
+      expect(fs.existsSync(full)).toBe(true);
+      const stat = fs.statSync(full);
+      expect(stat.size).toBeGreaterThan(100);
+    }
+  });
+
   test('verifies VFXSystem orchestrates all modular VFX systems without three-nebula', () => {
     const scene = new THREE.Scene();
     const vfx = new VFXSystem(scene);
@@ -96,6 +142,7 @@ test.describe('Elden Ring Combat VFX & SFX Architecture', () => {
     expect(vfx.batchRenderer).toBeDefined();
     expect(vfx.bloodVFX).toBeDefined();
     expect(vfx.groundSlamVFX).toBeDefined();
+    expect(vfx.sparkVFX).toBeDefined();
 
     // Verify calling all public VFX APIs
     expect(() => {
@@ -106,6 +153,10 @@ test.describe('Elden Ring Combat VFX & SFX Architecture', () => {
       vfx.spawnBloodBurst(new THREE.Vector3(0, 1, 0), new THREE.Vector3(1, 0, 0), true);
       vfx.triggerGroundSlam(new THREE.Vector3(0, 0, 0));
       vfx.update(0.016);
+      const counts = vfx.getActiveCounts();
+      expect(counts).toBeDefined();
+      expect(typeof counts.particles).toBe('number');
+      expect(counts.particles).toBeGreaterThanOrEqual(0);
     }).not.toThrow();
 
     vfx.dispose();

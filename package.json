@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
+    "server": "node server/index.mjs",
     "build": "tsc && vite build",
     "preview": "vite preview --host 127.0.0.1",
     "test": "playwright test",
@@ -21,6 +22,9 @@
     "inspect:canvas": "node scripts/inspect-threejs-canvas.mjs"
   },
   "dependencies": {
+    "@colyseus/ws-transport": "^0.18.5",
+    "colyseus": "^0.18.12",
+    "colyseus.js": "^0.16.22",
     "lil-gui": "^0.21.0",
     "three": "^0.184.0",
     "three.quarks": "^0.17.1"

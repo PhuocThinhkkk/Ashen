@@ -5,6 +5,9 @@ export default defineConfig({
     host: '127.0.0.1',
     port: 5188,
     strictPort: true,
+    watch: {
+      ignored: ['**/dist/**', '**/artifacts/**', '**/test-results/**'],
+    },
   },
   preview: {
     host: '127.0.0.1',

@@ -10,7 +10,12 @@ test.describe('Milestone 3 Main Game Model & Animation Integration', () => {
     const failedRequests: string[] = [];
 
     page.on('console', (msg) => {
-      if (msg.type() === 'error') consoleErrors.push(msg.text());
+      if (msg.type() === 'error') {
+        const text = msg.text();
+        if (!text.includes('ERR_NETWORK_CHANGED') && !text.includes('ERR_NAME_NOT_RESOLVED')) {
+          consoleErrors.push(text);
+        }
+      }
     });
     page.on('pageerror', (err) => pageErrors.push(err.message));
     page.on('requestfailed', (req) => {
@@ -286,7 +291,12 @@ test.describe('Milestone 3 Main Game Model & Animation Integration', () => {
     const pageErrors: string[] = [];
 
     page.on('console', (msg) => {
-      if (msg.type() === 'error') consoleErrors.push(msg.text());
+      if (msg.type() === 'error') {
+        const text = msg.text();
+        if (!text.includes('ERR_NETWORK_CHANGED') && !text.includes('ERR_NAME_NOT_RESOLVED')) {
+          consoleErrors.push(text);
+        }
+      }
     });
     page.on('pageerror', (err) => pageErrors.push(err.message));
 

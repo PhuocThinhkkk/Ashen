@@ -58,7 +58,9 @@ interface ThreeGameTestHooks {
   triggerBossAttack?(attackKey: string): void;
   triggerGroundSlam?(pos?: any): void;
   triggerBloodBurst?(pos?: any, dir?: any): void;
+  triggerHitSparks?(pos?: any, dir?: any): void;
   triggerSlashArc?(origin?: any, rotation?: any, color?: any): void;
+  getVfxSystem?(): any;
 }
 
 interface Window {

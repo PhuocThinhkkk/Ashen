@@ -14,6 +14,8 @@ import { Arena } from '../world/Arena';
 import { SettingsManager, type ShadowQuality } from '../systems/SettingsManager';
 import { PerformanceProfiler } from '../systems/PerformanceProfiler';
 import { UnifiedSettingsModal } from '../ui/UnifiedSettingsModal';
+import { NetworkManager, type RemoteHitData } from '../network/NetworkManager';
+import { RemotePlayerProxy } from '../network/RemotePlayerProxy';
 
 export const AVAILABLE_PLAYER_MODELS = [
   { id: 'knight', name: 'Knight' },
@@ -42,6 +44,12 @@ export class Game {
 
   private readonly settingsManager = SettingsManager.getInstance();
   private readonly profiler = PerformanceProfiler.getInstance();
+  private readonly network = NetworkManager.getInstance();
+
+  private remotePlayer: RemotePlayerProxy | null = null;
+  public isMultiplayerDuel = false;
+  private networkSendTimer = 0;
+  private opponentSessionId = '';
 
   private moonLight!: THREE.DirectionalLight;
 
@@ -148,6 +156,7 @@ export class Game {
 
     this.resetRun();
     this.installTestHooks();
+    this.setupNetworkHandlers();
 
     // Trigger Pre-match Preparation and Resource Warm-Up
     void this.prepareMatch();
@@ -176,6 +185,22 @@ export class Game {
       await Promise.all([this.player.loadPromise, this.boss.loadPromise]);
 
       setProgress(60, 'Pre-warming WebGL Shaders, Shadows & VFX Pools...');
+      // Pre-warm all AnimationMixer action tracks upfront so first-time action plays have zero binding hitch
+      if (this.player.mixer) {
+        for (const action of (this.player as unknown as { actions: Map<string, THREE.AnimationAction> }).actions.values()) {
+          action.play();
+          action.setEffectiveWeight(0.0001);
+        }
+        this.player.mixer.update(0.001);
+      }
+      if (this.boss.mixer) {
+        for (const action of (this.boss as unknown as { actions: Map<string, THREE.AnimationAction> }).actions.values()) {
+          action.play();
+          action.setEffectiveWeight(0.0001);
+        }
+        this.boss.mixer.update(0.001);
+      }
+
       this.resetRun();
       this.vfx.prewarm(this.renderer, this.camera);
       this.renderer.compile(this.scene, this.camera);
@@ -197,6 +222,106 @@ export class Game {
     }
 
     this.publishDiagnostics();
+  }
+
+  private setupNetworkHandlers(): void {
+    this.network.onMatchStart = (data) => {
+      void this.startMultiplayerDuel(data);
+    };
+
+    this.network.onRemoteUpdate = (data) => {
+      if (this.remotePlayer && this.isMultiplayerDuel) {
+        this.remotePlayer.applyRemoteState(data);
+      }
+    };
+
+    this.network.onCombatHit = (hitData) => {
+      this.handleRemoteCombatHit(hitData);
+    };
+
+    this.network.onMatchOver = (data) => {
+      this.handleMultiplayerMatchOver(data);
+    };
+
+    this.network.onOpponentDisconnect = () => {
+      this.handleOpponentDisconnect();
+    };
+  }
+
+  public async startMultiplayerDuel(data: { p1SessionId: string; p2SessionId: string | null }): Promise<void> {
+    this.isMultiplayerDuel = true;
+    this.boss.group.visible = false;
+    this.settingsModal.close();
+
+    const isHost = this.network.mySessionId === data.p1SessionId;
+    this.opponentSessionId = isHost ? (data.p2SessionId || '') : data.p1SessionId;
+
+    // Reset local player to dedicated spawn
+    const mySpawn = isHost ? new THREE.Vector3(0, 0, 7) : new THREE.Vector3(0, 0, -7);
+    this.player.reset(mySpawn);
+    if (!isHost) {
+      this.player.group.rotation.set(0, Math.PI, 0);
+    }
+
+    // Spawn or update remote player proxy
+    const oppSpawn = isHost ? new THREE.Vector3(0, 0, -7) : new THREE.Vector3(0, 0, 7);
+    if (!this.remotePlayer) {
+      this.remotePlayer = new RemotePlayerProxy(isHost ? 'samurai' : 'knight');
+      this.remotePlayer.setVfx(this.vfx);
+      this.scene.add(this.remotePlayer.group);
+    }
+    this.remotePlayer.group.visible = true;
+    this.remotePlayer.reset(oppSpawn);
+
+    // Update camera to target remote opponent
+    this.cameraRig.setLockedTarget(this.remotePlayer.group.position);
+    this.cameraRig.snapTo(this.player.group.position, this.arena.radius);
+    this.hud.reset();
+  }
+
+  private handleRemoteCombatHit(hitData: RemoteHitData): void {
+    const contact = new THREE.Vector3(hitData.hitPoint.x, hitData.hitPoint.y, hitData.hitPoint.z);
+    const dir = new THREE.Vector3(hitData.hitDir.x, hitData.hitDir.y, hitData.hitDir.z);
+
+    this.vfx.spawnBloodBurst(contact, dir, hitData.isHeavy);
+
+    // If I was the target, take damage locally
+    if (hitData.targetSessionId === this.network.mySessionId) {
+      this.player.takeDamage(hitData.damage, hitData.isHeavy);
+      const screenPos = this.projectToScreen(this.player.group.position, 1.2);
+      this.hud.spawnDamageNumber(hitData.damage, screenPos.x, screenPos.y, true);
+      this.audio.hitConfirm(hitData.isHeavy);
+      this.audio.damageTaken(hitData.isHeavy, false);
+      if (this.settingsManager.data.vfx.cameraShake) {
+        this.cameraRig.addShake(hitData.isHeavy ? 0.42 : 0.22);
+      }
+      this.hitstopTimer = 0.05;
+    } else if (this.remotePlayer) {
+      // Opponent was target
+      this.remotePlayer.hp = Math.max(0, this.remotePlayer.hp - hitData.damage);
+      const screenPos = this.projectToScreen(this.remotePlayer.group.position, 1.2);
+      this.hud.spawnDamageNumber(hitData.damage, screenPos.x, screenPos.y, false);
+      this.audio.hitConfirm(hitData.isHeavy);
+      this.audio.damageTaken(hitData.isHeavy, true);
+    }
+  }
+
+  private handleMultiplayerMatchOver(data: { winnerSessionId: string }): void {
+    const won = data.winnerSessionId === this.network.mySessionId;
+    if (won) {
+      this.audio.victoryStinger();
+    } else {
+      this.audio.deathStinger();
+    }
+  }
+
+  private handleOpponentDisconnect(): void {
+    if (this.remotePlayer) {
+      this.remotePlayer.group.visible = false;
+    }
+    this.isMultiplayerDuel = false;
+    this.boss.group.visible = true;
+    this.resetRun();
   }
 
   private applySettings(): void {
@@ -274,6 +399,11 @@ export class Game {
   }
 
   dispose(): void {
+    this.network.leaveRoom();
+    if (this.remotePlayer) {
+      this.remotePlayer.dispose();
+      this.remotePlayer = null;
+    }
     this.loop.stop();
     this.input.dispose();
     this.audio.dispose();
@@ -358,25 +488,33 @@ export class Game {
     }
 
     // 2. Lock-On Management
-    if (this.combatInputs.toggleLockOn && this.boss.state !== 'dead') {
-      const locked = this.cameraRig.toggleLockOn(this.boss.group.position);
+    const targetGroup = this.isMultiplayerDuel && this.remotePlayer
+      ? this.remotePlayer.group
+      : this.boss.group;
+    const targetPos = targetGroup.position;
+    const isTargetDead = this.isMultiplayerDuel && this.remotePlayer
+      ? this.remotePlayer.hp <= 0
+      : this.boss.state === 'dead';
+
+    if (this.combatInputs.toggleLockOn && !isTargetDead) {
+      const locked = this.cameraRig.toggleLockOn(targetPos);
       if (!locked) {
         this.cameraRig.setLockedTarget(null);
       }
     }
 
-    // Break lock-on if boss dead or too far
+    // Break lock-on if target dead or too far
     if (this.cameraRig.isLockedOn) {
-      const dist = this.player.group.position.distanceTo(this.boss.group.position);
-      if (this.boss.state === 'dead' || dist > 26.0) {
+      const dist = this.player.group.position.distanceTo(targetPos);
+      if (isTargetDead || dist > 26.0) {
         this.cameraRig.setLockedTarget(null);
       } else {
-        this.cameraRig.setLockedTarget(this.boss.group.position);
+        this.cameraRig.setLockedTarget(targetPos);
       }
     }
 
     // 3. Update Entities
-    const lockedTargetPos = this.cameraRig.isLockedOn ? this.boss.group.position : null;
+    const lockedTargetPos = this.cameraRig.isLockedOn ? targetPos : null;
 
     this.player.update(
       simDelta,
@@ -387,20 +525,59 @@ export class Game {
       this.arena.radius,
     );
 
-    this.boss.update(simDelta, elapsed, this.player.group.position, this.arena.radius);
-    this.arena.update(simDelta, elapsed);
+    if (this.isMultiplayerDuel && this.remotePlayer) {
+      this.remotePlayer.update(simDelta);
 
-    // Entity collision separation
-    const sepX = this.player.group.position.x - this.boss.group.position.x;
-    const sepZ = this.player.group.position.z - this.boss.group.position.z;
-    const sepDistSq = sepX * sepX + sepZ * sepZ;
-    const minDist = this.player.radius + this.boss.radius;
-    if (sepDistSq < minDist * minDist && sepDistSq > 0.0001) {
-      const sepDist = Math.sqrt(sepDistSq);
-      const push = minDist - sepDist;
-      this.player.group.position.x += (sepX / sepDist) * push;
-      this.player.group.position.z += (sepZ / sepDist) * push;
+      // Entity collision separation (player vs remote player)
+      const sepX = this.player.group.position.x - this.remotePlayer.group.position.x;
+      const sepZ = this.player.group.position.z - this.remotePlayer.group.position.z;
+      const sepDistSq = sepX * sepX + sepZ * sepZ;
+      const minDist = this.player.radius + this.remotePlayer.radius;
+      if (sepDistSq < minDist * minDist && sepDistSq > 0.0001) {
+        const sepDist = Math.sqrt(sepDistSq);
+        const push = minDist - sepDist;
+        this.player.group.position.x += (sepX / sepDist) * push;
+        this.player.group.position.z += (sepZ / sepDist) * push;
+      }
+
+      // 30Hz Network State Relay
+      this.networkSendTimer += delta;
+      if (this.networkSendTimer >= 0.033) {
+        this.networkSendTimer = 0;
+        this.network.sendPlayerState({
+          x: this.player.group.position.x,
+          y: this.player.group.position.y,
+          z: this.player.group.position.z,
+          rotY: this.player.group.rotation.y,
+          velX: this.player.velocity.x,
+          velZ: this.player.velocity.z,
+          state: this.player.state,
+          actionName: this.player.currentActionName,
+          attackPhase: this.player.attackPhase,
+          isInvulnerable: this.player.isInvulnerable,
+          hp: this.player.hp,
+          maxHp: this.player.maxHp,
+          stamina: this.player.stamina,
+          maxStamina: this.player.maxStamina,
+        });
+      }
+    } else {
+      this.boss.update(simDelta, elapsed, this.player.group.position, this.arena.radius);
+
+      // Entity collision separation (player vs boss)
+      const sepX = this.player.group.position.x - this.boss.group.position.x;
+      const sepZ = this.player.group.position.z - this.boss.group.position.z;
+      const sepDistSq = sepX * sepX + sepZ * sepZ;
+      const minDist = this.player.radius + this.boss.radius;
+      if (sepDistSq < minDist * minDist && sepDistSq > 0.0001) {
+        const sepDist = Math.sqrt(sepDistSq);
+        const push = minDist - sepDist;
+        this.player.group.position.x += (sepX / sepDist) * push;
+        this.player.group.position.z += (sepZ / sepDist) * push;
+      }
     }
+
+    this.arena.update(simDelta, elapsed);
 
     // 4. Combat Hit Resolution
     this.resolveCombatCollisions();
@@ -417,8 +594,12 @@ export class Game {
     // 8. Update HUD
     let screenReticle: THREE.Vector2 | null = null;
     if (this.cameraRig.isLockedOn) {
-      screenReticle = this.projectToScreen(this.boss.group.position, 1.8);
+      screenReticle = this.projectToScreen(targetPos, 1.8);
     }
+
+    const oppHp = this.isMultiplayerDuel && this.remotePlayer ? this.remotePlayer.hp : this.boss.hp;
+    const oppMaxHp = this.isMultiplayerDuel && this.remotePlayer ? this.remotePlayer.maxHp : this.boss.maxHp;
+    const isOppDead = this.isMultiplayerDuel && this.remotePlayer ? this.remotePlayer.hp <= 0 : this.boss.state === 'dead';
 
     this.hud.update(
       delta,
@@ -426,12 +607,12 @@ export class Game {
       this.player.maxHp,
       this.player.stamina,
       this.player.maxStamina,
-      this.boss.hp,
-      this.boss.maxHp,
+      oppHp,
+      oppMaxHp,
       this.cameraRig.isLockedOn,
       screenReticle,
       this.player.state === 'dead',
-      this.boss.state === 'dead',
+      isOppDead,
     );
 
     this.profiler.markUpdateEnd();
@@ -439,6 +620,50 @@ export class Game {
   }
 
   private resolveCombatCollisions(): void {
+    if (this.isMultiplayerDuel && this.remotePlayer && this.remotePlayer.hp > 0) {
+      const playerHitboxActive = this.player.isHitboxActive();
+      if (
+        this.player.state === 'attack' &&
+        (this.player.attackPhase === 'active' || playerHitboxActive) &&
+        this.player.currentAttack &&
+        !this.player.hasHitCurrentSwing
+      ) {
+        const hit = checkAttackHit(
+          this.player.group.position,
+          this.player.group.rotation.y,
+          this.player.currentAttack,
+          this.remotePlayer.group.position,
+          this.remotePlayer.radius,
+          this.remotePlayer.isInvulnerable,
+        );
+
+        if (hit.hit) {
+          this.player.hasHitCurrentSwing = true;
+          const hitPoint = hit.contactPoint || this.player.getHitboxWorldPosition();
+          const fwdAngle = this.player.group.rotation.y;
+          const hitDir = new THREE.Vector3(-Math.sin(fwdAngle), 0.25, -Math.cos(fwdAngle)).normalize();
+
+          this.network.sendCombatHit({
+            targetSessionId: this.opponentSessionId,
+            damage: hit.damage,
+            isHeavy: hit.isHeavy,
+            hitPoint: { x: hitPoint.x, y: hitPoint.y, z: hitPoint.z },
+            hitDir: { x: hitDir.x, y: hitDir.y, z: hitDir.z },
+          });
+
+          this.vfx.spawnBloodBurst(hitPoint, hitDir, hit.isHeavy);
+          this.audio.hitConfirm(hit.isHeavy);
+          this.audio.damageTaken(hit.isHeavy, true);
+
+          if (this.settingsManager.data.vfx.cameraShake) {
+            this.cameraRig.addShake(hit.isHeavy ? 0.32 : 0.16);
+          }
+          this.hitstopTimer = 0.05;
+        }
+      }
+      return;
+    }
+
     // A. Player Attack Hits Boss
     const playerHitboxActive = this.player.isHitboxActive();
     if (
@@ -465,12 +690,15 @@ export class Game {
         const screenPos = this.projectToScreen(this.boss.group.position, 1.5);
         this.hud.spawnDamageNumber(hit.damage, screenPos.x, screenPos.y, false);
 
-        // Combat VFX: Hit sparks and VISCERAL BLOOD SPLATTER (No Hit Flash)
+        // Combat VFX: Minimal Elden Ring blade-slash blood spit (No sparks, No ground decal)
         const hitPoint = hit.contactPoint || this.player.getHitboxWorldPosition();
         const fwdAngle = this.player.group.rotation.y;
-        const hitDir = new THREE.Vector3(-Math.sin(fwdAngle), 0.25, -Math.cos(fwdAngle)).normalize();
+        const hitDir = new THREE.Vector3(
+          Math.cos(fwdAngle) * 0.75 - Math.sin(fwdAngle) * 0.35,
+          0.15,
+          -Math.sin(fwdAngle) * 0.75 - Math.cos(fwdAngle) * 0.35,
+        ).normalize();
 
-        this.vfx.spawnHitSparks(hitPoint, hitDir, hit.isHeavy);
         this.vfx.spawnBloodBurst(hitPoint, hitDir, hit.isHeavy);
 
         this.profiler.markCombatEvent('PLAYER_HIT_BOSS', { damage: hit.damage, isHeavy: hit.isHeavy });
@@ -524,12 +752,15 @@ export class Game {
           const screenPos = this.projectToScreen(this.player.group.position, 1.2);
           this.hud.spawnDamageNumber(hit.damage, screenPos.x, screenPos.y, true);
 
-          // Combat VFX: Hit sparks and VISCERAL BLOOD SPLATTER (No Hit Flash)
+          // Combat VFX: Minimal Elden Ring blade-slash blood spit (No sparks, No ground decal)
           const hitPoint = hit.contactPoint || this.player.group.position.clone().add(new THREE.Vector3(0, 1.1, 0));
           const fwdAngle = this.boss.group.rotation.y;
-          const hitDir = new THREE.Vector3(-Math.sin(fwdAngle), 0.25, -Math.cos(fwdAngle)).normalize();
+          const hitDir = new THREE.Vector3(
+            -Math.cos(fwdAngle) * 0.75 - Math.sin(fwdAngle) * 0.35,
+            0.15,
+            Math.sin(fwdAngle) * 0.75 - Math.cos(fwdAngle) * 0.35,
+          ).normalize();
 
-          this.vfx.spawnHitSparks(hitPoint, hitDir, true);
           this.vfx.spawnBloodBurst(hitPoint, hitDir, true);
 
           this.profiler.markCombatEvent('BOSS_HIT_PLAYER', { damage: hit.damage });
@@ -589,6 +820,10 @@ export class Game {
   }
 
   public resetRun(): void {
+    if (this.isMultiplayerDuel && this.network.isConnected) {
+      this.network.rematch();
+      return;
+    }
     this.hitstopTimer = 0;
     this.input.reset();
     this.vfx.reset();
@@ -679,20 +914,36 @@ export class Game {
           (this.boss as unknown as { chooseAttack: (a: unknown) => void }).chooseAttack(atk);
         }
       },
-      triggerGroundSlam: (pos?: THREE.Vector3) => {
-        const p = pos || this.boss.group.position.clone().add(new THREE.Vector3(0, 0, 2));
+      triggerGroundSlam: (pos?: any) => {
+        const p = pos
+          ? (pos instanceof THREE.Vector3 ? pos : new THREE.Vector3(pos.x, pos.y, pos.z))
+          : this.boss.group.position.clone().add(new THREE.Vector3(0, 0, 2));
         this.vfx.triggerGroundSlam(p, this.arena.floorMesh);
       },
-      triggerBloodBurst: (pos?: THREE.Vector3, dir?: THREE.Vector3) => {
-        const p = pos || this.player.group.position.clone().add(new THREE.Vector3(0, 1, 0));
-        const d = dir || new THREE.Vector3(0, 0.5, 1);
+      triggerBloodBurst: (pos?: any, dir?: any) => {
+        const p = pos
+          ? (pos instanceof THREE.Vector3 ? pos : new THREE.Vector3(pos.x, pos.y, pos.z))
+          : this.player.group.position.clone().add(new THREE.Vector3(0, 1, 0));
+        const d = dir
+          ? (dir instanceof THREE.Vector3 ? dir : new THREE.Vector3(dir.x, dir.y, dir.z))
+          : new THREE.Vector3(0, 0.5, 1);
         this.vfx.spawnBloodBurst(p, d, true);
+      },
+      triggerHitSparks: (pos?: any, dir?: any) => {
+        const p = pos
+          ? (pos instanceof THREE.Vector3 ? pos : new THREE.Vector3(pos.x, pos.y, pos.z))
+          : this.player.group.position.clone().add(new THREE.Vector3(0, 1, 0));
+        const d = dir
+          ? (dir instanceof THREE.Vector3 ? dir : new THREE.Vector3(dir.x, dir.y, dir.z))
+          : new THREE.Vector3(0, 0.8, 0.6).normalize();
+        this.vfx.spawnHitSparks(p, d, true);
       },
       triggerSlashArc: (origin?: THREE.Vector3, rotation?: THREE.Euler, color?: number | string) => {
         const o = origin || this.player.group.position.clone().add(new THREE.Vector3(0, 1, 0));
         const r = rotation || new THREE.Euler(0, this.player.group.rotation.y, 0);
         this.vfx.spawnSlashArc(o, r, 1.2, color || 0xffe066);
       },
+      getVfxSystem: () => this.vfx,
     };
   }
 

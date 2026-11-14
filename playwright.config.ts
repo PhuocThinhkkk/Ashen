@@ -16,7 +16,7 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
   webServer: {
-    command: 'npm run dev',
+    command: `"${process.execPath}" node_modules/vite/bin/vite.js --host 127.0.0.1 --port 5188`,
     url: 'http://127.0.0.1:5188',
     // Reuse a dev server that is already running for the canvas inspector;
     // CI always starts a fresh one.
