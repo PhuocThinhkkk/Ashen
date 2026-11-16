@@ -173,7 +173,7 @@ export class RawAnimationStage {
 
     if (!this.axeObject) {
       onStatusUpdate?.('Loading Sword.glb...');
-      const swordGltf = await this.loader.loadAsync('/assets/weapons/Sword.glb');
+      const swordGltf = await this.loader.loadAsync('/assets/weapons/chevalier_sword.glb');
       this.axeObject = swordGltf.scene;
       this.axeObject.castShadow = true;
       this.axeObject.traverse((obj) => {

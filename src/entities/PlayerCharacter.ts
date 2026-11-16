@@ -116,9 +116,8 @@ export class PlayerCharacter {
       this.handBone = null;
     }
 
-    // 3. Ensure Weapon (Sword.glb) is loaded
     if (!this.swordObject) {
-      const swordGltf = await this.loader.loadAsync('/assets/weapons/Sword.glb');
+      const swordGltf = await this.loader.loadAsync('/assets/weapons/chevalier_sword.glb');
       this.swordObject = swordGltf.scene;
       this.swordObject.traverse((obj) => {
         if (obj instanceof THREE.Mesh) {

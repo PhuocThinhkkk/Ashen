@@ -12,23 +12,23 @@ export interface WeaponSocketTransform {
 
 
 export const DEFAULT_PLAYER_WEAPON_SOCKET: WeaponSocketTransform = {
-  posX: -14.3,
-  posY: 21.5,
-  posZ: 10.1,
-  rotX: 180,
-  rotY: -15,
-  rotZ: -112,
-  scale: 39,
+  posX: 60,
+  posY: 44.5,
+  posZ: 6.8,
+  rotX: -90,
+  rotY: 72,
+  rotZ: -27,
+  scale: 105,
 };
 
 export const DEFAULT_BOSS_WEAPON_SOCKET: WeaponSocketTransform = {
-  posX: 30.5,
-  posY: 33.5,
-  posZ: 4.5,
-  rotX: -94,
-  rotY: -19,
-  rotZ: -90,
-  scale: 100,
+  posX: -16.1,
+  posY: 13.9,
+  posZ: 7.4,
+  rotX: -27,
+  rotY: -1,
+  rotZ: -78,
+  scale: 142,
 };
 
 export function loadSocketConfig(key: string, fallback: WeaponSocketTransform): WeaponSocketTransform {

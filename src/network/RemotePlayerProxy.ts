@@ -74,7 +74,7 @@ export class RemotePlayerProxy {
     // 1. Weapon GLB
     if (!this.swordObject) {
       const loader = new GLTFLoader();
-      const swordGltf = await loader.loadAsync('/assets/weapons/Sword.glb');
+      const swordGltf = await loader.loadAsync('/assets/weapons/chevailer_sword.glb');
       this.swordObject = swordGltf.scene;
       this.swordObject.traverse((obj) => {
         if (obj instanceof THREE.Mesh) obj.castShadow = true;
