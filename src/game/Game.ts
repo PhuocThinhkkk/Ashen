@@ -14,6 +14,7 @@ import { Arena } from '../world/Arena';
 import { SettingsManager, type ShadowQuality } from '../systems/SettingsManager';
 import { PerformanceProfiler } from '../systems/PerformanceProfiler';
 import { UnifiedSettingsModal } from '../ui/UnifiedSettingsModal';
+import { MobileDeviceController } from '../ui/MobileDeviceController';
 import { NetworkManager, type RemoteHitData } from '../network/NetworkManager';
 import { RemotePlayerProxy } from '../network/RemotePlayerProxy';
 
@@ -41,6 +42,7 @@ export class Game {
   private readonly vfx: VFXSystem;
   private readonly hud: Hud;
   private readonly settingsModal: UnifiedSettingsModal;
+  private readonly mobileDeviceController: MobileDeviceController;
 
   private readonly settingsManager = SettingsManager.getInstance();
   private readonly profiler = PerformanceProfiler.getInstance();
@@ -139,6 +141,10 @@ export class Game {
       },
     });
 
+    this.mobileDeviceController = new MobileDeviceController({
+      onRestart: () => this.resetRun(),
+    });
+
     this.buildScene();
     this.applySettings();
 
@@ -201,7 +207,9 @@ export class Game {
         this.boss.mixer.update(0.001);
       }
 
-      this.resetRun();
+      if (this.player.state !== 'dead' && this.boss.state !== 'dead') {
+        this.resetRun();
+      }
       this.vfx.prewarm(this.renderer, this.camera);
       this.renderer.compile(this.scene, this.camera);
       this.render();
@@ -409,6 +417,7 @@ export class Game {
     this.audio.dispose();
     this.vfx.dispose();
     this.settingsModal.dispose();
+    this.mobileDeviceController.dispose();
     this.arena.dispose();
     this.player.dispose();
     this.boss.dispose();
@@ -985,6 +994,9 @@ export class Game {
         this.vfx.spawnSlashArc(o, r, 1.2, color || 0xffe066);
       },
       getVfxSystem: () => this.vfx,
+      triggerRestart: () => this.resetRun(),
+      getInputController: () => this.input,
+      getMobileDeviceController: () => this.mobileDeviceController,
     };
   }
 
@@ -1027,7 +1039,7 @@ export class Game {
         activeClip: this.boss.currentActionName,
         modelId: this.boss.modelId,
       },
-      assetsLoaded: this.player.isLoaded && this.boss.isLoaded,
+      assetsLoaded: this.player.isLoaded && this.boss.isLoaded && this.isReady,
       renderer: {
         calls: info.render.calls,
         triangles: info.render.triangles,

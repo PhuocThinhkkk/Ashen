@@ -61,6 +61,9 @@ interface ThreeGameTestHooks {
   triggerHitSparks?(pos?: any, dir?: any): void;
   triggerSlashArc?(origin?: any, rotation?: any, color?: any): void;
   getVfxSystem?(): any;
+  triggerRestart?(): void;
+  getInputController?(): any;
+  getMobileDeviceController?(): any;
 }
 
 interface Window {

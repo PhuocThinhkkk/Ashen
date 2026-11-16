@@ -22,6 +22,33 @@ export class InputController {
   private lockOnTriggered = false;
   private restartTriggered = false;
 
+  // Touch states
+  private joystickPointerId: number | null = null;
+  private joystickCenter = new THREE.Vector2();
+  private joystickSprint = false;
+  private touchSprintButton = false;
+
+  // Touch camera look
+  private cameraPointerId: number | null = null;
+  private lastCameraTouchX = 0;
+  private lastCameraTouchY = 0;
+
+  // DOM Elements cached for touch
+  private touchStickEl: HTMLElement | null = null;
+  private touchKnobEl: HTMLElement | null = null;
+  private touchAttackBtn: HTMLElement | null = null;
+  private touchHeavyBtn: HTMLElement | null = null;
+  private touchDodgeBtn: HTMLElement | null = null;
+  private touchLockBtn: HTMLElement | null = null;
+  private touchSprintBtn: HTMLElement | null = null;
+
+  // Restart buttons and overlays
+  private quickRestartBtn: HTMLElement | null = null;
+  private deathRestartBtn: HTMLElement | null = null;
+  private victoryRestartBtn: HTMLElement | null = null;
+  private deathOverlay: HTMLElement | null = null;
+  private victoryOverlay: HTMLElement | null = null;
+
   public mouseDeltaX = 0;
   public mouseDeltaY = 0;
   public isPointerLocked = false;
@@ -88,6 +115,35 @@ export class InputController {
     }
   };
 
+  // Canvas touch look handlers
+  private readonly onCanvasPointerDown = (event: PointerEvent) => {
+    if (event.pointerType === 'touch') {
+      // If user touches the right side of the screen, allow camera orbit
+      if (this.cameraPointerId === null && event.clientX > window.innerWidth * 0.3) {
+        this.cameraPointerId = event.pointerId;
+        this.lastCameraTouchX = event.clientX;
+        this.lastCameraTouchY = event.clientY;
+      }
+    }
+  };
+
+  private readonly onCanvasPointerMove = (event: PointerEvent) => {
+    if (event.pointerId === this.cameraPointerId) {
+      const dx = event.clientX - this.lastCameraTouchX;
+      const dy = event.clientY - this.lastCameraTouchY;
+      this.lastCameraTouchX = event.clientX;
+      this.lastCameraTouchY = event.clientY;
+      this.mouseDeltaX += dx * 1.6;
+      this.mouseDeltaY += dy * 1.6;
+    }
+  };
+
+  private readonly onCanvasPointerUp = (event: PointerEvent) => {
+    if (event.pointerId === this.cameraPointerId) {
+      this.cameraPointerId = null;
+    }
+  };
+
   constructor(private readonly canvas: HTMLCanvasElement) {
     window.addEventListener('keydown', this.onKeyDown);
     window.addEventListener('keyup', this.onKeyUp);
@@ -96,10 +152,222 @@ export class InputController {
     window.addEventListener('contextmenu', this.onContextMenu);
     document.addEventListener('pointerlockchange', this.onPointerLockChange);
     this.canvas.addEventListener('click', this.onCanvasClick);
+
+    // Canvas touch look
+    this.canvas.addEventListener('pointerdown', this.onCanvasPointerDown);
+    this.canvas.addEventListener('pointermove', this.onCanvasPointerMove);
+    this.canvas.addEventListener('pointerup', this.onCanvasPointerUp);
+    this.canvas.addEventListener('pointercancel', this.onCanvasPointerUp);
+
+    this.initTouchControls();
+  }
+
+  private initTouchControls(): void {
+    // 1. Joystick
+    this.touchStickEl = document.querySelector<HTMLElement>('#touch-stick');
+    this.touchKnobEl = document.querySelector<HTMLElement>('#touch-knob');
+
+    if (this.touchStickEl) {
+      this.touchStickEl.addEventListener('pointerdown', this.onJoystickPointerDown);
+      this.touchStickEl.addEventListener('pointermove', this.onJoystickPointerMove);
+      this.touchStickEl.addEventListener('pointerup', this.onJoystickPointerUp);
+      this.touchStickEl.addEventListener('pointercancel', this.onJoystickPointerUp);
+    }
+
+    // 2. Action buttons
+    this.touchAttackBtn = document.querySelector<HTMLElement>('#touch-attack-btn');
+    this.touchHeavyBtn = document.querySelector<HTMLElement>('#touch-heavy-btn');
+    this.touchDodgeBtn = document.querySelector<HTMLElement>('#touch-dodge-btn');
+    this.touchLockBtn = document.querySelector<HTMLElement>('#touch-lock-btn');
+    this.touchSprintBtn = document.querySelector<HTMLElement>('#touch-sprint-btn');
+
+    this.bindActionButton(this.touchAttackBtn, () => {
+      this.lightAttackTriggered = true;
+    });
+
+    this.bindActionButton(this.touchHeavyBtn, () => {
+      this.heavyAttackTriggered = true;
+    });
+
+    this.bindActionButton(this.touchDodgeBtn, () => {
+      this.dodgeTriggered = true;
+    });
+
+    this.bindActionButton(this.touchLockBtn, () => {
+      this.lockOnTriggered = true;
+    });
+
+    if (this.touchSprintBtn) {
+      this.touchSprintBtn.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        this.touchSprintButton = true;
+        this.touchSprintBtn?.classList.add('active');
+      });
+      const endSprint = () => {
+        this.touchSprintButton = false;
+        this.touchSprintBtn?.classList.remove('active');
+      };
+      this.touchSprintBtn.addEventListener('pointerup', endSprint);
+      this.touchSprintBtn.addEventListener('pointercancel', endSprint);
+      this.touchSprintBtn.addEventListener('pointerleave', endSprint);
+    }
+
+    // 3. Restart triggers (R to play again)
+    this.quickRestartBtn = document.querySelector<HTMLElement>('#quick-restart-btn');
+    this.deathRestartBtn = document.querySelector<HTMLElement>('#death-restart-btn');
+    this.victoryRestartBtn = document.querySelector<HTMLElement>('#victory-restart-btn');
+    this.deathOverlay = document.querySelector<HTMLElement>('#death-overlay');
+    this.victoryOverlay = document.querySelector<HTMLElement>('#victory-overlay');
+
+    if (this.quickRestartBtn) {
+      this.quickRestartBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.triggerRestart();
+      });
+    }
+
+    if (this.deathRestartBtn) {
+      this.deathRestartBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.triggerRestart();
+      });
+    }
+
+    if (this.victoryRestartBtn) {
+      this.victoryRestartBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.triggerRestart();
+      });
+    }
+
+    // Tapping death or victory banner also restarts
+    if (this.deathOverlay) {
+      this.deathOverlay.addEventListener('click', () => {
+        if (!this.deathOverlay?.classList.contains('hidden')) {
+          this.triggerRestart();
+        }
+      });
+    }
+
+    if (this.victoryOverlay) {
+      this.victoryOverlay.addEventListener('click', () => {
+        if (!this.victoryOverlay?.classList.contains('hidden')) {
+          this.triggerRestart();
+        }
+      });
+    }
+  }
+
+  private bindActionButton(btn: HTMLElement | null, trigger: () => void): void {
+    if (!btn) return;
+    btn.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      trigger();
+      btn.classList.add('active');
+    });
+    const removeActive = () => btn.classList.remove('active');
+    btn.addEventListener('pointerup', removeActive);
+    btn.addEventListener('pointercancel', removeActive);
+    btn.addEventListener('pointerleave', removeActive);
+  }
+
+  private readonly onJoystickPointerDown = (event: PointerEvent) => {
+    event.preventDefault();
+    this.joystickPointerId = event.pointerId;
+    if (this.touchStickEl) {
+      try {
+        this.touchStickEl.setPointerCapture(event.pointerId);
+      } catch {
+        // Fallback for browsers that don't support pointer capture
+      }
+      const rect = this.touchStickEl.getBoundingClientRect();
+      this.joystickCenter.set(rect.left + rect.width / 2, rect.top + rect.height / 2);
+      this.updateJoystickPosition(event.clientX, event.clientY);
+    }
+  };
+
+  private readonly onJoystickPointerMove = (event: PointerEvent) => {
+    if (event.pointerId === this.joystickPointerId) {
+      event.preventDefault();
+      this.updateJoystickPosition(event.clientX, event.clientY);
+    }
+  };
+
+  private readonly onJoystickPointerUp = (event: PointerEvent) => {
+    if (event.pointerId === this.joystickPointerId) {
+      this.joystickPointerId = null;
+      this.pointer.set(0, 0);
+      this.joystickSprint = false;
+      if (this.touchKnobEl) {
+        this.touchKnobEl.style.transform = 'translate(-50%, -50%)';
+      }
+      if (this.touchStickEl) {
+        try {
+          this.touchStickEl.releasePointerCapture(event.pointerId);
+        } catch {
+          // Ignore
+        }
+      }
+    }
+  };
+
+  private updateJoystickPosition(clientX: number, clientY: number): void {
+    if (!this.touchStickEl || !this.touchKnobEl) return;
+
+    const maxRadius = this.touchStickEl.clientWidth * 0.42;
+    const dx = clientX - this.joystickCenter.x;
+    const dy = clientY - this.joystickCenter.y;
+    const dist = Math.hypot(dx, dy);
+
+    const clampedDist = Math.min(dist, maxRadius);
+    const angle = Math.atan2(dy, dx);
+    const clampedX = Math.cos(angle) * clampedDist;
+    const clampedY = Math.sin(angle) * clampedDist;
+
+    this.touchKnobEl.style.transform = `translate(calc(-50% + ${clampedX}px), calc(-50% + ${clampedY}px))`;
+
+    if (maxRadius > 0) {
+      const normX = clampedX / maxRadius;
+      const normY = clampedY / maxRadius;
+      this.pointer.set(normX, normY);
+      // Auto-sprint if joystick pushed beyond 82% threshold
+      this.joystickSprint = clampedDist / maxRadius > 0.82;
+    }
+  }
+
+  public triggerRestart(): void {
+    this.restartTriggered = true;
+  }
+
+  public triggerDodge(): void {
+    this.dodgeTriggered = true;
+  }
+
+  public triggerLightAttack(): void {
+    this.lightAttackTriggered = true;
+  }
+
+  public triggerHeavyAttack(): void {
+    this.heavyAttackTriggered = true;
+  }
+
+  public triggerLockOn(): void {
+    this.lockOnTriggered = true;
+  }
+
+  public setTouchMove(x: number, y: number): void {
+    this.pointer.set(x, y);
+    if (this.pointer.lengthSq() > 1) {
+      this.pointer.normalize();
+    }
+  }
+
+  public setTouchSprint(sprint: boolean): void {
+    this.touchSprintButton = sprint;
   }
 
   public readInputs(target: CombatInputs): void {
-    // 1. Movement Vector (WASD)
+    // 1. Movement Vector (WASD + Touch Joystick)
     this.keyVector.set(0, 0);
     if (this.keys.has('KeyA') || this.keys.has('ArrowLeft')) this.keyVector.x -= 1;
     if (this.keys.has('KeyD') || this.keys.has('ArrowRight')) this.keyVector.x += 1;
@@ -111,8 +379,12 @@ export class InputController {
       target.move.normalize();
     }
 
-    // 2. Sprint
-    target.sprint = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight');
+    // 2. Sprint (Shift or Joystick max push or Dash touch button)
+    target.sprint =
+      this.keys.has('ShiftLeft') ||
+      this.keys.has('ShiftRight') ||
+      this.joystickSprint ||
+      this.touchSprintButton;
 
     // 3. Triggers (consumed upon read)
     target.dodge = this.dodgeTriggered;
@@ -145,10 +417,24 @@ export class InputController {
     this.restartTriggered = false;
     this.mouseDeltaX = 0;
     this.mouseDeltaY = 0;
+    this.joystickPointerId = null;
+    this.joystickSprint = false;
+    this.touchSprintButton = false;
+    this.cameraPointerId = null;
+
+    if (this.touchKnobEl) {
+      this.touchKnobEl.style.transform = 'translate(-50%, -50%)';
+    }
   }
 
   public isDashHeld(): boolean {
-    return this.keys.has('ShiftLeft') || this.keys.has('ShiftRight') || this.keys.has('Space');
+    return (
+      this.keys.has('ShiftLeft') ||
+      this.keys.has('ShiftRight') ||
+      this.keys.has('Space') ||
+      this.joystickSprint ||
+      this.touchSprintButton
+    );
   }
 
   public readMovement(target: THREE.Vector2): THREE.Vector2 {
@@ -171,5 +457,17 @@ export class InputController {
     window.removeEventListener('contextmenu', this.onContextMenu);
     document.removeEventListener('pointerlockchange', this.onPointerLockChange);
     this.canvas.removeEventListener('click', this.onCanvasClick);
+
+    this.canvas.removeEventListener('pointerdown', this.onCanvasPointerDown);
+    this.canvas.removeEventListener('pointermove', this.onCanvasPointerMove);
+    this.canvas.removeEventListener('pointerup', this.onCanvasPointerUp);
+    this.canvas.removeEventListener('pointercancel', this.onCanvasPointerUp);
+
+    if (this.touchStickEl) {
+      this.touchStickEl.removeEventListener('pointerdown', this.onJoystickPointerDown);
+      this.touchStickEl.removeEventListener('pointermove', this.onJoystickPointerMove);
+      this.touchStickEl.removeEventListener('pointerup', this.onJoystickPointerUp);
+      this.touchStickEl.removeEventListener('pointercancel', this.onJoystickPointerUp);
+    }
   }
 }
