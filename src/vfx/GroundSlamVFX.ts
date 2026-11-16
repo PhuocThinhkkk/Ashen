@@ -108,48 +108,48 @@ export class GroundSlamVFX {
 
     for (let i = 0; i < this.dustPoolSize; i++) {
       const donut = new DonutEmitter({
-        radius: 0.5,
-        donutRadius: 0.25,
+        radius: 0.8,
+        donutRadius: 0.4,
         arc: Math.PI * 2,
       });
 
       const dustGradient = new Gradient(
         [
-          [new Vector3(0.70, 0.64, 0.54), 0],
+          [new Vector3(0.72, 0.66, 0.56), 0],
           [new Vector3(0.48, 0.43, 0.36), 0.5],
           [new Vector3(0.35, 0.32, 0.28), 1],
         ],
         [
-          [0.45, 0],
-          [0.40, 0.40],
-          [0.18, 0.75],
+          [0.82, 0],
+          [0.75, 0.40],
+          [0.35, 0.75],
           [0.0, 1],
         ],
       );
       const colorRamp = new ColorOverLife(dustGradient);
 
       const sizeCurve = new SizeOverLife(
-        new PiecewiseBezier([[new Bezier(1.0, 1.25, 1.5, 1.7), 0]]),
+        new PiecewiseBezier([[new Bezier(1.0, 1.45, 1.95, 2.35), 0]]),
       );
       const drag = new SpeedOverLife(
         new PiecewiseBezier([[new Bezier(1.0, 0.35, 0.10, 0.02), 0]]),
       );
-      const thermalLift = new ApplyForce(new Vector3(0, 0.05, 0), new ConstantValue(0.06));
+      const thermalLift = new ApplyForce(new Vector3(0, 0.08, 0), new ConstantValue(0.10));
       const rotation = new RotationOverLife(new IntervalValue(-0.25, 0.25));
 
       const ps = new ParticleSystem({
-        duration: 3.2,
+        duration: 3.3,
         looping: false,
-        startLife: new IntervalValue(2.2, 3.2),
-        startSpeed: new IntervalValue(1.8, 3.2),
-        startSize: new IntervalValue(0.65, 0.95),
+        startLife: new IntervalValue(2.4, 3.4),
+        startSpeed: new IntervalValue(2.4, 4.4),
+        startSize: new IntervalValue(0.95, 1.35),
         startRotation: new IntervalValue(0, Math.PI * 2),
-        startColor: new ConstantColor(new Vector4(0.70, 0.64, 0.54, 0.40)),
+        startColor: new ConstantColor(new Vector4(0.72, 0.66, 0.56, 0.82)),
         emissionOverTime: new ConstantValue(0),
         emissionBursts: [
           {
             time: 0,
-            count: new IntervalValue(34, 44),
+            count: new IntervalValue(48, 62),
             cycle: 1,
             interval: 0.01,
             probability: 1,

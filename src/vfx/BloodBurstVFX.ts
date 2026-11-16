@@ -83,8 +83,8 @@ const WHIP_FRAGMENT_SHADER = /* glsl */ `
     if (alpha < 0.02) discard;
 
     // Deep dark arterial crimson (dark maroon-red, flat non-glowing opacity)
-    vec3 coreColor = vec3(0.44, 0.02, 0.02); // arterial core
-    vec3 rimColor = vec3(0.18, 0.005, 0.005); // dark coagulated edge
+    vec3 coreColor = vec3(0.58, 0.03, 0.03); // arterial core
+    vec3 rimColor = vec3(0.22, 0.008, 0.008); // dark coagulated edge
     vec3 finalColor = mix(coreColor, rimColor, distFromCenter);
 
     gl_FragColor = vec4(finalColor, alpha * 0.98);
@@ -169,7 +169,7 @@ export class BloodBurstVFX {
     this.scene = (sceneOrContainer as THREE.Scene) || (batchRenderer as unknown as THREE.Scene);
     const texFactory = VFXTextureFactory.getInstance();
 
-    this.whipGeometry = createWhipCrossGeometry(1.25, 0.18, 28);
+    this.whipGeometry = createWhipCrossGeometry(1.55, 0.24, 32);
 
     this.sparkMaterial = new THREE.MeshBasicMaterial({
       map: texFactory.getSparkStreakTexture(),
