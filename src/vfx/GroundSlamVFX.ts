@@ -108,44 +108,48 @@ export class GroundSlamVFX {
 
     for (let i = 0; i < this.dustPoolSize; i++) {
       const donut = new DonutEmitter({
-        radius: 0.9,
-        donutRadius: 0.45,
+        radius: 0.5,
+        donutRadius: 0.25,
         arc: Math.PI * 2,
       });
 
       const dustGradient = new Gradient(
         [
-          [new Vector3(0.75, 0.68, 0.58), 0],
-          [new Vector3(0.40, 0.36, 0.30), 1],
+          [new Vector3(0.70, 0.64, 0.54), 0],
+          [new Vector3(0.48, 0.43, 0.36), 0.5],
+          [new Vector3(0.35, 0.32, 0.28), 1],
         ],
         [
-          [0.90, 0],
-          [0.85, 0.4],
+          [0.45, 0],
+          [0.40, 0.40],
+          [0.18, 0.75],
           [0.0, 1],
         ],
       );
       const colorRamp = new ColorOverLife(dustGradient);
 
       const sizeCurve = new SizeOverLife(
-        new PiecewiseBezier([[new Bezier(1.0, 2.4, 3.8, 4.8), 0]]),
+        new PiecewiseBezier([[new Bezier(1.0, 1.25, 1.5, 1.7), 0]]),
       );
       const drag = new SpeedOverLife(
-        new PiecewiseBezier([[new Bezier(1.0, 0.5, 0.15, 0.05), 0]]),
+        new PiecewiseBezier([[new Bezier(1.0, 0.35, 0.10, 0.02), 0]]),
       );
-      const thermalLift = new ApplyForce(new Vector3(0, 0.2, 0), new ConstantValue(0.35));
+      const thermalLift = new ApplyForce(new Vector3(0, 0.05, 0), new ConstantValue(0.06));
+      const rotation = new RotationOverLife(new IntervalValue(-0.25, 0.25));
 
       const ps = new ParticleSystem({
-        duration: 0.9,
+        duration: 3.2,
         looping: false,
-        startLife: new IntervalValue(0.65, 1.05),
-        startSpeed: new IntervalValue(6.0, 10.5),
-        startSize: new IntervalValue(1.1, 2.2),
-        startColor: new ConstantColor(new Vector4(0.72, 0.65, 0.55, 0.90)),
+        startLife: new IntervalValue(2.2, 3.2),
+        startSpeed: new IntervalValue(1.8, 3.2),
+        startSize: new IntervalValue(0.65, 0.95),
+        startRotation: new IntervalValue(0, Math.PI * 2),
+        startColor: new ConstantColor(new Vector4(0.70, 0.64, 0.54, 0.40)),
         emissionOverTime: new ConstantValue(0),
         emissionBursts: [
           {
             time: 0,
-            count: new IntervalValue(85, 125),
+            count: new IntervalValue(34, 44),
             cycle: 1,
             interval: 0.01,
             probability: 1,
@@ -155,7 +159,7 @@ export class GroundSlamVFX {
         material: this.dustMaterial,
         renderMode: RenderMode.BillBoard,
         worldSpace: true,
-        behaviors: [colorRamp, sizeCurve, drag, thermalLift],
+        behaviors: [colorRamp, sizeCurve, drag, thermalLift, rotation],
       });
 
       this.batchRenderer.addSystem(ps);

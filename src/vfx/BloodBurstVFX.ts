@@ -91,7 +91,7 @@ const WHIP_FRAGMENT_SHADER = /* glsl */ `
   }
 `;
 
-function createWhipCrossGeometry(length = 1.6, width = 0.22, segmentsX = 28): THREE.BufferGeometry {
+function createWhipCrossGeometry(length = 1.25, width = 0.18, segmentsX = 28): THREE.BufferGeometry {
   const positions: number[] = [];
   const uvs: number[] = [];
   const indices: number[] = [];
@@ -169,7 +169,7 @@ export class BloodBurstVFX {
     this.scene = (sceneOrContainer as THREE.Scene) || (batchRenderer as unknown as THREE.Scene);
     const texFactory = VFXTextureFactory.getInstance();
 
-    this.whipGeometry = createWhipCrossGeometry(1.6, 0.22, 28);
+    this.whipGeometry = createWhipCrossGeometry(1.25, 0.18, 28);
 
     this.sparkMaterial = new THREE.MeshBasicMaterial({
       map: texFactory.getSparkStreakTexture(),

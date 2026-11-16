@@ -88,11 +88,7 @@ export class BossCharacter {
 
   constructor(initialModelId = 'titan') {
     this.bladeMaterial = new THREE.MeshStandardMaterial({
-      color: 0x222428,
-      emissive: 0xff4400,
-      emissiveIntensity: 0.35,
-      roughness: 0.3,
-      metalness: 0.9,
+      color: 0xffffff,
     });
 
     this.defaultBladeColor.copy(this.bladeMaterial.color);
@@ -114,11 +110,9 @@ export class BossCharacter {
         this.bladeMesh = obj;
         if (obj.material) {
           const mat = (Array.isArray(obj.material) ? obj.material[0] : obj.material) as THREE.MeshStandardMaterial;
-          if (mat && 'emissive' in mat) {
+          if (mat) {
             this.bladeMaterial = mat;
             this.defaultBladeColor.copy(mat.color);
-            this.bladeMaterial.emissive = new THREE.Color(0xff4400);
-            this.bladeMaterial.emissiveIntensity = 0.35;
           }
         }
       }
@@ -379,7 +373,7 @@ export class BossCharacter {
     return action;
   }
 
-  public update(delta: number, elapsed: number, playerPos: THREE.Vector3, arenaRadius: number): void {
+  public update(delta: number, _elapsed: number, playerPos: THREE.Vector3, arenaRadius: number): void {
     if (this.mixer) {
       this.mixer.update(delta);
     }
@@ -452,9 +446,7 @@ export class BossCharacter {
       this.group.position.z = (this.group.position.z / dist) * maxR;
     }
 
-    // Visual flame glow pulsing
-    const baseGlow = this.isPhase2 ? 0.9 : 0.35;
-    this.bladeMaterial.emissiveIntensity = baseGlow + this.telegraphGlow * 1.5 + Math.sin(elapsed * 6.0) * 0.15;
+
   }
 
   private updateIdle(delta: number, playerPos: THREE.Vector3): void {
@@ -698,8 +690,7 @@ export class BossCharacter {
     if (playerPos) {
       this.faceTarget(playerPos, 1.0);
     }
-    this.bladeMaterial.color.setHex(0x551100);
-    this.bladeMaterial.emissive.setHex(0xff3300);
+
     this.playAction('special', 0.2, THREE.LoopOnce, true, 1.0);
   }
 
@@ -778,8 +769,6 @@ export class BossCharacter {
     this.group.updateMatrixWorld(true);
 
     this.bladeMaterial.color.copy(this.defaultBladeColor);
-    this.bladeMaterial.emissive.setHex(0xff4400);
-    this.bladeMaterial.emissiveIntensity = 0.35;
   }
 
   public dispose(): void {

@@ -690,8 +690,18 @@ export class Game {
         const screenPos = this.projectToScreen(this.boss.group.position, 1.5);
         this.hud.spawnDamageNumber(hit.damage, screenPos.x, screenPos.y, false);
 
-        // Combat VFX: Minimal Elden Ring blade-slash blood spit (No sparks, No ground decal)
-        const hitPoint = hit.contactPoint || this.player.getHitboxWorldPosition();
+        // Combat VFX: Minimal Elden Ring blade-slash blood spit right on target surface
+        const toBoss = this.boss.group.position.clone().sub(this.player.group.position);
+        toBoss.y = 0;
+        let hitPoint: THREE.Vector3;
+        if (toBoss.length() > 0.01) {
+          toBoss.normalize();
+          hitPoint = this.boss.group.position.clone().addScaledVector(toBoss, -this.boss.radius * 0.75);
+          hitPoint.y = this.boss.group.position.y + 1.15;
+        } else {
+          hitPoint = hit.contactPoint || this.boss.group.position.clone().add(new THREE.Vector3(0, 1.15, 0));
+        }
+
         const fwdAngle = this.player.group.rotation.y;
         const hitDir = new THREE.Vector3(
           Math.cos(fwdAngle) * 0.75 - Math.sin(fwdAngle) * 0.35,
@@ -752,8 +762,18 @@ export class Game {
           const screenPos = this.projectToScreen(this.player.group.position, 1.2);
           this.hud.spawnDamageNumber(hit.damage, screenPos.x, screenPos.y, true);
 
-          // Combat VFX: Minimal Elden Ring blade-slash blood spit (No sparks, No ground decal)
-          const hitPoint = hit.contactPoint || this.player.group.position.clone().add(new THREE.Vector3(0, 1.1, 0));
+          // Combat VFX: Minimal Elden Ring blade-slash blood spit right on player surface
+          const toPlayer = this.player.group.position.clone().sub(this.boss.group.position);
+          toPlayer.y = 0;
+          let hitPoint: THREE.Vector3;
+          if (toPlayer.length() > 0.01) {
+            toPlayer.normalize();
+            hitPoint = this.player.group.position.clone().addScaledVector(toPlayer, -this.player.radius * 0.75);
+            hitPoint.y = this.player.group.position.y + 1.10;
+          } else {
+            hitPoint = hit.contactPoint || this.player.group.position.clone().add(new THREE.Vector3(0, 1.10, 0));
+          }
+
           const fwdAngle = this.boss.group.rotation.y;
           const hitDir = new THREE.Vector3(
             -Math.cos(fwdAngle) * 0.75 - Math.sin(fwdAngle) * 0.35,
@@ -839,6 +859,26 @@ export class Game {
     this.render();
   }
 
+  private syncHud(delta = 0): void {
+    const oppHp = this.isMultiplayerDuel && this.remotePlayer ? this.remotePlayer.hp : this.boss.hp;
+    const oppMaxHp = this.isMultiplayerDuel && this.remotePlayer ? this.remotePlayer.maxHp : this.boss.maxHp;
+    const isOppDead = this.isMultiplayerDuel && this.remotePlayer ? this.remotePlayer.hp <= 0 : this.boss.state === 'dead';
+
+    this.hud.update(
+      delta,
+      this.player.hp,
+      this.player.maxHp,
+      this.player.stamina,
+      this.player.maxStamina,
+      oppHp,
+      oppMaxHp,
+      this.cameraRig.isLockedOn,
+      null,
+      this.player.state === 'dead',
+      isOppDead,
+    );
+  }
+
   private installTestHooks(): void {
     window.__THREE_GAME_TEST_HOOKS__ = {
       seed: (_n: number) => {},
@@ -859,6 +899,7 @@ export class Game {
         } else {
           throw new Error(`Unknown state: ${stateName}`);
         }
+        this.syncHud();
         this.render();
         this.publishDiagnostics();
         return { state: stateName };

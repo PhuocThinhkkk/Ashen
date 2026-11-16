@@ -28,7 +28,7 @@ export const DEFAULT_BOSS_WEAPON_SOCKET: WeaponSocketTransform = {
   rotX: -27,
   rotY: -1,
   rotZ: -78,
-  scale: 142,
+  scale: 160,
 };
 
 export function loadSocketConfig(key: string, fallback: WeaponSocketTransform): WeaponSocketTransform {

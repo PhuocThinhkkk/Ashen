@@ -98,8 +98,8 @@ test.describe('VFX Visual Regression & Animation Capture', () => {
       if (hooks?.triggerBloodBurst && diag) {
         const p = diag.player.position;
         hooks.triggerBloodBurst(
-          { x: p.x + 0.3, y: p.y + 1.2, z: p.z - 2.0 },
-          { x: -0.7, y: 0.6, z: -0.4 },
+          { x: p.x + 0.15, y: p.y + 1.15, z: p.z - 1.2 },
+          { x: 0.75, y: 0.15, z: -0.35 },
         );
       }
     });
@@ -204,6 +204,12 @@ test.describe('VFX Visual Regression & Animation Capture', () => {
     const slamBillowBuf = await canvas.screenshot();
     const slamBillowPath = path.join(ARTIFACTS_DIR, 'vfx-slam-billow.png');
     fs.writeFileSync(slamBillowPath, slamBillowBuf);
+
+    // Capture Lingering Ground Dust (+1000ms later = 1.34s after slam)
+    await page.waitForTimeout(1000);
+    const slamLingeringBuf = await canvas.screenshot();
+    const slamLingeringPath = path.join(ARTIFACTS_DIR, 'vfx-slam-lingering.png');
+    fs.writeFileSync(slamLingeringPath, slamLingeringBuf);
 
     // Verify all 5 files exist with non-trivial size
     const expectedFiles = [
