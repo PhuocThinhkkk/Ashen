@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { type AttackDefinition, BOSS_ATTACKS } from '../combat/FrameCombat';
 import { HitboxVisualDebugger } from '../combat/HitboxVisualDebugger';
 import { KinematicCombatController } from '../combat/KinematicCombatController';
@@ -49,12 +50,15 @@ export class BossCharacter {
 
   // Weapon & Material
   public readonly greatswordGroup = new THREE.Group();
+  public swordObject: THREE.Object3D | null = null;
   public bladeMesh: THREE.Mesh | null = null;
   public readonly bladeHitbox = new THREE.Object3D();
   public readonly bladeBaseLocator = new THREE.Object3D();
   public readonly bladeTipLocator = new THREE.Object3D();
-  public readonly bladeMaterial: THREE.MeshStandardMaterial;
+  public bladeMaterial: THREE.MeshStandardMaterial;
   public handBone: THREE.Object3D | null = null;
+  private readonly defaultBladeColor = new THREE.Color(0xffffff);
+  private readonly loader = new GLTFLoader();
 
   // Model & Animation State
   public isLoaded = false;
@@ -91,53 +95,48 @@ export class BossCharacter {
       metalness: 0.9,
     });
 
-    this.buildGreatsword();
+    this.defaultBladeColor.copy(this.bladeMaterial.color);
     this.loadPromise = this.loadModel(initialModelId);
   }
 
-  private buildGreatsword(): void {
-    const goldMat = new THREE.MeshStandardMaterial({
-      color: 0x8c6d2c,
-      roughness: 0.3,
-      metalness: 0.85,
+  private async ensureGreatswordLoaded(): Promise<void> {
+    if (this.swordObject) return;
+
+    const gltf = await this.loader.loadAsync('/assets/weapons/lower_orc_great_sword.glb');
+    this.swordObject = gltf.scene;
+    // Align grip to weapon origin (Y=0.7 shifts local grip at ~-0.65 to around hand level)
+    this.swordObject.position.set(0, 0.7, 0);
+
+    this.swordObject.traverse((obj) => {
+      if (obj instanceof THREE.Mesh) {
+        obj.castShadow = true;
+        obj.receiveShadow = true;
+        this.bladeMesh = obj;
+        if (obj.material) {
+          const mat = (Array.isArray(obj.material) ? obj.material[0] : obj.material) as THREE.MeshStandardMaterial;
+          if (mat && 'emissive' in mat) {
+            this.bladeMaterial = mat;
+            this.defaultBladeColor.copy(mat.color);
+            this.bladeMaterial.emissive = new THREE.Color(0xff4400);
+            this.bladeMaterial.emissiveIntensity = 0.35;
+          }
+        }
+      }
     });
-    const gripMat = new THREE.MeshStandardMaterial({
-      color: 0x2a1c0e,
-      roughness: 0.7,
-    });
 
-    // Grip
-    const gripGeo = new THREE.CylinderGeometry(0.045, 0.045, 0.65, 8);
-    const grip = new THREE.Mesh(gripGeo, gripMat);
-    grip.position.y = -0.32;
-    grip.castShadow = true;
-    this.greatswordGroup.add(grip);
+    this.greatswordGroup.add(this.swordObject);
 
-    // Crossguard
-    const guardGeo = new THREE.BoxGeometry(0.75, 0.1, 0.14);
-    const guard = new THREE.Mesh(guardGeo, goldMat);
-    guard.position.y = 0.04;
-    guard.castShadow = true;
-    this.greatswordGroup.add(guard);
-
-    // Heavy Blade
-    const bladeGeo = new THREE.BoxGeometry(0.22, 2.2, 0.04);
-    this.bladeMesh = new THREE.Mesh(bladeGeo, this.bladeMaterial);
-    this.bladeMesh.position.y = 1.15;
-    this.bladeMesh.castShadow = true;
-    this.greatswordGroup.add(this.bladeMesh);
-
-    // Collision hitbox parented directly to the sword mesh
+    // Collision hitbox and blade locators
     this.bladeHitbox.name = 'BossBladeHitbox';
-    this.bladeHitbox.position.set(0, 0, 0);
-    this.bladeMesh.add(this.bladeHitbox);
+    this.bladeHitbox.position.set(0, 1.05, 0);
+    this.greatswordGroup.add(this.bladeHitbox);
 
     this.bladeBaseLocator.name = 'BossBladeBase';
-    this.bladeBaseLocator.position.set(0, 0.1, 0);
+    this.bladeBaseLocator.position.set(0, 0.35, 0);
     this.greatswordGroup.add(this.bladeBaseLocator);
 
     this.bladeTipLocator.name = 'BossBladeTip';
-    this.bladeTipLocator.position.set(0, 2.25, 0);
+    this.bladeTipLocator.position.set(0, 1.7, 0);
     this.greatswordGroup.add(this.bladeTipLocator);
   }
 
@@ -173,7 +172,10 @@ export class BossCharacter {
       this.handBone = null;
     }
 
-    // 3. Load GLTF model dynamically via ModelLoader
+    // 3. Ensure Weapon (lower_orc_great_sword.glb) is loaded
+    await this.ensureGreatswordLoaded();
+
+    // 4. Load GLTF model dynamically via ModelLoader
     const bossGltf = await ModelLoader.loadModel('boss', modelId);
     this.modelScene = bossGltf.scene;
     this.rawClips = bossGltf.animations;
@@ -775,8 +777,9 @@ export class BossCharacter {
     this.group.rotation.set(0, Math.PI, 0);
     this.group.updateMatrixWorld(true);
 
-    this.bladeMaterial.color.setHex(0x222428);
+    this.bladeMaterial.color.copy(this.defaultBladeColor);
     this.bladeMaterial.emissive.setHex(0xff4400);
+    this.bladeMaterial.emissiveIntensity = 0.35;
   }
 
   public dispose(): void {
@@ -787,6 +790,19 @@ export class BossCharacter {
     }
     if (this.greatswordGroup.parent) {
       this.greatswordGroup.parent.remove(this.greatswordGroup);
+    }
+    if (this.swordObject) {
+      this.swordObject.traverse((obj) => {
+        if (obj instanceof THREE.Mesh) {
+          obj.geometry.dispose();
+          if (Array.isArray(obj.material)) {
+            obj.material.forEach((m) => m.dispose());
+          } else {
+            obj.material?.dispose();
+          }
+        }
+      });
+      this.swordObject = null;
     }
     this.greatswordGroup.traverse((obj) => {
       if (obj instanceof THREE.Mesh) {

@@ -80,17 +80,21 @@ export class UnifiedSettingsModal {
           <button id="settings-close-btn" class="settings-close-btn" aria-label="Close Settings">${ICONS.CLOSE}</button>
         </header>
 
-        <nav class="settings-tabs" role="tablist">
-          <button class="settings-tab-btn" data-tab="vfx"><span class="tab-num">I</span> VFX CONFIG</button>
-          <button class="settings-tab-btn" data-tab="performance"><span class="tab-num">II</span> DIAGNOSTICS</button>
-          <button class="settings-tab-btn" data-tab="graphics"><span class="tab-num">III</span> GRAPHICS</button>
-          <button class="settings-tab-btn" data-tab="models"><span class="tab-num">IV</span> COMBATANTS</button>
-          <button class="settings-tab-btn" data-tab="gameplay"><span class="tab-num">V</span> KINEMATICS</button>
-          <button class="settings-tab-btn" data-tab="general"><span class="tab-num">VI</span> SYSTEM</button>
-          <button class="settings-tab-btn" data-tab="multiplayer"><span class="tab-num">VII</span> ONLINE DUEL</button>
-        </nav>
+        <div class="settings-modal-body">
+          <aside class="settings-sidebar">
+            <nav class="settings-tabs" role="tablist" aria-label="Settings Categories">
+              <button class="settings-tab-btn" data-tab="vfx"><span class="tab-num">I</span> VFX CONFIG</button>
+              <button class="settings-tab-btn" data-tab="performance"><span class="tab-num">II</span> DIAGNOSTICS</button>
+              <button class="settings-tab-btn" data-tab="graphics"><span class="tab-num">III</span> GRAPHICS</button>
+              <button class="settings-tab-btn" data-tab="models"><span class="tab-num">IV</span> COMBATANTS</button>
+              <button class="settings-tab-btn" data-tab="gameplay"><span class="tab-num">V</span> KINEMATICS</button>
+              <button class="settings-tab-btn" data-tab="general"><span class="tab-num">VI</span> SYSTEM</button>
+              <button class="settings-tab-btn" data-tab="multiplayer"><span class="tab-num">VII</span> ONLINE DUEL</button>
+            </nav>
+          </aside>
 
-        <main id="settings-tab-content" class="settings-tab-content"></main>
+          <main id="settings-tab-content" class="settings-tab-content"></main>
+        </div>
       </div>
     `;
 

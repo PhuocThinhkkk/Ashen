@@ -64,6 +64,7 @@ export class RawAnimationStage {
   public bossHandBone: THREE.Object3D | null = null;
   public bossLeftFootBone: THREE.Object3D | null = null;
   public bossSwordGroup: THREE.Group | null = null;
+  public bossSwordObject: THREE.Object3D | null = null;
 
   public readonly playerHitboxDebugger = new HitboxVisualDebugger({
     size: new THREE.Vector3(0.28, 1.4, 0.28),
@@ -207,6 +208,14 @@ export class RawAnimationStage {
     if (!this.scene) return;
     onStatusUpdate?.('Loading titan.glb...');
 
+    if (this.currentBossScene) {
+      if (this.bossMixer) this.bossMixer.stopAllAction();
+      if (this.bossSwordGroup && this.bossSwordGroup.parent) {
+        this.bossSwordGroup.parent.remove(this.bossSwordGroup);
+      }
+      this.scene.remove(this.currentBossScene);
+    }
+
     const bossGltf = await this.loader.loadAsync('/assets/models/bosses/titan.glb');
     this.currentBossScene = bossGltf.scene;
     this.currentBossScene.position.copy(CONFIG.track1.bossPos);
@@ -273,45 +282,25 @@ export class RawAnimationStage {
     this.diagnostics.boss.bonesCount = bBones;
     this.diagnostics.boss.handBoneFound = !!this.bossHandBone;
 
-    if (this.bossHandBone) {
+    if (!this.bossSwordGroup) {
+      onStatusUpdate?.('Loading lower_orc_great_sword.glb...');
+      const swordGltf = await this.loader.loadAsync('/assets/weapons/lower_orc_great_sword.glb');
+      this.bossSwordObject = swordGltf.scene;
+      this.bossSwordObject.position.set(0, 0.7, 0);
+      this.bossSwordObject.castShadow = true;
+      this.bossSwordObject.traverse((obj) => {
+        if (obj instanceof THREE.Mesh) {
+          obj.castShadow = true;
+          obj.receiveShadow = true;
+        }
+      });
       this.bossSwordGroup = new THREE.Group();
-      const gripGeo = new THREE.CylinderGeometry(0.04, 0.04, 0.6, 8);
-      const gripMat = new THREE.MeshStandardMaterial({ color: 0x332211, roughness: 0.7 });
-      const grip = new THREE.Mesh(gripGeo, gripMat);
-      grip.position.y = -0.3;
-      this.bossSwordGroup.add(grip);
+      this.bossSwordGroup.add(this.bossSwordObject);
+    }
 
-      const guardGeo = new THREE.BoxGeometry(0.7, 0.1, 0.12);
-      const guardMat = new THREE.MeshStandardMaterial({
-        color: 0x8c6d2c,
-        roughness: 0.3,
-        metalness: 0.8,
-      });
-      const guard = new THREE.Mesh(guardGeo, guardMat);
-      this.bossSwordGroup.add(guard);
-
-      const bladeGeo = new THREE.BoxGeometry(0.2, 2.0, 0.04);
-      const bladeMat = new THREE.MeshStandardMaterial({
-        color: 0x222428,
-        emissive: 0xff4400,
-        emissiveIntensity: 0.6,
-        roughness: 0.3,
-        metalness: 0.9,
-      });
-      const blade = new THREE.Mesh(bladeGeo, bladeMat);
-      blade.position.y = 1.0;
-      this.bossSwordGroup.add(blade);
-
-      const bladeHitbox = new THREE.Object3D();
-      bladeHitbox.name = 'BossSwordHitbox';
-      blade.add(bladeHitbox);
-
-      this.bossSwordGroup.traverse((o) => {
-        if (o instanceof THREE.Mesh) o.castShadow = true;
-      });
+    if (this.bossHandBone && this.bossSwordGroup) {
       applyWeaponSocketTransform(this.bossSwordGroup, this.bossSocket);
       this.bossHandBone.add(this.bossSwordGroup);
-
       this.bossHitboxDebugger.attachToBone(this.bossHandBone);
     }
 

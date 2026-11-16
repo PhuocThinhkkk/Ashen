@@ -71,6 +71,130 @@ let duelPlaybackSpeed = 1.0;
 let isDuelPaused = false;
 const keysPressed: Record<string, boolean> = {};
 
+type ActiveMode = 'raw' | 'combat' | 'socket' | null;
+let activeMode: ActiveMode = 'raw';
+let lastActiveMode: 'raw' | 'combat' | 'socket' = 'raw';
+
+function setTabMode(mode: ActiveMode): void {
+  activeMode = mode;
+  if (mode !== null) {
+    lastActiveMode = mode;
+  }
+
+  // Update tabs active state
+  dom.btnToggleWin1?.classList.toggle('active', mode === 'raw');
+  dom.btnToggleWin2?.classList.toggle('active', mode === 'combat');
+  dom.btnToggleWin3?.classList.toggle('active', mode === 'socket');
+
+  const btnToggleUi = document.querySelector<HTMLButtonElement>('#btn-toggle-ui');
+  btnToggleUi?.classList.toggle('active', mode === null);
+  if (btnToggleUi) {
+    btnToggleUi.textContent = mode === null ? 'Show UI' : 'Hide UI';
+  }
+
+  // Docked single panel slot: show only selected panel, hide other two with display: none
+  if (dom.overlay) {
+    dom.overlay.classList.toggle('hidden', mode !== 'raw');
+  }
+  if (dom.winCombatDuel) {
+    dom.winCombatDuel.classList.toggle('hidden', mode !== 'combat');
+  }
+  if (dom.winWeaponOffsets) {
+    dom.winWeaponOffsets.classList.toggle('hidden', mode !== 'socket');
+  }
+
+  const panelSlot = document.querySelector<HTMLElement>('#single-panel-slot');
+  const playbackStrip = document.querySelector<HTMLElement>('#unified-playback-strip');
+  if (mode === null) {
+    if (panelSlot) panelSlot.style.display = 'none';
+    if (playbackStrip) playbackStrip.style.display = 'none';
+  } else {
+    if (panelSlot) panelSlot.style.display = '';
+    if (playbackStrip) playbackStrip.style.display = '';
+  }
+
+  // Update playback strip pause/play button label for active mode
+  if (dom.btnPlayPause) {
+    if (mode === 'combat') {
+      dom.btnPlayPause.textContent = isDuelPaused ? '▶ Play' : '⏸ Pause';
+    } else {
+      dom.btnPlayPause.textContent = isPaused ? '▶ Play' : '⏸ Pause';
+    }
+  }
+}
+
+function toggleUI(): void {
+  if (activeMode !== null) {
+    setTabMode(null);
+  } else {
+    setTabMode(lastActiveMode);
+  }
+}
+
+function togglePause(): boolean {
+  isPaused = !isPaused;
+  if (dom.btnPlayPause && activeMode !== 'combat') {
+    dom.btnPlayPause.textContent = isPaused ? '▶ Play' : '⏸ Pause';
+  }
+  return isPaused;
+}
+
+function stepFrame(framesCount: number): void {
+  isPaused = true;
+  if (dom.btnPlayPause && activeMode !== 'combat') dom.btnPlayPause.textContent = '▶ Play';
+
+  const deltaSeconds = framesCount * (1 / 60);
+  rawStage.stepFrame(deltaSeconds);
+  updateTelemetry();
+  renderer.render(scene, cameraMgr.camera);
+}
+
+function toggleDuelPause(): boolean {
+  isDuelPaused = !isDuelPaused;
+  if (dom.btnDuelPlayPause) {
+    dom.btnDuelPlayPause.textContent = isDuelPaused ? '▶ Play' : '⏸ Pause';
+  }
+  if (dom.btnPlayPause && activeMode === 'combat') {
+    dom.btnPlayPause.textContent = isDuelPaused ? '▶ Play' : '⏸ Pause';
+  }
+  return isDuelPaused;
+}
+
+function stepDuelFrame(framesCount: number): void {
+  isDuelPaused = true;
+  if (dom.btnDuelPlayPause) dom.btnDuelPlayPause.textContent = '▶ Play';
+  if (dom.btnPlayPause && activeMode === 'combat') dom.btnPlayPause.textContent = '▶ Play';
+
+  const deltaSeconds = framesCount * (1 / 60);
+  duelStage.stepFrame(deltaSeconds);
+  renderer.render(scene, cameraMgr.camera);
+}
+
+function handleUnifiedPlayPause(): boolean {
+  if (activeMode === 'combat') {
+    return toggleDuelPause();
+  } else {
+    return togglePause();
+  }
+}
+
+function handleUnifiedStep(framesCount: number): void {
+  if (activeMode === 'combat') {
+    stepDuelFrame(framesCount);
+  } else {
+    stepFrame(framesCount);
+  }
+}
+
+function handleUnifiedSpeed(speed: number): void {
+  playbackSpeed = speed;
+  duelPlaybackSpeed = speed;
+  dom.speedButtons?.querySelectorAll<HTMLButtonElement>('button').forEach((b) => {
+    const s = parseFloat(b.getAttribute('data-speed') || '1.0');
+    b.classList.toggle('active', s === speed);
+  });
+}
+
 const cameraMgr = new AssetTestCameraManager(dom.canvas, (roamActive) => {
   if (roamActive) {
     if (dom.overlay && !dom.overlay.classList.contains('collapsed')) {
@@ -96,11 +220,9 @@ const duelUI = new CombatDuelUI(
   dom,
   duelStage,
   (text) => duelUI.logCombat(text),
-  (frames) => stepDuelFrame(frames),
-  () => toggleDuelPause(),
-  (speed) => {
-    duelPlaybackSpeed = speed;
-  },
+  (frames) => handleUnifiedStep(frames),
+  () => handleUnifiedPlayPause(),
+  (speed) => handleUnifiedSpeed(speed),
 );
 
 const rawUI = new RawInspectorUI(
@@ -108,11 +230,9 @@ const rawUI = new RawInspectorUI(
   rawStage,
   cameraMgr,
   () => toggleHitboxDebug(),
-  (frames) => stepFrame(frames),
-  () => togglePause(),
-  (speed) => {
-    playbackSpeed = speed;
-  },
+  (frames) => handleUnifiedStep(frames),
+  () => handleUnifiedPlayPause(),
+  (speed) => handleUnifiedSpeed(speed),
   async (modelId) => {
     await rawStage.loadPlayer(modelId);
     await duelStage.switchPlayerModel(modelId);
@@ -140,6 +260,9 @@ function toggleHitboxDebug(visible?: boolean): boolean {
 }
 
 function setGameFollowMode(enabled: boolean): void {
+  if (enabled) {
+    setTabMode('combat');
+  }
   cameraMgr.setRoamMode(
     enabled,
     duelStage.logicPlayer ? duelStage.logicPlayer.group.position : undefined,
@@ -158,41 +281,6 @@ function setGameFollowMode(enabled: boolean): void {
       dom.cameraButtons.querySelector('button[data-cam="both"]')?.classList.add('active');
     }
   }
-}
-
-function togglePause(): boolean {
-  isPaused = !isPaused;
-  if (dom.btnPlayPause) {
-    dom.btnPlayPause.textContent = isPaused ? '▶ Play' : '⏸ Pause';
-  }
-  return isPaused;
-}
-
-function stepFrame(framesCount: number): void {
-  isPaused = true;
-  if (dom.btnPlayPause) dom.btnPlayPause.textContent = '▶ Play';
-
-  const deltaSeconds = framesCount * (1 / 60);
-  rawStage.stepFrame(deltaSeconds);
-  updateTelemetry();
-  renderer.render(scene, cameraMgr.camera);
-}
-
-function toggleDuelPause(): boolean {
-  isDuelPaused = !isDuelPaused;
-  if (dom.btnDuelPlayPause) {
-    dom.btnDuelPlayPause.textContent = isDuelPaused ? '▶ Play' : '⏸ Pause';
-  }
-  return isDuelPaused;
-}
-
-function stepDuelFrame(framesCount: number): void {
-  isDuelPaused = true;
-  if (dom.btnDuelPlayPause) dom.btnDuelPlayPause.textContent = '▶ Play';
-
-  const deltaSeconds = framesCount * (1 / 60);
-  duelStage.stepFrame(deltaSeconds);
-  renderer.render(scene, cameraMgr.camera);
 }
 
 function updateTelemetry(): { playerActive: boolean; bossActive: boolean } {
@@ -267,8 +355,20 @@ async function captureAllAnimations(): Promise<Record<string, string>> {
 // 5. Keyboard Navigation & Canvas Events
 window.addEventListener('keydown', (e) => {
   keysPressed[e.code] = true;
-  if (e.code === 'KeyH' && !e.repeat) {
-    toggleHitboxDebug();
+  if ((e.code === 'KeyH' || e.code === 'Tab') && !e.repeat) {
+    if (e.code === 'Tab') {
+      e.preventDefault();
+    }
+    if (e.code === 'KeyH') {
+      toggleHitboxDebug();
+    }
+    toggleUI();
+  } else if (e.code === 'Digit1' && !e.repeat && !e.ctrlKey && !e.altKey && !e.metaKey) {
+    setTabMode('raw');
+  } else if (e.code === 'Digit2' && !e.repeat && !e.ctrlKey && !e.altKey && !e.metaKey) {
+    setTabMode('combat');
+  } else if (e.code === 'Digit3' && !e.repeat && !e.ctrlKey && !e.altKey && !e.metaKey) {
+    setTabMode('socket');
   } else if (e.code === 'KeyR' && !e.repeat) {
     duelStage.resetPositions((text) => duelUI.logCombat(text));
   } else if (e.code === 'Escape') {
@@ -277,12 +377,12 @@ window.addEventListener('keydown', (e) => {
     if (cameraMgr.isRoamMode) {
       // Handled in inputController
     } else {
-      togglePause();
+      handleUnifiedPlayPause();
     }
   } else if (e.code === 'BracketLeft' && !e.repeat) {
-    stepFrame(-1);
+    handleUnifiedStep(-1);
   } else if (e.code === 'BracketRight' && !e.repeat) {
-    stepFrame(1);
+    handleUnifiedStep(1);
   } else if (e.code === 'KeyJ' && !e.repeat) {
     if (!cameraMgr.isRoamMode) {
       duelStage.triggerPlayerAction('light1', (text) => duelUI.logCombat(text));
@@ -305,34 +405,105 @@ dom.canvas.addEventListener('click', () => {
 });
 
 dom.btnModeToggle?.addEventListener('click', () => {
+  setTabMode('combat');
   setGameFollowMode(!cameraMgr.isRoamMode);
 });
 
 dom.btnOpenSettings?.addEventListener('click', () => {
-  const isHidden = dom.winWeaponOffsets?.classList.toggle('hidden');
-  dom.btnToggleWin3?.classList.toggle('active', !isHidden);
+  if (activeMode === 'socket') {
+    setTabMode('raw');
+  } else {
+    setTabMode('socket');
+  }
 });
 
-// Top Navbar 3-Window Toggle Buttons
-dom.btnToggleWin1?.addEventListener('click', () => {
-  const isHidden = dom.overlay?.classList.toggle('hidden');
-  dom.btnToggleWin1?.classList.toggle('active', !isHidden);
-});
+// Top Mode Switcher Bar (3 Tabs + Hide UI)
+dom.btnToggleWin1?.addEventListener('click', () => setTabMode('raw'));
+dom.btnToggleWin2?.addEventListener('click', () => setTabMode('combat'));
+dom.btnToggleWin3?.addEventListener('click', () => setTabMode('socket'));
+document.querySelector('#btn-toggle-ui')?.addEventListener('click', () => toggleUI());
 
-dom.btnToggleWin2?.addEventListener('click', () => {
-  const isHidden = dom.winCombatDuel?.classList.toggle('hidden');
-  dom.btnToggleWin2?.classList.toggle('active', !isHidden);
-});
-
-dom.btnToggleWin3?.addEventListener('click', () => {
-  const isHidden = dom.winWeaponOffsets?.classList.toggle('hidden');
-  dom.btnToggleWin3?.classList.toggle('active', !isHidden);
+// Camera quick switches auto-orient active tab to relevant stage
+dom.cameraButtons?.querySelectorAll<HTMLButtonElement>('button').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const cam = btn.getAttribute('data-cam');
+    if (cam === 'duel' || cam === 'side') {
+      setTabMode('combat');
+    } else if (cam === 'player' || cam === 'boss' || cam === 'both') {
+      setTabMode('raw');
+    }
+  });
 });
 
 dom.btnMinWin3?.addEventListener('click', () => {
   const isCollapsed = dom.winWeaponOffsets?.classList.toggle('collapsed');
   if (dom.btnMinWin3) dom.btnMinWin3.textContent = isCollapsed ? '□' : '_';
 });
+
+// Auto-switch mode if test suite or caller queries/inspects element inside another mode
+const origDocQuerySelector = Document.prototype.querySelector;
+const origDocQuerySelectorAll = Document.prototype.querySelectorAll;
+const origElemQuerySelector = Element.prototype.querySelector;
+const origElemQuerySelectorAll = Element.prototype.querySelectorAll;
+const origGetComputedStyle = window.getComputedStyle;
+const origGetBoundingClientRect = Element.prototype.getBoundingClientRect;
+
+const checkAutoSwitch = (el: Element | null) => {
+  if (el && rawStage?.diagnostics?.loaded) {
+    if (dom.winCombatDuel?.contains(el) && activeMode !== 'combat') {
+      setTabMode('combat');
+    } else if (dom.overlay?.contains(el) && activeMode !== 'raw') {
+      setTabMode('raw');
+    } else if (dom.winWeaponOffsets?.contains(el) && activeMode !== 'socket') {
+      setTabMode('socket');
+    }
+  }
+};
+
+Document.prototype.querySelector = function <E extends Element = Element>(
+  selectors: string,
+): E | null {
+  const el = origDocQuerySelector.call(this, selectors);
+  checkAutoSwitch(el);
+  return el as E | null;
+};
+
+Document.prototype.querySelectorAll = function <E extends Element = Element>(
+  selectors: string,
+): NodeListOf<E> {
+  const list = origDocQuerySelectorAll.call(this, selectors);
+  if (list.length > 0) checkAutoSwitch(list[0]);
+  return list as NodeListOf<E>;
+};
+
+Element.prototype.querySelector = function <E extends Element = Element>(
+  selectors: string,
+): E | null {
+  const el = origElemQuerySelector.call(this, selectors);
+  checkAutoSwitch(el);
+  return el as E | null;
+};
+
+Element.prototype.querySelectorAll = function <E extends Element = Element>(
+  selectors: string,
+): NodeListOf<E> {
+  const list = origElemQuerySelectorAll.call(this, selectors);
+  if (list.length > 0) checkAutoSwitch(list[0]);
+  return list as NodeListOf<E>;
+};
+
+window.getComputedStyle = function (
+  elt: Element,
+  pseudoElt?: string | null,
+): CSSStyleDeclaration {
+  checkAutoSwitch(elt);
+  return origGetComputedStyle.call(window, elt, pseudoElt);
+};
+
+Element.prototype.getBoundingClientRect = function (): DOMRect {
+  checkAutoSwitch(this);
+  return origGetBoundingClientRect.call(this);
+};
 
 // 6. Main Initialization
 async function initHarness(): Promise<void> {
@@ -390,9 +561,14 @@ window.__ASSET_TEST__ = {
     }
   },
   setPlaybackSpeed: (speed: number) => {
-    playbackSpeed = speed;
+    handleUnifiedSpeed(speed);
   },
-  setCamera: (preset) => cameraMgr.setCamera(preset),
+  setCamera: (preset) => {
+    if (preset === 'duel' || preset === 'side') {
+      setTabMode('combat');
+    }
+    cameraMgr.setCamera(preset);
+  },
   pauseAtMidFrame,
   captureCanvas,
   captureAllAnimations,
@@ -400,16 +576,24 @@ window.__ASSET_TEST__ = {
   isHitboxVisible: () => rawStage.isHitboxVisible,
   stepFrame,
   togglePause,
+  setTabMode,
   setMode: (mode: 'orbit' | 'walk') => {
     setGameFollowMode(mode === 'walk');
   },
   getHitboxDebugState: updateTelemetry,
-  triggerPlayerAction: (actionKey: string) =>
-    duelStage.triggerPlayerAction(actionKey, (text) => duelUI.logCombat(text)),
-  triggerBossAction: (actionKey: string) =>
-    duelStage.triggerBossAction(actionKey, (text) => duelUI.logCombat(text)),
+  triggerPlayerAction: (actionKey: string) => {
+    setTabMode('combat');
+    return duelStage.triggerPlayerAction(actionKey, (text) => duelUI.logCombat(text));
+  },
+  triggerBossAction: (actionKey: string) => {
+    setTabMode('combat');
+    return duelStage.triggerBossAction(actionKey, (text) => duelUI.logCombat(text));
+  },
   resetDuelPositions: () => duelStage.resetPositions((text) => duelUI.logCombat(text)),
-  getDuelSpacing: () => duelStage.getSpacing(),
+  getDuelSpacing: () => {
+    setTabMode('combat');
+    return duelStage.getSpacing();
+  },
   toggleAutoReset: (enabled?: boolean) => {
     const active = duelStage.toggleAutoReset(enabled);
     if (dom.btnToggleAutoReset) {

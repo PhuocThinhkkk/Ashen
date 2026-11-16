@@ -58,6 +58,7 @@ declare global {
       isHitboxVisible?: () => boolean;
       stepFrame?: (frames: number) => void;
       togglePause?: () => boolean;
+      setTabMode?: (mode: 'raw' | 'combat' | 'socket' | null) => void;
       setMode?: (mode: 'orbit' | 'walk') => void;
       getHitboxDebugState?: () => { playerActive: boolean; bossActive: boolean };
       triggerPlayerAction?: (actionKey: string) => void;
