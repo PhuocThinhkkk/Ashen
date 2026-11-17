@@ -1,7 +1,12 @@
 import { defineConfig, devices } from '@playwright/test';
+import path from 'node:path';
 
-export default defineConfig({
+export default (defineConfig as any)({
   testDir: './tests',
+  // Configure Playwright's internal Babel transpiler to handle Vite's ?raw GLSL imports in Node tests
+  '@playwright/test': {
+    babelPlugins: [[path.resolve('scripts/babel-plugin-glsl-raw.cjs')]],
+  },
   // One worker: parallel headless WebGL contexts contend for the GPU, and the
   // frame-time collapse makes game time drift from wall time, flaking timed
   // gameplay phases and screenshot baselines.
