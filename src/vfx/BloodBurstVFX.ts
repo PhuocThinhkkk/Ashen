@@ -1,259 +1,135 @@
 import * as THREE from 'three';
-import {
-  BatchedRenderer,
-  ParticleSystem,
-  SphereEmitter,
-  IntervalValue,
-  ConstantValue,
-  ConstantColor,
-  ColorOverLife,
-  Gradient,
-  ApplyForce,
-  RenderMode,
-  Vector3,
-  Vector4,
-} from 'three.quarks';
+import type { BatchedRenderer } from 'three.quarks';
 import { VFXTextureFactory } from './VFXTextureFactory';
+import WHIP_VERTEX_SHADER from './shaders/bloodWhip.vert.glsl?raw';
+import WHIP_FRAGMENT_SHADER from './shaders/bloodWhip.frag.glsl?raw';
+import FLIPBOOK_VERTEX_SHADER from './shaders/bloodFlipbook.vert.glsl?raw';
+import FLIPBOOK_FRAGMENT_SHADER from './shaders/bloodFlipbook.frag.glsl?raw';
 
-const WHIP_VERTEX_SHADER = /* glsl */ `
-  uniform float uProgress;
-  varying vec2 vUv;
-
-  void main() {
-    vUv = uv;
-    vec3 pos = position;
-
-    // Rapid whip snap: extends full length in first 22% of lifetime
-    float extendFactor = clamp(uProgress / 0.22, 0.0, 1.0);
-    extendFactor = 1.0 - pow(1.0 - extendFactor, 3.0); // snappy ease-out
-
-    if (pos.x > 0.0) {
-      pos.x *= extendFactor;
-    }
-
-    // Natural fluid gravity droop along whip length
-    float sag = pow(vUv.x, 2.0) * uProgress * 0.22;
-    pos.y -= sag;
-
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
-  }
-`;
-
-const WHIP_FRAGMENT_SHADER = /* glsl */ `
-  uniform float uProgress;
-  varying vec2 vUv;
-
-  void main() {
-    // vUv.x: 0.0 = contact point (wound root), 1.0 = streak tail
-    // vUv.y: 0.0 to 1.0 across whip width (0.5 = center fluid spine)
-
-    float distFromCenter = abs(vUv.y - 0.5) * 2.0;
-
-    // Tapering width: thick at wound, tapering to 42% at tail
-    float taper = mix(0.95, 0.40, vUv.x);
-
-    // Dynamic fluid tendril shear: splits into jagged liquid tendrils toward tail
-    float tendril1 = sin(vUv.y * 32.0 + vUv.x * 16.0);
-    float tendril2 = cos(vUv.y * 48.0 - vUv.x * 24.0);
-    float tendrilPattern = tendril1 * 0.55 + tendril2 * 0.45;
-
-    // Cohesion: solid sheet near wound root, breaking into ligaments toward tail
-    float cohesion = smoothstep(0.38, 0.04, vUv.x);
-    float streamMask = mix(tendrilPattern, 0.75, cohesion);
-
-    // Razor-sharp sheared liquid edge (no blurry circular gradient)
-    float edgeOffset = distFromCenter - (streamMask * 0.32 * vUv.x);
-    float liquidEdge = smoothstep(taper, taper - 0.04, edgeOffset);
-
-    // Droplet breakup near the whip tail
-    if (vUv.x > 0.72) {
-      float breakPattern = sin(vUv.x * 58.0) * cos(vUv.y * 36.0);
-      if (breakPattern < -0.28) {
-        liquidEdge = 0.0;
-      }
-    }
-
-    // Root dissolve: tail burns forward as the whip ejects away from blade
-    float rootDissolve = smoothstep(uProgress * 0.72, uProgress * 0.72 + 0.14, vUv.x);
-
-    // Rapid, clean fade-out in final 35% of duration
-    float fade = 1.0 - smoothstep(0.62, 1.0, uProgress);
-
-    float alpha = liquidEdge * rootDissolve * fade;
-    if (alpha < 0.02) discard;
-
-    // Deep dark arterial crimson (dark maroon-red, flat non-glowing opacity)
-    vec3 coreColor = vec3(0.58, 0.03, 0.03); // arterial core
-    vec3 rimColor = vec3(0.22, 0.008, 0.008); // dark coagulated edge
-    vec3 finalColor = mix(coreColor, rimColor, distFromCenter);
-
-    gl_FragColor = vec4(finalColor, alpha * 0.98);
-  }
-`;
-
-function createWhipCrossGeometry(length = 1.25, width = 0.18, segmentsX = 28): THREE.BufferGeometry {
+function createWhipGeometry(length = 1.55, width = 0.22, segmentsX = 24): THREE.BufferGeometry {
   const positions: number[] = [];
   const uvs: number[] = [];
   const indices: number[] = [];
 
-  // Plane A: in XY plane
-  for (let i = 0; i <= segmentsX; i++) {
-    const u = i / segmentsX;
-    const x = u * length;
-    positions.push(x, width * 0.5, 0);
-    uvs.push(u, 1.0);
-    positions.push(x, -width * 0.5, 0);
-    uvs.push(u, 0.0);
-  }
-  for (let i = 0; i < segmentsX; i++) {
-    const base = i * 2;
-    indices.push(base, base + 1, base + 2);
-    indices.push(base + 1, base + 3, base + 2);
-  }
+  for (let plane = 0; plane < 2; plane++) {
+    const isXZ = plane === 1;
+    const baseOffset = positions.length / 3;
 
-  // Plane B: in XZ plane (cross plane for 3D visibility from any camera angle)
-  const offset = (segmentsX + 1) * 2;
-  for (let i = 0; i <= segmentsX; i++) {
-    const u = i / segmentsX;
-    const x = u * length;
-    positions.push(x, 0, width * 0.5);
-    uvs.push(u, 1.0);
-    positions.push(x, 0, -width * 0.5);
-    uvs.push(u, 0.0);
-  }
-  for (let i = 0; i < segmentsX; i++) {
-    const base = offset + i * 2;
-    indices.push(base, base + 1, base + 2);
-    indices.push(base + 1, base + 3, base + 2);
+    for (let i = 0; i <= segmentsX; i++) {
+      const u = i / segmentsX;
+      const x = u * length;
+      const w = width * 0.5;
+
+      if (!isXZ) {
+        positions.push(x, w, 0, x, -w, 0);
+      } else {
+        positions.push(x, 0, w, x, 0, -w);
+      }
+      uvs.push(u, 1.0, u, 0.0);
+    }
+
+    for (let i = 0; i < segmentsX; i++) {
+      const b = baseOffset + i * 2;
+      indices.push(b, b + 1, b + 2, b + 1, b + 3, b + 2);
+    }
   }
 
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
   geo.setIndex(indices);
-  geo.computeVertexNormals();
   return geo;
 }
 
-interface BloodWhipInstance {
-  mesh: THREE.Mesh;
-  material: THREE.ShaderMaterial;
+interface BloodVfxInstance {
+  whipMesh: THREE.Mesh;
+  whipMaterial: THREE.ShaderMaterial;
+  quadMesh: THREE.Mesh;
+  quadMaterial: THREE.ShaderMaterial;
   active: boolean;
   timer: number;
   duration: number;
 }
 
-interface CompositeBloodBurst {
-  whip: BloodWhipInstance;
-  sparkPs: ParticleSystem;
-}
-
 /**
- * Directional Liquid Whip & Pinpoint Contact Spark Flesh-Hit VFX.
- * 1. Directional Liquid Whip: Narrow, cohesive ~1.6m elongated dark crimson streak
- *    shooting along blade slash with sharp torn edges breaking into tendrils.
- * 2. Pinpoint Contact Spark Anchor: Tight micro-burst of warm-orange sparks at exact hit point.
- * 3. Fast snappy 0.32s lifetime, clean floor (zero ground blood decals).
+ * Directional Liquid Whip & Camera-Aligned Billboard Quad Flesh-Hit VFX.
+ * Eliminates GPU buffer streaming (gl.bufferSubData) by utilizing pre-allocated
+ * static meshes and GPU uniform-driven UV animation.
  */
 export class BloodBurstVFX {
-  private pool: CompositeBloodBurst[] = [];
-  private readonly poolSize = 6;
+  private pool: BloodVfxInstance[] = [];
+  private readonly poolSize = 8;
   private currentIndex = 0;
-  private batchRenderer: BatchedRenderer;
   private scene: THREE.Scene;
+
+  // Pre-allocated static geometries
   private whipGeometry: THREE.BufferGeometry;
-  private sparkMaterial: THREE.MeshBasicMaterial;
+  private quadGeometry: THREE.PlaneGeometry;
 
-  constructor(batchRenderer: BatchedRenderer, sceneOrContainer?: THREE.Object3D) {
-    this.batchRenderer = batchRenderer;
-    this.scene = (sceneOrContainer as THREE.Scene) || (batchRenderer as unknown as THREE.Scene);
+  // Static scratch math objects (Zero runtime GC allocations)
+  private readonly scratchForwardX = new THREE.Vector3(1, 0, 0);
+  private readonly scratchDir = new THREE.Vector3();
+  private readonly scratchQuat = new THREE.Quaternion();
+  private readonly scratchPos = new THREE.Vector3();
+
+  constructor(_batchRenderer?: BatchedRenderer, sceneOrContainer?: THREE.Object3D) {
+    this.scene = (sceneOrContainer as THREE.Scene) || new THREE.Scene();
     const texFactory = VFXTextureFactory.getInstance();
+    const bloodTexture = texFactory.getBloodSplatTexture();
 
-    this.whipGeometry = createWhipCrossGeometry(1.55, 0.24, 32);
-
-    this.sparkMaterial = new THREE.MeshBasicMaterial({
-      map: texFactory.getSparkStreakTexture(),
-      transparent: true,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-    });
+    this.whipGeometry = createWhipGeometry(1.55, 0.22, 24);
+    this.quadGeometry = new THREE.PlaneGeometry(1, 1);
 
     for (let i = 0; i < this.poolSize; i++) {
-      // 1. Directional Liquid Whip Mesh
-      const mat = new THREE.ShaderMaterial({
+      // 1. Directional Liquid Whip Mesh (Deforms along slash vector)
+      const whipMat = new THREE.ShaderMaterial({
         vertexShader: WHIP_VERTEX_SHADER,
         fragmentShader: WHIP_FRAGMENT_SHADER,
-        uniforms: {
-          uProgress: { value: 0.0 },
-        },
+        uniforms: { uProgress: { value: 0.0 } },
         transparent: true,
         blending: THREE.NormalBlending,
         side: THREE.DoubleSide,
         depthWrite: false,
       });
+      const whipMesh = new THREE.Mesh(this.whipGeometry, whipMat);
+      whipMesh.visible = false;
+      whipMesh.frustumCulled = false;
+      this.scene.add(whipMesh);
 
-      const mesh = new THREE.Mesh(this.whipGeometry, mat);
-      mesh.visible = false;
-      mesh.frustumCulled = false;
-      this.scene.add(mesh);
+      // 2. Camera-Aligned Billboard Quad (Zero buffer updates, animated via uProgress)
+      const quadMat = new THREE.ShaderMaterial({
+        vertexShader: FLIPBOOK_VERTEX_SHADER,
+        fragmentShader: FLIPBOOK_FRAGMENT_SHADER,
+        uniforms: {
+          uTexture: { value: bloodTexture },
+          uProgress: { value: 0.0 },
+          uGrid: { value: new THREE.Vector2(1.0, 1.0) }, // Single 1920x1920 pre-colored blood splat image
+          uSize: { value: 1.1 },
+        },
+        transparent: true,
+        blending: THREE.NormalBlending,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      });
+      const quadMesh = new THREE.Mesh(this.quadGeometry, quadMat);
+      quadMesh.visible = false;
+      quadMesh.frustumCulled = false;
+      this.scene.add(quadMesh);
 
-      const whip: BloodWhipInstance = {
-        mesh,
-        material: mat,
+      this.pool.push({
+        whipMesh,
+        whipMaterial: whipMat,
+        quadMesh,
+        quadMaterial: quadMat,
         active: false,
         timer: 0,
-        duration: 0.34,
-      };
-
-      // 2. Pinpoint Contact Spark Anchor
-      const sparkSphere = new SphereEmitter({ radius: 0.015 });
-      const sparkGradient = new Gradient(
-        [
-          [new Vector3(1.0, 0.78, 0.25), 0],
-          [new Vector3(1.0, 0.38, 0.05), 1],
-        ],
-        [
-          [1.0, 0],
-          [0.0, 1],
-        ],
-      );
-      const sparkColor = new ColorOverLife(sparkGradient);
-      const sparkGravity = new ApplyForce(new Vector3(0, -9.8, 0), new ConstantValue(1.0));
-
-      const sparkPs = new ParticleSystem({
-        duration: 0.15,
-        looping: false,
-        startLife: new IntervalValue(0.08, 0.14),
-        startSpeed: new IntervalValue(3.5, 7.5),
-        startSize: new IntervalValue(0.04, 0.08),
-        startColor: new ConstantColor(new Vector4(1.0, 0.78, 0.25, 1.0)),
-        emissionOverTime: new ConstantValue(0),
-        emissionBursts: [
-          {
-            time: 0,
-            count: new IntervalValue(10, 14),
-            cycle: 1,
-            interval: 0.01,
-            probability: 1,
-          },
-        ],
-        shape: sparkSphere,
-        material: this.sparkMaterial,
-        renderMode: RenderMode.StretchedBillBoard,
-        speedFactor: 0.16,
-        worldSpace: true,
-        behaviors: [sparkColor, sparkGravity],
+        duration: 0.32,
       });
-
-      this.batchRenderer.addSystem(sparkPs);
-      this.scene.add(sparkPs.emitter);
-
-      this.pool.push({ whip, sparkPs });
     }
   }
 
   /**
-   * Emits the directional liquid whip and pinpoint contact spark anchor.
+   * Triggers the zero-buffer-upload directional whip and billboard burst.
    */
   public emit(
     contactPoint: THREE.Vector3 | { x: number; y: number; z: number },
@@ -263,41 +139,46 @@ export class BloodBurstVFX {
     const burst = this.pool[this.currentIndex];
     this.currentIndex = (this.currentIndex + 1) % this.poolSize;
 
-    const cp = contactPoint instanceof THREE.Vector3 ? contactPoint : new THREE.Vector3(contactPoint.x, contactPoint.y, contactPoint.z);
-    const hd = hitDirection instanceof THREE.Vector3 ? hitDirection : new THREE.Vector3(hitDirection.x, hitDirection.y, hitDirection.z);
+    this.scratchPos.set(contactPoint.x, contactPoint.y, contactPoint.z);
+    this.scratchDir.set(hitDirection.x, hitDirection.y, hitDirection.z).normalize();
+    this.scratchQuat.setFromUnitVectors(this.scratchForwardX, this.scratchDir);
 
-    const normDir = hd.clone().normalize();
-    // Orientation: geometry extends along +X, orient +X to normDir
-    const forwardX = new THREE.Vector3(1, 0, 0);
-    const quat = new THREE.Quaternion().setFromUnitVectors(forwardX, normDir);
-    const scale = isHeavy ? 1.35 : 1.0;
+    const scale = isHeavy ? 1.4 : 1.0;
+    const duration = isHeavy ? 0.38 : 0.30;
 
-    // 1. Trigger Liquid Whip
-    burst.whip.active = true;
-    burst.whip.timer = 0;
-    burst.whip.duration = isHeavy ? 0.38 : 0.32;
-    burst.whip.material.uniforms.uProgress.value = 0.0;
-    burst.whip.mesh.position.copy(cp);
-    burst.whip.mesh.quaternion.copy(quat);
-    burst.whip.mesh.scale.set(scale, scale, scale);
-    burst.whip.mesh.visible = true;
-    burst.whip.mesh.updateMatrixWorld(true);
+    // 1. Activate Liquid Whip
+    burst.whipMesh.position.copy(this.scratchPos);
+    burst.whipMesh.quaternion.copy(this.scratchQuat);
+    burst.whipMesh.scale.set(scale, scale, scale);
+    burst.whipMaterial.uniforms.uProgress.value = 0.0;
+    burst.whipMesh.visible = true;
 
-    // 2. Trigger Pinpoint Contact Spark Anchor
-    burst.sparkPs.emitter.position.copy(cp);
-    burst.sparkPs.emitter.updateMatrixWorld(true);
-    burst.sparkPs.restart();
+    // 2. Activate Billboard Quad
+    burst.quadMesh.position.copy(this.scratchPos);
+    burst.quadMaterial.uniforms.uProgress.value = 0.0;
+    burst.quadMaterial.uniforms.uSize.value = isHeavy ? 1.5 : 1.1;
+    burst.quadMesh.visible = true;
+
+    burst.active = true;
+    burst.timer = 0;
+    burst.duration = duration;
   }
 
   public update(delta: number): void {
-    for (const b of this.pool) {
-      if (b.whip.active) {
-        b.whip.timer += delta;
-        const progress = Math.min(1.0, b.whip.timer / b.whip.duration);
-        b.whip.material.uniforms.uProgress.value = progress;
+    for (let i = 0; i < this.poolSize; i++) {
+      const b = this.pool[i];
+      if (b.active) {
+        b.timer += delta;
+        const progress = Math.min(1.0, b.timer / b.duration);
+
+        // Update uniforms only — zero vertex buffer transfers to GPU!
+        b.whipMaterial.uniforms.uProgress.value = progress;
+        b.quadMaterial.uniforms.uProgress.value = progress;
+
         if (progress >= 1.0) {
-          b.whip.active = false;
-          b.whip.mesh.visible = false;
+          b.active = false;
+          b.whipMesh.visible = false;
+          b.quadMesh.visible = false;
         }
       }
     }
@@ -305,25 +186,25 @@ export class BloodBurstVFX {
 
   public reset(): void {
     for (const b of this.pool) {
-      b.whip.active = false;
-      b.whip.mesh.visible = false;
-      b.whip.timer = 0;
-      b.whip.material.uniforms.uProgress.value = 0.0;
-      b.sparkPs.restart();
+      b.active = false;
+      b.whipMesh.visible = false;
+      b.quadMesh.visible = false;
+      b.timer = 0;
+      b.whipMaterial.uniforms.uProgress.value = 0.0;
+      b.quadMaterial.uniforms.uProgress.value = 0.0;
     }
     this.currentIndex = 0;
   }
 
   public dispose(): void {
     for (const b of this.pool) {
-      this.scene.remove(b.whip.mesh);
-      b.whip.material.dispose();
-
-      this.batchRenderer.deleteSystem(b.sparkPs);
-      if (b.sparkPs.emitter.parent) b.sparkPs.emitter.parent.remove(b.sparkPs.emitter);
+      this.scene.remove(b.whipMesh);
+      this.scene.remove(b.quadMesh);
+      b.whipMaterial.dispose();
+      b.quadMaterial.dispose();
     }
-    this.pool = [];
     this.whipGeometry.dispose();
-    this.sparkMaterial.dispose();
+    this.quadGeometry.dispose();
+    this.pool = [];
   }
 }

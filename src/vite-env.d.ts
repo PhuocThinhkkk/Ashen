@@ -61,6 +61,7 @@ interface ThreeGameTestHooks {
   triggerHitSparks?(pos?: any, dir?: any): void;
   triggerSlashArc?(origin?: any, rotation?: any, color?: any): void;
   getVfxSystem?(): any;
+  getProfiler?(): any;
   triggerRestart?(): void;
   getInputController?(): any;
   getMobileDeviceController?(): any;
@@ -69,5 +70,15 @@ interface ThreeGameTestHooks {
 interface Window {
   __THREE_GAME_DIAGNOSTICS__?: ThreeGameDiagnostics;
   __THREE_GAME_TEST_HOOKS__?: ThreeGameTestHooks;
+}
+
+declare module '*.glsl?raw' {
+  const content: string;
+  export default content;
+}
+
+declare module '*.glsl' {
+  const content: string;
+  export default content;
 }
 
