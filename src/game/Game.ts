@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { BOSS_ATTACKS } from '../combat/FrameCombat';
 import { checkAttackHit } from '../combat/HitDetection';
-import { type CombatInputs, InputController } from '../core/InputController';
+import { type CombatInputs } from '../core/types';
+import { InputController } from '../core/InputController';
 import { Loop } from '../core/Loop';
 import { createRenderer, resizeRenderer } from '../core/Renderer';
 import { BossCharacter } from '../entities/BossCharacter';
@@ -71,6 +72,12 @@ export class Game {
   };
 
   private readonly mouseDelta = new THREE.Vector2();
+
+  // Pre-allocated scratch vectors & cached viewport to eliminate runtime GC allocations and DOM reflow
+  private readonly scratchScreenPos = new THREE.Vector2();
+  private readonly scratchWorldPos = new THREE.Vector3();
+  private cachedHalfWidth = 640;
+  private cachedHalfHeight = 360;
 
   private readonly tuning = {
     speed: 4.8,
@@ -163,6 +170,10 @@ export class Game {
     this.resetRun();
     this.installTestHooks();
     this.setupNetworkHandlers();
+
+    // Cache initial viewport dimensions
+    this.cachedHalfWidth = Math.max(1, (this.canvas.clientWidth || 1280) / 2);
+    this.cachedHalfHeight = Math.max(1, (this.canvas.clientHeight || 720) / 2);
 
     // Trigger Pre-match Preparation and Resource Warm-Up
     void this.prepareMatch();
@@ -470,7 +481,10 @@ export class Game {
     }
 
     this.elapsed += delta;
-    resizeRenderer(this.renderer, this.camera, this.settingsManager.data.graphics.maxDpr);
+    if (resizeRenderer(this.renderer, this.camera, this.settingsManager.data.graphics.maxDpr)) {
+      this.cachedHalfWidth = Math.max(1, this.canvas.clientWidth / 2);
+      this.cachedHalfHeight = Math.max(1, this.canvas.clientHeight / 2);
+    }
 
     // Hitstop time dilation on impacts (visceral weight without halting browser rendering or dropping frames)
     let simDelta = delta;
@@ -834,13 +848,15 @@ export class Game {
   }
 
   private projectToScreen(worldPos: THREE.Vector3, heightOffset = 0): THREE.Vector2 {
-    const v = worldPos.clone();
-    v.y += heightOffset;
-    v.project(this.camera);
+    this.scratchWorldPos.copy(worldPos);
+    this.scratchWorldPos.y += heightOffset;
+    this.scratchWorldPos.project(this.camera);
 
-    const halfW = this.canvas.clientWidth / 2;
-    const halfH = this.canvas.clientHeight / 2;
-    return new THREE.Vector2(v.x * halfW + halfW, -v.y * halfH + halfH);
+    this.scratchScreenPos.set(
+      this.scratchWorldPos.x * this.cachedHalfWidth + this.cachedHalfWidth,
+      -this.scratchWorldPos.y * this.cachedHalfHeight + this.cachedHalfHeight,
+    );
+    return this.scratchScreenPos;
   }
 
   private render(): void {
@@ -994,6 +1010,7 @@ export class Game {
         this.vfx.spawnSlashArc(o, r, 1.2, color || 0xffe066);
       },
       getVfxSystem: () => this.vfx,
+      getProfiler: () => this.profiler,
       triggerRestart: () => this.resetRun(),
       getInputController: () => this.input,
       getMobileDeviceController: () => this.mobileDeviceController,

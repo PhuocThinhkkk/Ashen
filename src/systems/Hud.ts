@@ -10,6 +10,14 @@ export interface HudModelControls {
   onBossModelChange: (modelId: string) => Promise<void> | void;
 }
 
+interface PooledDamageSlot {
+  wrapper: HTMLDivElement;
+  textEl: HTMLSpanElement;
+  active: boolean;
+  timer: number;
+  duration: number;
+}
+
 export class Hud {
   private readonly playerHpFill: HTMLElement;
   private readonly playerHpChip: HTMLElement;
@@ -39,6 +47,11 @@ export class Hud {
   private fpsFrames = 0;
   private fpsTimer = 0;
 
+  // Damage Number Object Pool
+  private readonly damagePool: PooledDamageSlot[] = [];
+  private readonly damagePoolSize = 10;
+  private damagePoolIndex = 0;
+
   constructor(modelControls?: HudModelControls) {
     this.playerHpFill = this.getEl('#player-hp-fill');
     this.playerHpChip = this.getEl('#player-hp-chip');
@@ -54,6 +67,27 @@ export class Hud {
     this.deathOverlay = this.getEl('#death-overlay');
     this.victoryOverlay = this.getEl('#victory-overlay');
     this.fpsDisplay = document.querySelector<HTMLElement>('#fps-display');
+
+    // Pre-allocate 10 DOM slots upfront to eliminate runtime allocations & reflow
+    this.damageContainer.innerHTML = '';
+    for (let i = 0; i < this.damagePoolSize; i++) {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'damage-number-slot';
+      wrapper.style.display = 'none';
+
+      const textEl = document.createElement('span');
+      textEl.className = 'damage-number-text';
+      wrapper.appendChild(textEl);
+
+      this.damageContainer.appendChild(wrapper);
+      this.damagePool.push({
+        wrapper,
+        textEl,
+        active: false,
+        timer: 0,
+        duration: 0.85,
+      });
+    }
 
     this.modelSelectPanel = document.querySelector<HTMLElement>('#model-select-panel');
     this.playerModelSelect = document.querySelector<HTMLSelectElement>('#player-model-select');
@@ -215,28 +249,56 @@ export class Hud {
       this.fpsFrames = 0;
       this.fpsTimer = 0;
     }
+
+    // 7. Update active damage numbers
+    for (let i = 0; i < this.damagePoolSize; i++) {
+      const slot = this.damagePool[i];
+      if (slot.active) {
+        slot.timer += delta;
+        if (slot.timer >= slot.duration) {
+          slot.active = false;
+          slot.wrapper.style.display = 'none';
+          slot.wrapper.classList.remove('anim-active');
+        }
+      }
+    }
   }
 
   public spawnDamageNumber(amount: number, screenX: number, screenY: number, isPlayerDamage = false): void {
     if (!SettingsManager.getInstance().data.vfx.damageNumbers) return;
 
-    const el = document.createElement('div');
-    el.className = `damage-number ${isPlayerDamage ? 'player-damage' : ''}`;
-    el.textContent = `${Math.round(amount)}`;
-    el.style.left = `${screenX + (Math.random() - 0.5) * 30}px`;
-    el.style.top = `${screenY + (Math.random() - 0.5) * 20}px`;
+    const slot = this.damagePool[this.damagePoolIndex];
+    this.damagePoolIndex = (this.damagePoolIndex + 1) % this.damagePoolSize;
 
-    this.damageContainer.appendChild(el);
-    setTimeout(() => {
-      el.remove();
-    }, 900);
+    const scatterX = Math.round(screenX + (Math.random() - 0.5) * 32);
+    const scatterY = Math.round(screenY + (Math.random() - 0.5) * 20);
+
+    slot.textEl.textContent = `${Math.round(amount)}`;
+    slot.textEl.className = `damage-number-text ${isPlayerDamage ? 'player-damage' : ''}`;
+
+    // GPU-composited translate3d without modifying style.left / style.top
+    slot.wrapper.style.transform = `translate3d(${scatterX}px, ${scatterY}px, 0)`;
+    slot.wrapper.style.display = 'block';
+
+    slot.wrapper.classList.remove('anim-active');
+    void slot.wrapper.offsetWidth;
+    slot.wrapper.classList.add('anim-active');
+
+    slot.active = true;
+    slot.timer = 0;
   }
 
   public reset(): void {
     this.deathOverlay.classList.add('hidden');
     this.victoryOverlay.classList.add('hidden');
     this.lockonReticle.classList.add('hidden');
-    this.damageContainer.innerHTML = '';
+    for (const slot of this.damagePool) {
+      slot.active = false;
+      slot.wrapper.style.display = 'none';
+      slot.wrapper.classList.remove('anim-active');
+      slot.timer = 0;
+    }
+    this.damagePoolIndex = 0;
     this.fpsFrames = 0;
     this.fpsTimer = 0;
   }
