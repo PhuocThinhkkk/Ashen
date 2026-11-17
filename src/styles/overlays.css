@@ -1,0 +1,177 @@
+/* ========================================================
+   6. Death & Victory Banners
+   ======================================================== */
+.banner-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(6px);
+  z-index: 25;
+  transition: opacity 1.2s ease-in;
+  cursor: pointer;
+}
+
+.death-title {
+  margin: 0;
+  font-size: clamp(3rem, 10vw, 5.5rem);
+  font-weight: 700;
+  letter-spacing: 12px;
+  color: #b51818;
+  text-shadow: 0 0 32px rgba(181, 24, 24, 0.8), 0 4px 16px rgba(0, 0, 0, 0.95);
+  animation: bannerFadeIn 1.4s ease-out forwards;
+}
+
+.victory-title {
+  margin: 0;
+  font-size: clamp(2.4rem, 8vw, 4.8rem);
+  font-weight: 700;
+  letter-spacing: 10px;
+  color: #e5bd57;
+  text-shadow: 0 0 32px rgba(229, 189, 87, 0.85), 0 4px 18px rgba(0, 0, 0, 0.95);
+  animation: bannerFadeIn 1.4s ease-out forwards;
+}
+
+.banner-prompt {
+  margin-top: 18px;
+  font-size: 1.15rem;
+  letter-spacing: 3px;
+  color: #edd9ba;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8);
+  animation: bannerFadeIn 2.2s ease-out forwards;
+}
+
+.banner-restart-btn {
+  margin-top: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px 28px;
+  min-width: 230px;
+  background: linear-gradient(180deg, rgba(32, 24, 18, 0.92) 0%, rgba(16, 12, 10, 0.96) 100%);
+  border: 1.5px solid #d4af37;
+  border-radius: 4px;
+  color: #f7e7c4;
+  font-family: "Cinzel", "Georgia", serif;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 2px;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.8), 0 0 20px rgba(212, 175, 55, 0.25);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  touch-action: manipulation;
+  pointer-events: auto;
+  animation: bannerFadeIn 2.4s ease-out forwards;
+}
+
+.banner-restart-btn:hover {
+  background: linear-gradient(180deg, rgba(48, 36, 26, 0.96) 0%, rgba(26, 20, 16, 0.98) 100%);
+  border-color: #ffd700;
+  color: #ffffff;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.9), 0 0 28px rgba(255, 215, 0, 0.5);
+  transform: translateY(-2px);
+}
+
+.banner-restart-btn:active {
+  transform: scale(0.96);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.9), 0 0 12px rgba(255, 215, 0, 0.4);
+}
+
+@keyframes bannerFadeIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.hidden {
+  display: none !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+/* ========================================================
+   9. Pre-Match Preparation Loading Screen
+   ======================================================== */
+.prewarm-loading-screen {
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(circle at center, #101622 0%, #06080e 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  transition: opacity 0.4s ease, visibility 0.4s ease;
+}
+
+.prewarm-loading-screen.fade-out {
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.prewarm-modal {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  width: min(480px, 90vw);
+  background: rgba(12, 16, 24, 0.9);
+  border: 1px solid rgba(181, 149, 74, 0.5);
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.8), 0 0 30px rgba(181, 149, 74, 0.2);
+  padding: 36px 32px;
+  border-radius: 6px;
+  backdrop-filter: blur(12px);
+}
+
+.prewarm-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: #b5954a;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.prewarm-title {
+  font-family: "Cinzel", "Georgia", serif;
+  font-size: 1.6rem;
+  letter-spacing: 3px;
+  color: #e5bd57;
+  margin: 0 0 24px 0;
+  text-shadow: 0 0 16px rgba(229, 189, 87, 0.5);
+}
+
+.prewarm-bar-track {
+  width: 100%;
+  height: 10px;
+  background: rgba(6, 8, 14, 0.8);
+  border: 1px solid rgba(181, 149, 74, 0.35);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.8);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+
+.prewarm-progress-fill {
+  height: 100%;
+  width: 15%;
+  background: linear-gradient(90deg, #b5954a 0%, #ffd700 100%);
+  box-shadow: 0 0 12px rgba(255, 215, 0, 0.8);
+  transition: width 0.25s ease-out;
+}
+
+.prewarm-status {
+  font-size: 0.8rem;
+  color: rgba(229, 222, 210, 0.8);
+  letter-spacing: 0.8px;
+  margin: 0;
+}

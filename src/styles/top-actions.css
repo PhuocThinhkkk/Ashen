@@ -1,0 +1,210 @@
+/* ========================================================
+   8. Top Actions & Unified Settings Trigger (Top-Right)
+   ======================================================== */
+.top-actions {
+  position: absolute;
+  top: max(16px, env(safe-area-inset-top));
+  right: max(20px, env(safe-area-inset-right));
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 1005;
+}
+
+.top-action-btn,
+.unified-settings-trigger,
+.unified-settings-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: rgba(14, 18, 26, 0.88);
+  border: 1px solid rgba(181, 149, 74, 0.6);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  color: #e5bd57;
+  font-family: "Cinzel", "Georgia", serif;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 1.1px;
+  padding: 8px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  backdrop-filter: blur(8px);
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+}
+
+.top-action-btn:hover,
+.unified-settings-trigger:hover,
+.unified-settings-btn:hover {
+  background: rgba(28, 36, 50, 0.95);
+  border-color: #ffd700;
+  box-shadow: 0 0 14px rgba(229, 189, 87, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  transform: translateY(-1px);
+}
+
+.top-action-btn:active,
+.unified-settings-trigger.active,
+.unified-settings-btn.active {
+  background: rgba(181, 149, 74, 0.25);
+  border-color: #ffd700;
+  box-shadow: 0 0 16px rgba(229, 189, 87, 0.6);
+  transform: scale(0.97);
+}
+
+/* ========================================================
+   8b. Horizontal Orientation Prompt Overlay
+   ======================================================== */
+.orientation-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: radial-gradient(circle at center, rgba(14, 18, 28, 0.96) 0%, rgba(6, 8, 14, 0.98) 100%);
+  backdrop-filter: blur(12px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  animation: bannerFadeIn 0.3s ease-out;
+}
+
+.orientation-modal {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  max-width: 440px;
+  width: 100%;
+  background: rgba(12, 16, 24, 0.92);
+  border: 1.5px solid rgba(229, 189, 87, 0.6);
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.85), 0 0 30px rgba(229, 189, 87, 0.25);
+  padding: 32px 24px;
+  border-radius: 6px;
+}
+
+.phone-anim-wrapper {
+  width: 64px;
+  height: 64px;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.rotate-phone-svg {
+  width: 56px;
+  height: 56px;
+  stroke: #ffd700;
+  animation: rotatePhoneAnim 2.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+@keyframes rotatePhoneAnim {
+  0%, 20% {
+    transform: rotate(0deg);
+  }
+  50%, 80% {
+    transform: rotate(-90deg);
+  }
+  100% {
+    transform: rotate(0deg);
+  }
+}
+
+.orientation-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: #b5954a;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.orientation-title {
+  font-family: "Cinzel", "Georgia", serif;
+  font-size: 1.35rem;
+  letter-spacing: 2.5px;
+  color: #e5bd57;
+  margin: 0 0 12px 0;
+  text-shadow: 0 0 16px rgba(229, 189, 87, 0.5);
+}
+
+.orientation-desc {
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: rgba(229, 222, 210, 0.85);
+  margin: 0 0 24px 0;
+}
+
+.orientation-btn-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+}
+
+.orientation-primary-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 12px 18px;
+  background: linear-gradient(180deg, rgba(46, 36, 24, 0.95) 0%, rgba(20, 16, 12, 0.98) 100%);
+  border: 1.5px solid #d4af37;
+  border-radius: 4px;
+  color: #ffffff;
+  font-family: "Cinzel", "Georgia", serif;
+  font-size: 0.88rem;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.8), 0 0 18px rgba(212, 175, 55, 0.35);
+  touch-action: manipulation;
+}
+
+.orientation-primary-btn:hover {
+  background: linear-gradient(180deg, rgba(60, 48, 30, 0.98) 0%, rgba(30, 22, 16, 1) 100%);
+  border-color: #ffd700;
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.9), 0 0 24px rgba(255, 215, 0, 0.5);
+}
+
+.orientation-secondary-btn {
+  background: transparent;
+  border: none;
+  color: rgba(229, 222, 210, 0.6);
+  font-family: inherit;
+  font-size: 0.8rem;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 6px;
+}
+
+.orientation-secondary-btn:hover {
+  color: #edd9ba;
+}
+
+/* Fullscreen icon helpers */
+.ui-icon {
+  width: 16px;
+  height: 16px;
+  display: inline-block;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+
+.unified-settings-trigger .ui-icon,
+.unified-settings-btn .ui-icon {
+  width: 17px;
+  height: 17px;
+  margin-right: 6px;
+  stroke: #d4af37;
+  transition: transform 0.3s ease;
+}
+
+.unified-settings-trigger:hover .ui-icon,
+.unified-settings-btn:hover .ui-icon {
+  transform: rotate(35deg);
+  stroke: #ffd700;
+}

@@ -1,0 +1,262 @@
+/* ========================================================
+   1. Player Bars (Top-Left)
+   ======================================================== */
+#player-bars {
+  position: absolute;
+  top: max(24px, env(safe-area-inset-top));
+  left: max(28px, env(safe-area-inset-left));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.bar-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bar-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #b5954a;
+  letter-spacing: 1px;
+  width: 24px;
+}
+
+.bar-track {
+  position: relative;
+  width: 280px;
+  height: 14px;
+  background: rgba(14, 18, 24, 0.85);
+  border: 1px solid rgba(181, 149, 74, 0.45);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6), inset 0 1px 3px rgba(0, 0, 0, 0.8);
+  overflow: hidden;
+}
+
+.bar-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  transition: width 0.08s ease-out;
+  z-index: 2;
+}
+
+.bar-chip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background: #8b1818;
+  transition: width 0.4s ease-out;
+  z-index: 1;
+}
+
+.hp-fill {
+  background: linear-gradient(180deg, #db2c2c 0%, #aa1414 100%);
+  box-shadow: 0 0 10px rgba(219, 44, 44, 0.5);
+}
+
+.stamina-fill {
+  background: linear-gradient(180deg, #38d665 0%, #1f9443 100%);
+  box-shadow: 0 0 8px rgba(46, 187, 90, 0.4);
+}
+
+.stamina-wrapper .bar-track {
+  width: 220px;
+  height: 10px;
+}
+
+.bar-text {
+  font-size: 0.68rem;
+  color: rgba(229, 222, 210, 0.75);
+  letter-spacing: 0.5px;
+}
+
+.fps-display {
+  display: inline-flex;
+  align-items: center;
+  font-family: "JetBrains Mono", monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: #7ef29d;
+  letter-spacing: 0.8px;
+  background: rgba(10, 14, 22, 0.88);
+  border: 1px solid rgba(212, 175, 55, 0.3);
+  padding: 3px 8px;
+  border-radius: 2px;
+  width: fit-content;
+  margin-top: 3px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+  user-select: none;
+  transition: color 0.2s ease;
+}
+
+/* ========================================================
+   2. Boss HUD (Bottom-Center)
+   ======================================================== */
+#boss-hud {
+  position: absolute;
+  bottom: max(32px, env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: min(720px, 88vw);
+  pointer-events: none;
+  z-index: 10;
+  transition: opacity 0.5s ease-out;
+}
+
+.boss-header {
+  text-align: center;
+  margin-bottom: 6px;
+}
+
+.boss-title {
+  display: block;
+  font-size: 0.65rem;
+  letter-spacing: 3px;
+  color: #8c734b;
+  text-transform: uppercase;
+}
+
+.boss-name {
+  margin: 2px 0 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: 2.5px;
+  color: #edd9ba;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.9), 0 0 16px rgba(255, 68, 0, 0.3);
+}
+
+.boss-bar-track {
+  position: relative;
+  width: 100%;
+  height: 18px;
+  background: rgba(10, 12, 16, 0.92);
+  border: 1px solid #7a5e2a;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.8), inset 0 2px 6px rgba(0, 0, 0, 0.9);
+  overflow: hidden;
+}
+
+.boss-hp-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background: linear-gradient(180deg, #d32020 0%, #871010 100%);
+  box-shadow: 0 0 14px rgba(211, 32, 32, 0.6);
+  transition: width 0.08s ease-out;
+  z-index: 2;
+}
+
+.boss-hp-chip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background: #ffaa33;
+  transition: width 0.55s ease-out;
+  z-index: 1;
+}
+
+/* ========================================================
+   3. Lock-On Reticle
+   ======================================================== */
+#lockon-reticle {
+  position: absolute;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  z-index: 15;
+  transition: opacity 0.2s ease-out;
+}
+
+.reticle-diamond {
+  width: 18px;
+  height: 18px;
+  border: 2px solid #ffaa33;
+  transform: rotate(45deg);
+  box-shadow: 0 0 12px rgba(255, 170, 51, 0.8);
+  animation: reticlePulse 1.8s infinite ease-in-out;
+}
+
+@keyframes reticlePulse {
+  0%, 100% {
+    transform: rotate(45deg) scale(1);
+    opacity: 0.8;
+  }
+  50% {
+    transform: rotate(45deg) scale(1.25);
+    opacity: 1;
+  }
+}
+
+/* ========================================================
+   4. Floating Combat Damage Numbers (Zero-Reflow Pool)
+   ======================================================== */
+#damage-container {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 12;
+}
+
+/* Outer slot positioned via GPU translate3d(x, y, 0) */
+.damage-number-slot {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  will-change: transform;
+}
+
+/* Inner text element executes the vertical rise & fade */
+.damage-number-text,
+.damage-number {
+  display: block;
+  font-family: "Cinzel", "Georgia", serif;
+  font-weight: 800;
+  font-size: 1.45rem;
+  color: #ffdd44;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9), 0 0 12px rgba(255, 110, 0, 0.8);
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+
+.damage-number-text.player-damage,
+.damage-number.player-damage {
+  color: #ff4433;
+  font-size: 1.6rem;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.95), 0 0 16px rgba(255, 0, 0, 0.9);
+}
+
+.damage-number-slot.anim-active .damage-number-text {
+  animation: damageFloat 0.85s ease-out forwards;
+}
+
+@keyframes damageFloat {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 20%) scale(0.6);
+  }
+  18% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.25);
+  }
+  75% {
+    opacity: 1;
+    transform: translate(-50%, -110%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -150%) scale(0.75);
+  }
+}

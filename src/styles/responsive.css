@@ -1,0 +1,96 @@
+/* ========================================================
+   Mobile Landscape & Compact Device Optimization
+   ======================================================== */
+@media screen and (max-height: 520px) {
+  #player-bars {
+    top: max(12px, env(safe-area-inset-top));
+    left: max(16px, env(safe-area-inset-left));
+    gap: 6px;
+    transform: scale(0.88);
+    transform-origin: top left;
+  }
+
+  .top-actions {
+    top: max(12px, env(safe-area-inset-top));
+    right: max(16px, env(safe-area-inset-right));
+    gap: 6px;
+  }
+
+  .top-action-btn,
+  .unified-settings-trigger,
+  .unified-settings-btn {
+    padding: 6px 10px;
+    font-size: 0.72rem;
+    gap: 6px;
+  }
+
+  #boss-hud {
+    bottom: max(16px, env(safe-area-inset-bottom));
+    width: min(440px, 48vw);
+  }
+
+  .boss-name {
+    font-size: 0.95rem;
+    letter-spacing: 1.8px;
+  }
+
+  .boss-bar-track {
+    height: 10px;
+  }
+
+  #touch-controls {
+    bottom: max(12px, env(safe-area-inset-bottom));
+    left: max(14px, env(safe-area-inset-left));
+    right: max(14px, env(safe-area-inset-right));
+  }
+
+  #touch-stick {
+    width: 105px;
+    height: 105px;
+  }
+
+  #touch-knob {
+    width: 42px;
+    height: 42px;
+  }
+
+  .touch-combat-cluster {
+    grid-template-columns: repeat(2, 56px);
+    grid-template-rows: repeat(2, 56px);
+    gap: 10px;
+  }
+
+  .touch-btn-attack {
+    width: 58px;
+    height: 58px;
+    font-size: 0.7rem;
+  }
+
+  .touch-btn-heavy {
+    width: 54px;
+    height: 54px;
+    font-size: 0.68rem;
+  }
+
+  .touch-btn-dodge {
+    width: 58px;
+    height: 58px;
+    font-size: 0.7rem;
+  }
+
+  .touch-btn-aux {
+    width: 44px;
+    height: 44px;
+    font-size: 0.62rem;
+  }
+}
+
+@media screen and (max-width: 600px) {
+  .top-action-btn .btn-text {
+    display: none;
+  }
+
+  .top-action-btn {
+    padding: 7px 8px;
+  }
+}
