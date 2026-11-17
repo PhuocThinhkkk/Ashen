@@ -8,7 +8,8 @@ import type { DuelSpacing } from '../types';
 import { TrajectoryVisualizer } from './TrajectoryVisualizer';
 import { DuelCombatResolver } from './DuelCombatResolver';
 import { WeaponHitboxVisualizer } from '../../combat/WeaponHitboxVisualizer';
-import type { InputController, CombatInputs } from '../../core/InputController';
+import type { InputController } from '../../core/InputController';
+import type { CombatInputs } from '../../core/types';
 import type { SoulslikeCamera } from '../../systems/SoulslikeCamera';
 
 export interface DuelTelemetryUpdate {

@@ -273,4 +273,60 @@ test.describe('Mobile Touch Controls, Fullscreen, and Horizontal Orientation', (
     // In horizontal landscape, the prompt automatically hides
     await expect(overlay).toBeHidden();
   });
+
+  test('touch joystick walks without draining stamina; sprint button runs and consumes stamina', async ({ page }) => {
+    test.setTimeout(45_000);
+    await page.setViewportSize({ width: 844, height: 390 });
+    await page.goto('/');
+    await page.waitForFunction(
+      () => {
+        const d = window.__THREE_GAME_DIAGNOSTICS__;
+        return d && d.assetsLoaded === true && (d.frame ?? 0) > 15;
+      },
+      { timeout: 20_000 },
+    );
+    await page.evaluate(() => document.body.classList.add('touch-device'));
+
+    const stick = page.locator('#touch-stick');
+    const stickBox = await stick.boundingBox();
+    expect(stickBox).not.toBeNull();
+    const cx = stickBox!.x + stickBox!.width / 2;
+    const cy = stickBox!.y + stickBox!.height / 2;
+
+    // Push joystick forward (without touching sprint button)
+    await page.evaluate(
+      ({ cx, cy }) => {
+        const stickEl = document.querySelector<HTMLElement>('#touch-stick');
+        stickEl?.dispatchEvent(new PointerEvent('pointerdown', { pointerId: 20, clientX: cx, clientY: cy, bubbles: true }));
+        stickEl?.dispatchEvent(new PointerEvent('pointermove', { pointerId: 20, clientX: cx, clientY: cy - 45, bubbles: true }));
+      },
+      { cx, cy },
+    );
+
+    // Move forward for 400ms
+    await page.waitForTimeout(400);
+    const diagWalking = await page.evaluate(() => window.__THREE_GAME_DIAGNOSTICS__);
+    expect(diagWalking?.player.state).toBe('moving');
+    // Stamina must NOT drain when simply walking with joystick
+    expect(diagWalking?.player.stamina).toBe(100);
+
+    // Now press the dedicated Sprint button while moving
+    const sprintBtn = page.locator('#touch-sprint-btn');
+    await sprintBtn.dispatchEvent('pointerdown');
+    await page.waitForTimeout(300);
+
+    const diagSprinting = await page.evaluate(() => window.__THREE_GAME_DIAGNOSTICS__);
+    // Stamina should now be consumed by intentional sprint
+    expect(diagSprinting?.player.stamina).toBeLessThan(100);
+
+    // Release sprint and joystick
+    await sprintBtn.dispatchEvent('pointerup');
+    await page.evaluate(
+      ({ cx, cy }) => {
+        const stickEl = document.querySelector<HTMLElement>('#touch-stick');
+        stickEl?.dispatchEvent(new PointerEvent('pointerup', { pointerId: 20, clientX: cx, clientY: cy - 45, bubbles: true }));
+      },
+      { cx, cy },
+    );
+  });
 });

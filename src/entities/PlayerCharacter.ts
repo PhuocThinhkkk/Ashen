@@ -9,7 +9,7 @@ import {
 import { DODGE_CONFIG } from '../combat/KinematicData';
 import { KinematicCombatController } from '../combat/KinematicCombatController';
 import { HitboxVisualDebugger } from '../combat/HitboxVisualDebugger';
-import type { CombatInputs } from '../core/InputController';
+import type { CombatInputs } from '../core/types';
 import type { AudioSystem } from '../systems/AudioSystem';
 import type { VFXSystem } from '../systems/VFXSystem';
 import { ModelLoader } from '../utils/ModelLoader';
@@ -412,7 +412,7 @@ export class PlayerCharacter {
     lockedTargetPos: THREE.Vector3 | null,
   ): void {
     // Check Dodge input first (high priority)
-    if (inputs.dodge && this.stamina >= this.dodgeConfig.staminaCost) {
+    if (inputs.dodge && this.stamina > 0) {
       this.startDodge(inputs, cameraYaw);
       return;
     }
@@ -451,7 +451,8 @@ export class PlayerCharacter {
 
     if (moveMag > 0.05) {
       const isSprinting = inputs.sprint && this.stamina > 5;
-      const speed = isSprinting ? 7.2 : 4.4;
+      const walkSpeed = moveMag < 0.65 ? 2.2 + 2.2 * (moveMag / 0.65) : 4.4;
+      const speed = isSprinting ? 7.2 : walkSpeed;
 
       if (isSprinting) {
         this.stamina = Math.max(0, this.stamina - 14 * delta);
@@ -484,7 +485,8 @@ export class PlayerCharacter {
       if (isSprinting) {
         this.playAction('run', 0.15, THREE.LoopRepeat, false, 1.0);
       } else {
-        this.playAction('walk', 0.15, THREE.LoopRepeat, false, 1.0);
+        const animSpeed = moveMag < 0.65 ? Math.max(0.7, moveMag / 0.65) : 1.0;
+        this.playAction('walk', 0.15, THREE.LoopRepeat, false, animSpeed);
       }
     } else {
       this.velocity.set(0, 0, 0);
@@ -508,7 +510,7 @@ export class PlayerCharacter {
     this.state = 'dodge';
     this.dodgeTimer = 0;
     this.isInvulnerable = false;
-    this.stamina -= this.dodgeConfig.staminaCost;
+    this.stamina = Math.max(0, this.stamina - this.dodgeConfig.staminaCost);
     this.staminaRegenDelay = 1.0;
 
     // Compute dodge direction
@@ -679,8 +681,18 @@ export class PlayerCharacter {
 
     this.attackTimer += delta;
 
-    if (this.attackPhase === 'recovery' && inputs.lightAttack && this.comboStep > 0 && this.comboStep < 3) {
-      this.comboQueued = true;
+    if (this.attackPhase === 'recovery') {
+      if (inputs.dodge && this.stamina > 0) {
+        this.currentAttack = null;
+        this.attackPhase = 'none';
+        this.comboStep = 0;
+        this.comboQueued = false;
+        this.startDodge(inputs);
+        return;
+      }
+      if (inputs.lightAttack && this.comboStep > 0 && this.comboStep < 3) {
+        this.comboQueued = true;
+      }
     }
 
     const { startup, active, recovery, forwardImpulse } = this.currentAttack;

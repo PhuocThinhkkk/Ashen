@@ -1,14 +1,5 @@
 import * as THREE from 'three';
-
-export interface CombatInputs {
-  move: THREE.Vector2;
-  sprint: boolean;
-  dodge: boolean;
-  lightAttack: boolean;
-  heavyAttack: boolean;
-  toggleLockOn: boolean;
-  restart: boolean;
-}
+import { type CombatInputs } from './types';
 
 export class InputController {
   private readonly keys = new Set<string>();
@@ -25,7 +16,6 @@ export class InputController {
   // Touch states
   private joystickPointerId: number | null = null;
   private joystickCenter = new THREE.Vector2();
-  private joystickSprint = false;
   private touchSprintButton = false;
 
   // Touch camera look
@@ -115,11 +105,10 @@ export class InputController {
     }
   };
 
-  // Canvas touch look handlers
+  // Canvas touch look handlers — only fire when the event target IS the canvas
   private readonly onCanvasPointerDown = (event: PointerEvent) => {
-    if (event.pointerType === 'touch') {
-      // If user touches the right side of the screen, allow camera orbit
-      if (this.cameraPointerId === null && event.clientX > window.innerWidth * 0.3) {
+    if (event.pointerType === 'touch' && event.target === this.canvas) {
+      if (this.cameraPointerId === null && event.clientX > window.innerWidth * 0.35) {
         this.cameraPointerId = event.pointerId;
         this.lastCameraTouchX = event.clientX;
         this.lastCameraTouchY = event.clientY;
@@ -198,18 +187,23 @@ export class InputController {
     });
 
     if (this.touchSprintBtn) {
-      this.touchSprintBtn.addEventListener('pointerdown', (e) => {
+      const onSprintStart = (e: Event) => {
         e.preventDefault();
+        e.stopPropagation();
         this.touchSprintButton = true;
         this.touchSprintBtn?.classList.add('active');
-      });
-      const endSprint = () => {
+      };
+      const onSprintEnd = () => {
         this.touchSprintButton = false;
         this.touchSprintBtn?.classList.remove('active');
       };
-      this.touchSprintBtn.addEventListener('pointerup', endSprint);
-      this.touchSprintBtn.addEventListener('pointercancel', endSprint);
-      this.touchSprintBtn.addEventListener('pointerleave', endSprint);
+      this.touchSprintBtn.addEventListener('pointerdown', onSprintStart, { passive: false });
+      this.touchSprintBtn.addEventListener('touchstart', onSprintStart, { passive: false });
+      this.touchSprintBtn.addEventListener('pointerup', onSprintEnd);
+      this.touchSprintBtn.addEventListener('pointercancel', onSprintEnd);
+      this.touchSprintBtn.addEventListener('pointerleave', onSprintEnd);
+      this.touchSprintBtn.addEventListener('touchend', onSprintEnd);
+      this.touchSprintBtn.addEventListener('touchcancel', onSprintEnd);
     }
 
     // 3. Restart triggers (R to play again)
@@ -260,15 +254,28 @@ export class InputController {
 
   private bindActionButton(btn: HTMLElement | null, trigger: () => void): void {
     if (!btn) return;
-    btn.addEventListener('pointerdown', (e) => {
+    let lastTime = 0;
+    const onPress = (e: Event) => {
+      const now = performance.now();
+      if (now - lastTime < 60) {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+      lastTime = now;
       e.preventDefault();
+      e.stopPropagation();
       trigger();
       btn.classList.add('active');
-    });
+    };
+    btn.addEventListener('pointerdown', onPress, { passive: false });
+    btn.addEventListener('touchstart', onPress, { passive: false });
     const removeActive = () => btn.classList.remove('active');
     btn.addEventListener('pointerup', removeActive);
     btn.addEventListener('pointercancel', removeActive);
     btn.addEventListener('pointerleave', removeActive);
+    btn.addEventListener('touchend', removeActive);
+    btn.addEventListener('touchcancel', removeActive);
   }
 
   private readonly onJoystickPointerDown = (event: PointerEvent) => {
@@ -297,7 +304,6 @@ export class InputController {
     if (event.pointerId === this.joystickPointerId) {
       this.joystickPointerId = null;
       this.pointer.set(0, 0);
-      this.joystickSprint = false;
       if (this.touchKnobEl) {
         this.touchKnobEl.style.transform = 'translate(-50%, -50%)';
       }
@@ -330,8 +336,6 @@ export class InputController {
       const normX = clampedX / maxRadius;
       const normY = clampedY / maxRadius;
       this.pointer.set(normX, normY);
-      // Auto-sprint if joystick pushed beyond 82% threshold
-      this.joystickSprint = clampedDist / maxRadius > 0.82;
     }
   }
 
@@ -379,12 +383,8 @@ export class InputController {
       target.move.normalize();
     }
 
-    // 2. Sprint (Shift or Joystick max push or Dash touch button)
-    target.sprint =
-      this.keys.has('ShiftLeft') ||
-      this.keys.has('ShiftRight') ||
-      this.joystickSprint ||
-      this.touchSprintButton;
+    // 2. Sprint (Shift or dedicated SPRINT touch button only)
+    target.sprint = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight') || this.touchSprintButton;
 
     // 3. Triggers (consumed upon read)
     target.dodge = this.dodgeTriggered;
@@ -418,7 +418,6 @@ export class InputController {
     this.mouseDeltaX = 0;
     this.mouseDeltaY = 0;
     this.joystickPointerId = null;
-    this.joystickSprint = false;
     this.touchSprintButton = false;
     this.cameraPointerId = null;
 
@@ -432,7 +431,6 @@ export class InputController {
       this.keys.has('ShiftLeft') ||
       this.keys.has('ShiftRight') ||
       this.keys.has('Space') ||
-      this.joystickSprint ||
       this.touchSprintButton
     );
   }
