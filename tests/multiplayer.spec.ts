@@ -44,8 +44,8 @@ test.describe('Phase 2 Multiplayer Chamber Architecture & Animation Sanity', () 
     expect(midCombatDiag?.player.state).not.toBe('dead');
     expect(midCombatDiag?.boss.activeClip).toBeDefined();
 
-    // 4. Test Key R Instant Reset - verify immediate Idle restoration without T-pose
-    await page.keyboard.press('KeyR');
+    // 4. Test Key Y Instant Reset - verify immediate Idle restoration without T-pose
+    await page.keyboard.press('KeyY');
     await page.waitForTimeout(150);
 
     const postResetDiag = await page.evaluate(() => window.__THREE_GAME_DIAGNOSTICS__);

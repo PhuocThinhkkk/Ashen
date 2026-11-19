@@ -338,4 +338,108 @@ test.describe('In-Game Drinking-While-Walking & Jumping Combat Integration', () 
     expect(consoleErrors).toEqual([]);
     expect(pageErrors).toEqual([]);
   });
+
+  test('executes limited 2 heal charges per match with bottom-left potion HUD, empty state gating, and Y reset', async ({ page }) => {
+    const consoleErrors: string[] = [];
+    const pageErrors: string[] = [];
+
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') consoleErrors.push(msg.text());
+    });
+    page.on('pageerror', (err) => pageErrors.push(err.message));
+
+    await page.goto('/');
+    await page.waitForFunction(() => (window.__THREE_GAME_DIAGNOSTICS__?.frame ?? 0) > 10);
+
+    // 1. Verify bottom-left Potion HUD widget and initial 2 charges
+    const potionHud = page.locator('#potion-hud');
+    await expect(potionHud).toBeVisible();
+    const badge = page.locator('#potion-charges-badge');
+    await expect(badge).toHaveText('2');
+
+    // 2. Damage player to 40 HP
+    await page.evaluate(() => window.__THREE_GAME_TEST_HOOKS__?.setPlayerHp?.(40));
+    await page.waitForTimeout(50);
+
+    // 3. First heal: press Key R
+    await page.keyboard.press('KeyR');
+    await page.waitForFunction(() => {
+      const d = window.__THREE_GAME_DIAGNOSTICS__;
+      return d?.player.isDrinking === true;
+    });
+
+    // Verify charge decremented to 1
+    await expect(badge).toHaveText('1');
+
+    // Wait for heal tick (~55% progress)
+    await page.waitForFunction(() => {
+      const d = window.__THREE_GAME_DIAGNOSTICS__;
+      return d && d.player.hp >= 80;
+    });
+
+    // Wait for first drink to complete
+    await page.waitForFunction(() => {
+      const d = window.__THREE_GAME_DIAGNOSTICS__;
+      return d && d.player.isDrinking === false;
+    });
+
+    // 4. Second heal: damage player again, press Key R
+    await page.evaluate(() => window.__THREE_GAME_TEST_HOOKS__?.setPlayerHp?.(40));
+    await page.keyboard.press('KeyR');
+    await page.waitForFunction(() => {
+      const d = window.__THREE_GAME_DIAGNOSTICS__;
+      return d?.player.isDrinking === true;
+    });
+
+    // Verify charge decremented to 0 and empty class is added
+    await expect(badge).toHaveText('0');
+    await expect(potionHud).toHaveClass(/empty/);
+
+    // Wait for second heal tick (~55% progress)
+    await page.waitForFunction(() => {
+      const d = window.__THREE_GAME_DIAGNOSTICS__;
+      return d && d.player.hp >= 80;
+    });
+
+    // Wait for second drink to complete
+    await page.waitForFunction(() => {
+      const d = window.__THREE_GAME_DIAGNOSTICS__;
+      return d && d.player.isDrinking === false;
+    });
+
+    // 5. Third attempt: try to heal with 0 charges
+    await page.evaluate(() => window.__THREE_GAME_TEST_HOOKS__?.setPlayerHp?.(35));
+    await page.keyboard.press('KeyR');
+    await page.waitForTimeout(300);
+
+    const zeroChargeDiag = await page.evaluate(() => window.__THREE_GAME_DIAGNOSTICS__);
+    expect(zeroChargeDiag?.player.isDrinking, 'Player must not drink when charges are 0').toBe(false);
+    expect(zeroChargeDiag?.player.hp, 'Player HP must remain unchanged when charges are 0').toBe(35);
+    await expect(badge).toHaveText('0');
+
+    // 6. Reset match via Key Y
+    await page.keyboard.press('KeyY');
+    await page.waitForTimeout(150);
+
+    const resetDiag = await page.evaluate(() => window.__THREE_GAME_DIAGNOSTICS__);
+    expect(resetDiag?.player.healCharges, 'Heal charges must reset to 2').toBe(2);
+    expect(resetDiag?.player.hp, 'Player HP must reset to 100').toBe(100);
+    await expect(badge).toHaveText('2');
+    await expect(potionHud).not.toHaveClass(/empty/);
+
+    // 7. Verify Controls Guide is accessible in settings tab
+    const orientationOverlay = page.locator('#orientation-overlay');
+    if (await orientationOverlay.isVisible().catch(() => false)) {
+      await page.setViewportSize({ width: 844, height: 390 });
+      await page.waitForTimeout(200);
+    }
+    await page.locator('#game-settings-btn').click({ force: true });
+    await page.locator('.settings-tab-btn[data-tab="gameplay"]').click();
+    await expect(page.locator('.controls-guide-grid')).toBeVisible();
+    await expect(page.locator('.controls-guide-grid')).toContainText('Space (Tap)');
+    await expect(page.locator('.controls-guide-grid')).toContainText('Drink Health Potion');
+
+    expect(consoleErrors).toEqual([]);
+    expect(pageErrors).toEqual([]);
+  });
 });

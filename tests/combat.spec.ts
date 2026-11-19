@@ -120,8 +120,8 @@ test.describe('Soulslike Boss Fight Combat System', () => {
     // Capture combat encounter screenshot
     await page.screenshot({ path: 'artifacts/screenshots/combat-boss-encounter.png', fullPage: true });
 
-    // 6. Test Instant In-Engine Restart (KeyR)
-    await page.keyboard.press('KeyR');
+    // 6. Test Instant In-Engine Restart (KeyY)
+    await page.keyboard.press('KeyY');
     await page.waitForTimeout(150);
 
     const resetDiag = await page.evaluate(() => window.__THREE_GAME_DIAGNOSTICS__);
