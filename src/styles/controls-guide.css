@@ -1,23 +1,8 @@
 /* ========================================================
-   5. Controls Guide (Bottom-Left)
+   Controls Guide (Moved to Settings Modal)
    ======================================================== */
 #controls-guide {
-  position: absolute;
-  bottom: max(24px, env(safe-area-inset-bottom));
-  left: max(28px, env(safe-area-inset-left));
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  padding: 10px 14px;
-  background: rgba(10, 14, 20, 0.72);
-  border: 1px solid rgba(181, 149, 74, 0.28);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(8px);
-  pointer-events: none;
-  z-index: 8;
-  font-size: 0.72rem;
-  color: rgba(229, 222, 210, 0.8);
-  letter-spacing: 0.6px;
+  display: none !important;
 }
 
 kbd {
@@ -30,4 +15,134 @@ kbd {
   border: 1px solid rgba(181, 149, 74, 0.4);
   border-radius: 3px;
   margin-right: 4px;
+}
+
+/* ========================================================
+   Health Potion HUD (Bottom-Left)
+   ======================================================== */
+.potion-hud {
+  position: absolute;
+  bottom: max(24px, env(safe-area-inset-bottom));
+  left: max(28px, env(safe-area-inset-left));
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: rgba(12, 16, 22, 0.78);
+  border: 1px solid rgba(212, 175, 55, 0.45);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.65), inset 0 0 16px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(8px);
+  z-index: 10;
+  cursor: pointer;
+  user-select: none;
+  transition: transform 0.15s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.potion-hud:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 200, 80, 0.75);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.75), 0 0 12px rgba(255, 140, 20, 0.3);
+}
+
+.potion-hud:active {
+  transform: translateY(0);
+}
+
+.potion-frame {
+  position: relative;
+  width: 52px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle, rgba(45, 25, 12, 0.8) 0%, rgba(10, 12, 16, 0.95) 100%);
+  border: 1.5px solid rgba(212, 175, 55, 0.5);
+  border-radius: 6px;
+  box-shadow: inset 0 0 10px rgba(255, 100, 0, 0.25);
+}
+
+.potion-img {
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 6px rgba(255, 90, 0, 0.5));
+  transition: filter 0.2s ease, opacity 0.2s ease;
+}
+
+.potion-charges-badge {
+  position: absolute;
+  bottom: -5px;
+  right: -5px;
+  min-width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  font-family: 'Cinzel', serif, monospace;
+  font-weight: 700;
+  font-size: 0.78rem;
+  color: #0b0c10;
+  background: #d4af37;
+  border: 1.5px solid #1a1a1a;
+  border-radius: 10px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.75);
+}
+
+.potion-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.potion-key-hint {
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: rgba(235, 225, 210, 0.9);
+  letter-spacing: 0.8px;
+}
+
+/* Empty State (0 charges left) */
+.potion-hud.empty {
+  opacity: 0.65;
+  border-color: rgba(120, 120, 120, 0.3);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+}
+
+.potion-hud.empty .potion-img {
+  filter: grayscale(1) opacity(0.4);
+}
+
+.potion-hud.empty .potion-charges-badge {
+  background: #555555;
+  color: #aaaaaa;
+}
+
+.potion-hud.empty .potion-key-hint {
+  color: rgba(180, 180, 180, 0.5);
+}
+
+/* Controls Grid in Settings Modal */
+.controls-guide-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.control-key-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(15, 20, 28, 0.75);
+  border: 1px solid rgba(181, 149, 74, 0.25);
+  border-radius: 5px;
+  font-size: 0.78rem;
+  color: rgba(229, 222, 210, 0.88);
+}
+
+.control-key-item kbd {
+  font-weight: 700;
 }

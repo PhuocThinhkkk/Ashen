@@ -33,6 +33,8 @@ export class Hud {
   private readonly deathOverlay: HTMLElement;
   private readonly victoryOverlay: HTMLElement;
   private readonly fpsDisplay: HTMLElement | null;
+  private readonly potionHud: HTMLElement | null;
+  private readonly potionChargesBadge: HTMLElement | null;
 
   // Model Selection UI Elements
   private readonly modelSelectPanel: HTMLElement | null;
@@ -67,6 +69,8 @@ export class Hud {
     this.deathOverlay = this.getEl('#death-overlay');
     this.victoryOverlay = this.getEl('#victory-overlay');
     this.fpsDisplay = document.querySelector<HTMLElement>('#fps-display');
+    this.potionHud = document.querySelector<HTMLElement>('#potion-hud');
+    this.potionChargesBadge = document.querySelector<HTMLElement>('#potion-charges-badge');
 
     // Pre-allocate 10 DOM slots upfront to eliminate runtime allocations & reflow
     this.damageContainer.innerHTML = '';
@@ -177,7 +181,12 @@ export class Hud {
     reticleScreenPos: THREE.Vector2 | null,
     isPlayerDead: boolean,
     isBossDead: boolean,
+    healCharges = 2,
+    maxHealCharges = 2,
   ): void {
+    // Potion HUD
+    this.updateHealCharges(healCharges, maxHealCharges);
+
     // 1. Player HP
     const hpPct = Math.max(0, Math.min(100, (playerHp / playerMaxHp) * 100));
     this.playerHpFill.style.width = `${hpPct}%`;
@@ -286,6 +295,19 @@ export class Hud {
 
     slot.active = true;
     slot.timer = 0;
+  }
+
+  public updateHealCharges(charges: number, _maxCharges = 2): void {
+    if (this.potionChargesBadge) {
+      this.potionChargesBadge.textContent = `${charges}`;
+    }
+    if (this.potionHud) {
+      if (charges <= 0) {
+        this.potionHud.classList.add('empty');
+      } else {
+        this.potionHud.classList.remove('empty');
+      }
+    }
   }
 
   public reset(): void {

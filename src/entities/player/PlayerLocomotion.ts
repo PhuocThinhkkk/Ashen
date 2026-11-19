@@ -10,11 +10,13 @@ export class PlayerLocomotion {
       player.state === 'dodge' ||
       player.state === 'stagger' ||
       player.state === 'dead' ||
-      player.isDrinking
+      player.isDrinking ||
+      player.healCharges <= 0
     ) {
       return;
     }
 
+    player.healCharges--;
     player.isDrinking = true;
     player.hasHealedDuringDrink = false;
     player.drinkTimer = 0;
@@ -225,7 +227,7 @@ export class PlayerLocomotion {
     }
 
     // Check Drink / Heal input
-    if (inputs.heal && player.isGrounded && !player.isDrinking) {
+    if (inputs.heal && player.isGrounded && !player.isDrinking && player.healCharges > 0) {
       player.startDrink();
     }
 

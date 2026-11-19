@@ -157,6 +157,14 @@ export class Game {
     });
     this.multiplayerHandler = new GameMultiplayerHandler(this);
 
+    const potionHudEl = document.querySelector<HTMLElement>('#potion-hud');
+    if (potionHudEl) {
+      potionHudEl.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.input.triggerHeal();
+      });
+    }
+
     this.buildScene();
     this.applySettings();
 
@@ -553,6 +561,8 @@ export class Game {
       screenReticle,
       this.player.state === 'dead',
       isOppDead,
+      this.player.healCharges,
+      this.player.maxHealCharges,
     );
 
     this.profiler.markUpdateEnd();
@@ -657,6 +667,8 @@ export class Game {
       null,
       this.player.state === 'dead',
       isOppDead,
+      this.player.healCharges,
+      this.player.maxHealCharges,
     );
   }
 
@@ -693,6 +705,8 @@ export class Game {
         isDrinking: this.player.isDrinking,
         isAirborneAttack: this.player.isAirborneAttack,
         tiltAngle: this.player.currentTiltAngle,
+        healCharges: this.player.healCharges,
+        maxHealCharges: this.player.maxHealCharges,
         modelId: this.player.modelId,
       },
       boss: {

@@ -102,6 +102,8 @@ export function installGameTestHooks(game: Game): void {
         isDrinking: g.player.isDrinking,
         drinkTimer: g.player.drinkTimer,
         hasHealed: g.player.hasHealedDuringDrink,
+        healCharges: g.player.healCharges,
+        maxHealCharges: g.player.maxHealCharges,
         hp: g.player.hp,
         flaskVisible: g.player.flaskMesh ? g.player.flaskMesh.visible : false,
         upperClip: g.player.currentUpperActionName,

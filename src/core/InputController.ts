@@ -47,12 +47,27 @@ export class InputController {
   public mouseDeltaY = 0;
   public isPointerLocked = false;
 
+  // Space tap vs hold tracking (Space = tap to roll, hold to run)
+  private spacePressed = false;
+  private spaceDownTime = 0;
+  private spaceHasSprinted = false;
+
+  private isRestartOverlayVisible(): boolean {
+    const isDeathVisible = !!this.deathOverlay && !this.deathOverlay.classList.contains('hidden');
+    const isVictoryVisible = !!this.victoryOverlay && !this.victoryOverlay.classList.contains('hidden');
+    return isDeathVisible || isVictoryVisible;
+  }
+
   private readonly onKeyDown = (event: KeyboardEvent) => {
     this.keys.add(event.code);
 
     if (event.code === 'Space') {
       event.preventDefault();
-      this.dodgeTriggered = true;
+      if (!this.spacePressed) {
+        this.spacePressed = true;
+        this.spaceDownTime = performance.now();
+        this.spaceHasSprinted = false;
+      }
     } else if (event.code === 'KeyJ') {
       this.lightAttackTriggered = true;
     } else if (event.code === 'KeyK') {
@@ -60,8 +75,14 @@ export class InputController {
     } else if (event.code === 'KeyQ' || event.code === 'Tab') {
       event.preventDefault();
       this.lockOnTriggered = true;
-    } else if (event.code === 'KeyR') {
+    } else if (event.code === 'KeyY') {
       this.restartTriggered = true;
+    } else if (event.code === 'KeyR') {
+      if (this.isRestartOverlayVisible()) {
+        this.restartTriggered = true;
+      } else {
+        this.healTriggered = true;
+      }
     } else if (event.code === 'KeyE') {
       this.healTriggered = true;
     } else if (event.code === 'KeyF') {
@@ -71,6 +92,16 @@ export class InputController {
 
   private readonly onKeyUp = (event: KeyboardEvent) => {
     this.keys.delete(event.code);
+
+    if (event.code === 'Space') {
+      event.preventDefault();
+      const duration = performance.now() - this.spaceDownTime;
+      this.spacePressed = false;
+      if (!this.spaceHasSprinted && duration < 300) {
+        this.dodgeTriggered = true;
+      }
+      this.spaceHasSprinted = false;
+    }
   };
 
   private readonly onMouseDown = (event: MouseEvent) => {
@@ -409,8 +440,17 @@ export class InputController {
       target.move.normalize();
     }
 
-    // 2. Sprint (Shift or dedicated SPRINT touch button only)
-    target.sprint = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight') || this.touchSprintButton;
+    // 2. Sprint (Shift, dedicated SPRINT touch button, or held Space)
+    const isSpaceHeldForRun = this.spacePressed && performance.now() - this.spaceDownTime >= 180;
+    if (isSpaceHeldForRun) {
+      this.spaceHasSprinted = true;
+    }
+
+    target.sprint =
+      this.keys.has('ShiftLeft') ||
+      this.keys.has('ShiftRight') ||
+      this.touchSprintButton ||
+      isSpaceHeldForRun;
 
     // 3. Triggers (consumed upon read)
     target.dodge = this.dodgeTriggered;
@@ -449,6 +489,9 @@ export class InputController {
     this.jumpTriggered = false;
     this.mouseDeltaX = 0;
     this.mouseDeltaY = 0;
+    this.spacePressed = false;
+    this.spaceDownTime = 0;
+    this.spaceHasSprinted = false;
     this.joystickPointerId = null;
     this.touchSprintButton = false;
     this.cameraPointerId = null;
@@ -462,7 +505,7 @@ export class InputController {
     return (
       this.keys.has('ShiftLeft') ||
       this.keys.has('ShiftRight') ||
-      this.keys.has('Space') ||
+      (this.spacePressed && performance.now() - this.spaceDownTime >= 180) ||
       this.touchSprintButton
     );
   }

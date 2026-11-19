@@ -95,33 +95,43 @@
       <!-- Floating Damage Numbers Container -->
       <div id="damage-container" pointer-events="none"></div>
 
-      <!-- Controls Guide Overlay (Bottom Left) -->
-      <div id="controls-guide">
+      <!-- Health Potion Item HUD (Bottom Left) -->
+      <div id="potion-hud" class="potion-hud" role="button" aria-label="Health Potion [R]" tabindex="0">
+        <div class="potion-frame">
+          <img src="/assets/items/health_potions.png" alt="Health Potion" class="potion-img" />
+          <span id="potion-charges-badge" class="potion-charges-badge">2</span>
+        </div>
+        <div class="potion-info">
+          <span class="potion-key-hint"><kbd>R</kbd> HEAL</span>
+        </div>
+      </div>
+
+      <!-- Controls Guide Overlay (Moved to Settings Tabs, kept hidden for backward compatibility) -->
+      <div id="controls-guide" style="display: none;">
         <div class="control-key"><kbd>WASD</kbd> Move</div>
-        <div class="control-key"><kbd>Shift</kbd> Sprint</div>
-        <div class="control-key"><kbd>Space</kbd> Dodge Roll (i-frames)</div>
-        <div class="control-key"><kbd>E</kbd> Drink Flask</div>
+        <div class="control-key"><kbd>Space</kbd> Roll (Tap) / Run (Hold)</div>
+        <div class="control-key"><kbd>R</kbd> Drink Flask</div>
         <div class="control-key"><kbd>F</kbd> Jump / Air Attack</div>
         <div class="control-key"><kbd>L-Click / J</kbd> Light Combo</div>
         <div class="control-key"><kbd>R-Click / K</kbd> Heavy Thrust</div>
         <div class="control-key"><kbd>Tab / Q</kbd> Lock On</div>
-        <div class="control-key"><kbd>R</kbd> Restart</div>
+        <div class="control-key"><kbd>Y</kbd> Reset Match</div>
       </div>
 
       <!-- Death & Victory Banners -->
       <div id="death-overlay" class="banner-overlay hidden" role="dialog" aria-label="Player Defeated">
         <h1 class="death-title">YOU DIED</h1>
-        <p class="banner-prompt">Press <kbd>R</kbd> or tap below to Rise Again</p>
+        <p class="banner-prompt">Press <kbd>Y</kbd> or <kbd>R</kbd> or tap below to Rise Again</p>
         <button id="death-restart-btn" class="banner-restart-btn" type="button" aria-label="Rise Again">
-          RISE AGAIN [R]
+          RISE AGAIN [Y]
         </button>
       </div>
 
       <div id="victory-overlay" class="banner-overlay hidden" role="dialog" aria-label="Boss Vanquished">
         <h1 class="victory-title">LEGEND VANQUISHED</h1>
-        <p class="banner-prompt">Press <kbd>R</kbd> or tap below to Face the Trial Once More</p>
+        <p class="banner-prompt">Press <kbd>Y</kbd> or <kbd>R</kbd> or tap below to Face the Trial Once More</p>
         <button id="victory-restart-btn" class="banner-restart-btn" type="button" aria-label="Face Trial Once More">
-          FACE TRIAL ONCE MORE [R]
+          FACE TRIAL ONCE MORE [Y]
         </button>
       </div>
 

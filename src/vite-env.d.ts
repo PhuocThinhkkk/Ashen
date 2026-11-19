@@ -22,6 +22,8 @@ interface ThreeGameDiagnostics {
     isDrinking?: boolean;
     isAirborneAttack?: boolean;
     tiltAngle?: number;
+    healCharges?: number;
+    maxHealCharges?: number;
   };
   boss: {
     position: { x: number; y: number; z: number };

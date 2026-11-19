@@ -17,7 +17,7 @@ import {
   applyWeaponSocketTransform,
 } from '../combat/WeaponSocketConfig';
 import type { WeaponBladeSegment, BodyCapsule } from '../combat/WeaponCollisionSystem';
-import { createHealingFlaskMesh } from './player/HealingFlask';
+import { loadHealingFlaskMesh } from './player/HealingFlask';
 import { updateSpinePitchTilt } from './player/PlayerSpineTilt';
 import { PlayerDodgeHandler } from './player/PlayerDodge';
 import { PlayerCombat } from './player/PlayerCombat';
@@ -68,11 +68,13 @@ export class PlayerCharacter {
   public currentTiltAngle = 0;
   private spineBones: THREE.Object3D[] = [];
 
-  // Drinking While Walking State
+  // Drinking While Walking State & Limited Heal Charges
   public isDrinking = false;
   public drinkTimer = 0;
   public readonly drinkDuration = 3.55;
   public hasHealedDuringDrink = false;
+  public maxHealCharges = 2;
+  public healCharges = 2;
   public flaskMesh: THREE.Group | null = null;
   public leftHandBone: THREE.Object3D | null = null;
 
@@ -282,7 +284,7 @@ export class PlayerCharacter {
       'handL',
     ]);
     if (this.leftHandBone) {
-      this.flaskMesh = createHealingFlaskMesh();
+      this.flaskMesh = await loadHealingFlaskMesh(this.loader);
       this.leftHandBone.add(this.flaskMesh);
       this.leftHandBone.updateMatrixWorld(true);
     }
@@ -645,6 +647,7 @@ export class PlayerCharacter {
     this.isDrinking = false;
     this.drinkTimer = 0;
     this.hasHealedDuringDrink = false;
+    this.healCharges = this.maxHealCharges;
     if (this.flaskMesh) this.flaskMesh.visible = false;
 
     this.dodgeTimer = 0;

@@ -51,6 +51,24 @@ export function renderGameplayTab(ctx: TabRenderContext): void {
 
       <button id="btn-reset-tuning" class="btn-util">RESTORE DEFAULT KINEMATICS</button>
     </div>
+
+    <div class="settings-section" style="margin-top: 18px;">
+      <h3 class="section-title">HOW TO MOVE & COMBAT CONTROLS</h3>
+      <p class="section-desc">Full keybindings guide for movement, actions, and combat.</p>
+
+      <div class="controls-guide-grid">
+        <div class="control-key-item"><kbd>WASD</kbd> <span>Move Character</span></div>
+        <div class="control-key-item"><kbd>Space (Tap)</kbd> <span>Dodge Roll (i-frames)</span></div>
+        <div class="control-key-item"><kbd>Space (Hold)</kbd> <span>Sprint / Dash</span></div>
+        <div class="control-key-item"><kbd>R</kbd> <span>Drink Health Potion (2/match)</span></div>
+        <div class="control-key-item"><kbd>F</kbd> <span>Jump / Mid-Air Attack</span></div>
+        <div class="control-key-item"><kbd>L-Click / J</kbd> <span>Light Combo Attack</span></div>
+        <div class="control-key-item"><kbd>R-Click / K</kbd> <span>Heavy Thrust Attack</span></div>
+        <div class="control-key-item"><kbd>Tab / Q / MMB</kbd> <span>Toggle Target Lock-on</span></div>
+        <div class="control-key-item"><kbd>Shift</kbd> <span>Sprint Modifier</span></div>
+        <div class="control-key-item"><kbd>Y</kbd> <span>Reset Match & Sanctuary</span></div>
+      </div>
+    </div>
   `;
 
   const bindSlider = (id: string, key: keyof typeof gp, valId: string, format: (v: number) => string) => {
