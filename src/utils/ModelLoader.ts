@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GLTF, GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+export { splitClipByBodyPart, isLowerBodyBone } from './AnimationSplitter';
 
 export type EntityType = 'player' | 'boss';
 
@@ -49,6 +50,8 @@ export class ModelLoader {
       attack_jump: ['attack_jump', 'jump_attack', 'Standing Melee Run Jump Attack', 'standing_melee_run_jump_attack'],
       attack_360: ['attack_360', '360_attack', 'Standing Melee Attack 360 Low heavy attack', 'standing_melee_attack_360_low_heavy_attack'],
       kick: ['kick', 'Great Sword Kick', 'great_sword_kick'],
+      drinking: ['drinking', 'drink', 'Drink', 'Drinking'],
+      jumping: ['jumping', 'jump', 'Jump', 'Jumping'],
       special: ['special', 'taunt', 'Roar'],
       hit: ['hit', 'Great Sword Impact', 'great_sword_impact', 'Hit_Reaction', 'Hurt'],
       death: ['death', 'die', 'HumanArmature|Death', 'Die'],

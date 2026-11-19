@@ -12,6 +12,8 @@ export class InputController {
   private heavyAttackTriggered = false;
   private lockOnTriggered = false;
   private restartTriggered = false;
+  private healTriggered = false;
+  private jumpTriggered = false;
 
   // Touch states
   private joystickPointerId: number | null = null;
@@ -31,6 +33,8 @@ export class InputController {
   private touchDodgeBtn: HTMLElement | null = null;
   private touchLockBtn: HTMLElement | null = null;
   private touchSprintBtn: HTMLElement | null = null;
+  private touchHealBtn: HTMLElement | null = null;
+  private touchJumpBtn: HTMLElement | null = null;
 
   // Restart buttons and overlays
   private quickRestartBtn: HTMLElement | null = null;
@@ -58,6 +62,10 @@ export class InputController {
       this.lockOnTriggered = true;
     } else if (event.code === 'KeyR') {
       this.restartTriggered = true;
+    } else if (event.code === 'KeyE') {
+      this.healTriggered = true;
+    } else if (event.code === 'KeyF') {
+      this.jumpTriggered = true;
     }
   };
 
@@ -169,6 +177,8 @@ export class InputController {
     this.touchDodgeBtn = document.querySelector<HTMLElement>('#touch-dodge-btn');
     this.touchLockBtn = document.querySelector<HTMLElement>('#touch-lock-btn');
     this.touchSprintBtn = document.querySelector<HTMLElement>('#touch-sprint-btn');
+    this.touchHealBtn = document.querySelector<HTMLElement>('#touch-heal-btn');
+    this.touchJumpBtn = document.querySelector<HTMLElement>('#touch-jump-btn');
 
     this.bindActionButton(this.touchAttackBtn, () => {
       this.lightAttackTriggered = true;
@@ -184,6 +194,14 @@ export class InputController {
 
     this.bindActionButton(this.touchLockBtn, () => {
       this.lockOnTriggered = true;
+    });
+
+    this.bindActionButton(this.touchHealBtn, () => {
+      this.healTriggered = true;
+    });
+
+    this.bindActionButton(this.touchJumpBtn, () => {
+      this.jumpTriggered = true;
     });
 
     if (this.touchSprintBtn) {
@@ -359,6 +377,14 @@ export class InputController {
     this.lockOnTriggered = true;
   }
 
+  public triggerHeal(): void {
+    this.healTriggered = true;
+  }
+
+  public triggerJump(): void {
+    this.jumpTriggered = true;
+  }
+
   public setTouchMove(x: number, y: number): void {
     this.pointer.set(x, y);
     if (this.pointer.lengthSq() > 1) {
@@ -392,12 +418,16 @@ export class InputController {
     target.heavyAttack = this.heavyAttackTriggered;
     target.toggleLockOn = this.lockOnTriggered;
     target.restart = this.restartTriggered;
+    target.heal = this.healTriggered;
+    target.jump = this.jumpTriggered;
 
     this.dodgeTriggered = false;
     this.lightAttackTriggered = false;
     this.heavyAttackTriggered = false;
     this.lockOnTriggered = false;
     this.restartTriggered = false;
+    this.healTriggered = false;
+    this.jumpTriggered = false;
   }
 
   public consumeMouseDelta(out: THREE.Vector2): void {
@@ -415,6 +445,8 @@ export class InputController {
     this.heavyAttackTriggered = false;
     this.lockOnTriggered = false;
     this.restartTriggered = false;
+    this.healTriggered = false;
+    this.jumpTriggered = false;
     this.mouseDeltaX = 0;
     this.mouseDeltaY = 0;
     this.joystickPointerId = null;

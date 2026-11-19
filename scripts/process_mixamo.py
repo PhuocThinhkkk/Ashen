@@ -39,6 +39,8 @@ PLAYER_STANDARD_TARGETS = {
     "dodge": ["stand_to_roll", "roll"],
     "attack_light": ["great_sword_light_attack", "attack_light"],
     "attack_heavy": ["standing_melee_attack_downward", "great_sword_light_attack"],
+    "drinking": ["drinking", "drink"],
+    "jumping": ["jumping", "jump"],
     "hit": ["great_sword_impact", "impact", "hit"],
     "death": ["great_sword_impact", "hit", "death", "die"],
 }

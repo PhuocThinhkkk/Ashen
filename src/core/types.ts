@@ -8,4 +8,6 @@ export interface CombatInputs {
   heavyAttack: boolean;
   toggleLockOn: boolean;
   restart: boolean;
+  heal?: boolean;
+  jump?: boolean;
 }

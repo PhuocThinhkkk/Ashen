@@ -33,6 +33,8 @@ const STANDARD_PLAYER_ANIMATIONS = [
   'run',
   'walk',
   'death',
+  'drinking',
+  'jumping',
 ];
 
 const STANDARD_BOSS_ANIMATIONS = [

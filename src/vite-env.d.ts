@@ -16,6 +16,12 @@ interface ThreeGameDiagnostics {
     loaded?: boolean;
     activeClip?: string;
     modelId?: string;
+    upperClip?: string;
+    lowerClip?: string;
+    isGrounded?: boolean;
+    isDrinking?: boolean;
+    isAirborneAttack?: boolean;
+    tiltAngle?: number;
   };
   boss: {
     position: { x: number; y: number; z: number };
@@ -65,6 +71,12 @@ interface ThreeGameTestHooks {
   triggerRestart?(): void;
   getInputController?(): any;
   getMobileDeviceController?(): any;
+  setPlayerHp?(hp: number): void;
+  triggerHeal?(): void;
+  triggerJump?(): void;
+  triggerMidAirAttack?(heavy?: boolean): void;
+  getPlayerJumpDiagnostics?(): any;
+  getPlayerDrinkDiagnostics?(): any;
 }
 
 interface Window {

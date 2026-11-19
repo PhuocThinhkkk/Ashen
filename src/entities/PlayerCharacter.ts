@@ -3,10 +3,8 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import {
   type AttackDefinition,
   type DodgeDefinition,
-  PLAYER_ATTACKS,
   PLAYER_DODGE,
 } from '../combat/FrameCombat';
-import { DODGE_CONFIG } from '../combat/KinematicData';
 import { KinematicCombatController } from '../combat/KinematicCombatController';
 import { HitboxVisualDebugger } from '../combat/HitboxVisualDebugger';
 import type { CombatInputs } from '../core/types';
@@ -19,8 +17,14 @@ import {
   applyWeaponSocketTransform,
 } from '../combat/WeaponSocketConfig';
 import type { WeaponBladeSegment, BodyCapsule } from '../combat/WeaponCollisionSystem';
+import { createHealingFlaskMesh } from './player/HealingFlask';
+import { updateSpinePitchTilt } from './player/PlayerSpineTilt';
+import { PlayerDodgeHandler } from './player/PlayerDodge';
+import { PlayerCombat } from './player/PlayerCombat';
+import { PlayerLocomotion } from './player/PlayerLocomotion';
+import { PlayerDualLayerAnimator } from './player/PlayerDualLayerAnimator';
 
-export type PlayerState = 'idle' | 'moving' | 'dodge' | 'attack' | 'stagger' | 'dead';
+export type PlayerState = 'idle' | 'moving' | 'dodge' | 'attack' | 'stagger' | 'dead' | 'jumping';
 
 export class PlayerCharacter {
   public readonly group = new THREE.Group();
@@ -53,12 +57,98 @@ export class PlayerCharacter {
   // Stagger
   public staggerTimer = 0;
 
+  // Jump & Airborne State
+  public isGrounded = true;
+  public verticalVelocity = 0;
+  public readonly gravity = -18.0;
+  public readonly jumpImpulse = 6.8;
+  public isAirborneAttack = false;
+
+  // Target-Lock Procedural Downward Spine Tilt
+  public currentTiltAngle = 0;
+  private spineBones: THREE.Object3D[] = [];
+
+  // Drinking While Walking State
+  public isDrinking = false;
+  public drinkTimer = 0;
+  public readonly drinkDuration = 3.55;
+  public hasHealedDuringDrink = false;
+  public flaskMesh: THREE.Group | null = null;
+  public leftHandBone: THREE.Object3D | null = null;
+
+  // Dual-Layer Animator Delegation & Compatibility Accessors
+  public readonly animator = new PlayerDualLayerAnimator();
+
+  public get upperBodyAction(): THREE.AnimationAction | null {
+    return this.animator.upperBodyAction;
+  }
+  public set upperBodyAction(action: THREE.AnimationAction | null) {
+    this.animator.upperBodyAction = action;
+  }
+
+  public get lowerBodyAction(): THREE.AnimationAction | null {
+    return this.animator.lowerBodyAction;
+  }
+  public set lowerBodyAction(action: THREE.AnimationAction | null) {
+    this.animator.lowerBodyAction = action;
+  }
+
+  public get currentUpperActionName(): string {
+    return this.animator.currentUpperActionName;
+  }
+  public set currentUpperActionName(name: string) {
+    this.animator.currentUpperActionName = name;
+  }
+
+  public get currentLowerActionName(): string {
+    return this.animator.currentLowerActionName;
+  }
+  public set currentLowerActionName(name: string) {
+    this.animator.currentLowerActionName = name;
+  }
+
+  public get currentActionName(): string {
+    return this.animator.currentActionName;
+  }
+  public set currentActionName(name: string) {
+    this.animator.currentActionName = name;
+  }
+
+  public get currentAction(): THREE.AnimationAction | null {
+    return this.animator.currentAction;
+  }
+  public set currentAction(action: THREE.AnimationAction | null) {
+    this.animator.currentAction = action;
+  }
+
+  public get isUpperBodyOverride(): boolean {
+    return this.animator.isUpperBodyOverride;
+  }
+  public set isUpperBodyOverride(val: boolean) {
+    this.animator.isUpperBodyOverride = val;
+  }
+
+  public get upperActions(): Map<string, THREE.AnimationAction> {
+    return this.animator.upperActions;
+  }
+
+  public get lowerActions(): Map<string, THREE.AnimationAction> {
+    return this.animator.lowerActions;
+  }
+
+  public get splitClips(): Map<string, { upper: THREE.AnimationClip; lower: THREE.AnimationClip }> {
+    return this.animator.splitClips;
+  }
+
+  public get actions(): Map<string, THREE.AnimationAction> {
+    return this.animator.actions;
+  }
+
   // Model & Animation State
   public isLoaded = false;
   public loadPromise: Promise<void>;
   public mixer: THREE.AnimationMixer | null = null;
   public kinematicController: KinematicCombatController | null = null;
-  public currentActionName = '';
   public handBone: THREE.Object3D | null = null;
   public swordObject: THREE.Object3D | null = null;
   public readonly bladeBaseLocator = new THREE.Object3D();
@@ -68,13 +158,10 @@ export class PlayerCharacter {
     size: new THREE.Vector3(0.28, 1.4, 0.28),
     offset: new THREE.Vector3(0, 0.7, 0),
   });
-  private vfxSystem: VFXSystem | null = null;
-  private audioSystem: AudioSystem | null = null;
+  public vfxSystem: VFXSystem | null = null;
+  public audioSystem: AudioSystem | null = null;
   private readonly loader = new GLTFLoader();
-  private readonly actions = new Map<string, THREE.AnimationAction>();
-  private currentAction: THREE.AnimationAction | null = null;
-  private modelScene: THREE.Group | null = null;
-  private rawClips: THREE.AnimationClip[] = [];
+  public modelScene: THREE.Group | null = null;
 
   public get modelId(): string {
     return this.currentModelId;
@@ -87,18 +174,22 @@ export class PlayerCharacter {
   public async loadModel(modelId: string): Promise<void> {
     this.isLoaded = false;
 
-    // 1. Detach weapon from existing bone
+    // 1. Detach weapon and items from existing bones
     if (this.swordObject && this.swordObject.parent) {
       this.swordObject.parent.remove(this.swordObject);
     }
+    if (this.flaskMesh && this.flaskMesh.parent) {
+      this.flaskMesh.parent.remove(this.flaskMesh);
+    }
+    this.flaskMesh = null;
+    this.leftHandBone = null;
+    this.spineBones = [];
 
     // 2. Stop and dispose existing model scene & animations
     if (this.mixer) {
       this.mixer.stopAllAction();
     }
-    this.actions.clear();
-    this.currentAction = null;
-    this.currentActionName = '';
+    this.animator.clear();
 
     if (this.modelScene) {
       this.group.remove(this.modelScene);
@@ -136,7 +227,6 @@ export class PlayerCharacter {
     // 4. Load Player Model dynamically via ModelLoader
     const gltf = await ModelLoader.loadModel('player', modelId);
     this.modelScene = gltf.scene;
-    this.rawClips = gltf.animations;
 
     // Scale to exactly 1.80m height and orient standard forward (-Z)
     const rawBox = new THREE.Box3().setFromObject(this.modelScene);
@@ -181,6 +271,29 @@ export class PlayerCharacter {
       console.warn(`[PlayerCharacter] Hand socket bone not found in model "${modelId}".`);
     }
 
+    // Locate LeftHand bone for flask mesh
+    this.leftHandBone = ModelLoader.findSocketBone(this.modelScene, [
+      'mixamorig:LeftHand',
+      'mixamorigLeftHand',
+      'LeftHand',
+      'Palm.L',
+      'PalmL',
+      'hand.L',
+      'handL',
+    ]);
+    if (this.leftHandBone) {
+      this.flaskMesh = createHealingFlaskMesh();
+      this.leftHandBone.add(this.flaskMesh);
+      this.leftHandBone.updateMatrixWorld(true);
+    }
+
+    // Locate Spine bones for procedural target-lock pitch tilt
+    this.spineBones = [
+      ModelLoader.findSocketBone(this.modelScene, ['mixamorig:Spine', 'Spine']),
+      ModelLoader.findSocketBone(this.modelScene, ['mixamorig:Spine1', 'Spine1']),
+      ModelLoader.findSocketBone(this.modelScene, ['mixamorig:Spine2', 'Spine2']),
+    ].filter((b): b is THREE.Object3D => b !== null);
+
     // 6. Parent weapon directly to socket bone (scaled to 1.4m broadsword proportion)
     if (this.handBone && this.swordObject) {
       const socketCfg = loadSocketConfig('player', DEFAULT_PLAYER_WEAPON_SOCKET);
@@ -191,7 +304,7 @@ export class PlayerCharacter {
       this.swordObject.updateMatrixWorld(true);
     }
 
-    // 7. Setup AnimationMixer with standardized clip names
+    // 7. Setup AnimationMixer with 2-layer track splitting
     this.mixer = new THREE.AnimationMixer(this.modelScene);
 
     // 8. Setup Kinematic Combat Controller & bind armature
@@ -199,18 +312,15 @@ export class PlayerCharacter {
     this.kinematicController.bindArmature(this.modelScene);
     this.updateKinematicCallbacks();
 
-    for (const clip of gltf.animations) {
-      this.kinematicController.stripRootMotion(clip);
-      const action = this.mixer.clipAction(clip);
-      this.actions.set(clip.name, action);
-    }
+    // Initialize dual-layer animation actions
+    this.animator.initAnimations(this.mixer, gltf.animations, this.kinematicController);
 
     this.group.add(this.modelScene);
     this.currentModelId = modelId;
     this.isLoaded = true;
 
-    // Play default standardized idle
-    this.playAction('idle', 0.1);
+    // Play default standardized idle across both layers
+    this.playFullBodyAction('idle', 0.1);
   }
 
   public setVfxAndAudio(vfx: VFXSystem, audio: AudioSystem): void {
@@ -243,6 +353,9 @@ export class PlayerCharacter {
   }
 
   public isHitboxActive(): boolean {
+    if (this.isAirborneAttack) {
+      return this.attackPhase === 'active';
+    }
     if (this.kinematicController && this.state === 'attack') {
       return this.kinematicController.isAttacking;
     }
@@ -295,6 +408,40 @@ export class PlayerCharacter {
     return this.hitboxDebugger.toggle();
   }
 
+  public playFullBodyAction(
+    name: string,
+    fadeDuration = 0.15,
+    loop: THREE.AnimationActionLoopStyles = THREE.LoopRepeat,
+    clampWhenFinished = false,
+    timeScale = 1.0,
+  ): { upper: THREE.AnimationAction | null; lower: THREE.AnimationAction | null } {
+    return this.animator.playFullBodyAction(name, fadeDuration, loop, clampWhenFinished, timeScale);
+  }
+
+  public playUpperBodyAction(
+    name: string,
+    fadeDuration = 0.18,
+    loop: THREE.AnimationActionLoopStyles = THREE.LoopOnce,
+    clampWhenFinished = true,
+    timeScale = 1.0,
+  ): THREE.AnimationAction | null {
+    return this.animator.playUpperBodyAction(name, fadeDuration, loop, clampWhenFinished, timeScale);
+  }
+
+  public playLowerBodyAction(
+    name: string,
+    fadeDuration = 0.15,
+    loop: THREE.AnimationActionLoopStyles = THREE.LoopRepeat,
+    clampWhenFinished = false,
+    timeScale = 1.0,
+  ): THREE.AnimationAction | null {
+    return this.animator.playLowerBodyAction(name, fadeDuration, loop, clampWhenFinished, timeScale);
+  }
+
+  public clearUpperBodyOverride(fadeDuration = 0.18): void {
+    this.animator.clearUpperBodyOverride(fadeDuration);
+  }
+
   public playAction(
     name: string,
     fadeDuration = 0.15,
@@ -302,42 +449,64 @@ export class PlayerCharacter {
     clampWhenFinished = false,
     timeScale = 1.0,
   ): THREE.AnimationAction | null {
-    let action = this.actions.get(name);
-    if (!action) {
-      const clip = ModelLoader.findClip(this.rawClips, name);
-      if (clip) {
-        action = this.actions.get(clip.name);
-      }
+    return this.animator.playAction(name, fadeDuration, loop, clampWhenFinished, timeScale);
+  }
+
+  /**
+   * Triggers healing flask drink while grounded.
+   */
+  public startDrink(): void {
+    PlayerLocomotion.startDrink(this);
+  }
+
+  /**
+   * Restores player HP and triggers visual/audio feedback.
+   */
+  public heal(amount = 40): void {
+    if (this.state === 'dead' || this.hp <= 0) return;
+    this.hp = Math.min(this.maxHp, this.hp + amount);
+    if (this.vfxSystem) {
+      this.vfxSystem.spawnPeakVelocitySparks(
+        this.group.position.clone().add(new THREE.Vector3(0, 1.0, 0)),
+        14,
+        true,
+      );
     }
-    if (!action) return null;
-
-    if (this.currentAction === action && action.isRunning()) {
-      action.timeScale = timeScale;
-      return action;
+    if (this.audioSystem) {
+      this.audioSystem.playPeakSwoosh(650, 0.35, false);
     }
+  }
 
-    if (this.kinematicController) {
-      this.kinematicController.playAction(name, action, {
-        fadeDuration,
-        loop,
-        clampWhenFinished,
-        timeScale,
-      });
-    } else {
-      action.reset();
-      action.setLoop(loop, loop === THREE.LoopRepeat ? Infinity : 1);
-      action.clampWhenFinished = clampWhenFinished;
-      action.timeScale = timeScale;
+  /**
+   * Triggers a vertical jump with physics and ground detection.
+   */
+  public startJump(): void {
+    PlayerLocomotion.startJump(this);
+  }
 
-      if (this.currentAction) {
-        this.currentAction.crossFadeTo(action, fadeDuration, true);
-      }
-      action.play();
-    }
+  /**
+   * Triggers an upper-body attack while airborne without interrupting lower-body jumping locomotion.
+   */
+  public startMidAirAttack(attack: AttackDefinition): void {
+    PlayerCombat.startMidAirAttack(this, attack);
+  }
 
-    this.currentAction = action;
-    this.currentActionName = name;
-    return action;
+  /**
+   * Late-update procedural target-lock pitch tilt.
+   * Runs AFTER mixer.update() so AnimationMixer does not overwrite spine flexion.
+   */
+  private updateSpinePitchTilt(delta: number, lockedTargetPos: THREE.Vector3 | null): void {
+    const isAirborne = !this.isGrounded || this.group.position.y > 0.05;
+    this.currentTiltAngle = updateSpinePitchTilt(
+      delta,
+      lockedTargetPos,
+      isAirborne,
+      this.group.position,
+      this.currentTiltAngle,
+      this.spineBones,
+      this.modelScene,
+      this.handBone,
+    );
   }
 
   public update(
@@ -348,9 +517,17 @@ export class PlayerCharacter {
     lockedTargetPos: THREE.Vector3 | null,
     arenaRadius: number,
   ): void {
+    // 1. AnimationMixer Update
     if (this.mixer) {
       this.mixer.update(delta);
     }
+
+    // Full-Body Sync: keep normalized time aligned when no upper override is active
+    this.animator.syncNormalizedTime();
+
+    // 2. Late-update Procedural Pitch Tilt (Executed AFTER mixer.update)
+    this.updateSpinePitchTilt(delta, lockedTargetPos);
+
     if (this.kinematicController) {
       this.kinematicController.update(delta, this.group.rotation.y);
     }
@@ -362,22 +539,33 @@ export class PlayerCharacter {
     }
     this.hitboxDebugger.update(this.isHitboxActive());
 
+    // 3. Airborne Physics & Ground Detection
+    PlayerLocomotion.updateAirbornePhysics(this, delta, inputs);
+
+    // 4. Drinking While Walking Progress & Heal Timing
+    PlayerLocomotion.updateDrinkingState(this, delta);
+
     if (this.state === 'dead') {
       if (this.currentActionName !== 'death') {
-        this.playAction('death', 0.1, THREE.LoopOnce, true, 1.0);
+        this.playFullBodyAction('death', 0.1, THREE.LoopOnce, true, 1.0);
       }
       return;
     }
 
-    // 1. Stamina Regeneration
+    // 5. Stamina Regeneration
     if (this.staminaRegenDelay > 0) {
       this.staminaRegenDelay -= delta;
-    } else if (this.stamina < this.maxStamina && this.state !== 'dodge' && this.state !== 'attack') {
+    } else if (
+      this.stamina < this.maxStamina &&
+      this.state !== 'dodge' &&
+      this.state !== 'attack' &&
+      this.state !== 'jumping'
+    ) {
       const regenRate = inputs.sprint && inputs.move.lengthSq() > 0 ? 0 : 36.0;
       this.stamina = Math.min(this.maxStamina, this.stamina + regenRate * delta);
     }
 
-    // 2. Handle Current State
+    // 6. Handle Current State
     switch (this.state) {
       case 'dodge':
         this.updateDodge(delta, inputs);
@@ -388,13 +576,16 @@ export class PlayerCharacter {
       case 'stagger':
         this.updateStagger(delta);
         break;
+      case 'jumping':
+        PlayerLocomotion.updateJumping(this, delta, elapsed, inputs, cameraYaw, lockedTargetPos);
+        break;
       case 'idle':
       case 'moving':
-        this.updateLocomotion(delta, elapsed, inputs, cameraYaw, lockedTargetPos);
+        PlayerLocomotion.updateLocomotion(this, delta, elapsed, inputs, cameraYaw, lockedTargetPos);
         break;
     }
 
-    // 3. Keep Inside Arena
+    // 7. Keep Inside Arena
     const maxR = arenaRadius - this.radius - 0.5;
     const distSq = this.group.position.x * this.group.position.x + this.group.position.z * this.group.position.z;
     if (distSq > maxR * maxR) {
@@ -404,383 +595,32 @@ export class PlayerCharacter {
     }
   }
 
-  private updateLocomotion(
-    delta: number,
-    _elapsed: number,
-    inputs: CombatInputs,
-    cameraYaw: number,
-    lockedTargetPos: THREE.Vector3 | null,
-  ): void {
-    // Check Dodge input first (high priority)
-    if (inputs.dodge && this.stamina > 0) {
-      this.startDodge(inputs, cameraYaw);
-      return;
-    }
-
-    // Check Attack input
-    if (inputs.lightAttack && this.stamina >= PLAYER_ATTACKS.light1.staminaCost) {
-      if (lockedTargetPos) {
-        const dx = lockedTargetPos.x - this.group.position.x;
-        const dz = lockedTargetPos.z - this.group.position.z;
-        this.group.rotation.y = Math.atan2(-dx, -dz);
-      }
-      this.startAttack(PLAYER_ATTACKS.light1, 1);
-      return;
-    }
-    if (inputs.heavyAttack && this.stamina >= PLAYER_ATTACKS.heavy.staminaCost) {
-      if (lockedTargetPos) {
-        const dx = lockedTargetPos.x - this.group.position.x;
-        const dz = lockedTargetPos.z - this.group.position.z;
-        this.group.rotation.y = Math.atan2(-dx, -dz);
-      }
-      this.startAttack(PLAYER_ATTACKS.heavy, 0);
-      return;
-    }
-
-    // Camera-relative direction calculation
-    const sinYaw = Math.sin(cameraYaw);
-    const cosYaw = Math.cos(cameraYaw);
-    const fwdX = -sinYaw;
-    const fwdZ = -cosYaw;
-    const rightX = cosYaw;
-    const rightZ = -sinYaw;
-
-    const moveDirX = inputs.move.x * rightX - inputs.move.y * fwdX;
-    const moveDirZ = inputs.move.x * rightZ - inputs.move.y * fwdZ;
-    const moveMag = Math.sqrt(moveDirX * moveDirX + moveDirZ * moveDirZ);
-
-    if (moveMag > 0.05) {
-      const isSprinting = inputs.sprint && this.stamina > 5;
-      const walkSpeed = moveMag < 0.65 ? 2.2 + 2.2 * (moveMag / 0.65) : 4.4;
-      const speed = isSprinting ? 7.2 : walkSpeed;
-
-      if (isSprinting) {
-        this.stamina = Math.max(0, this.stamina - 14 * delta);
-        this.staminaRegenDelay = 0.8;
-      }
-
-      this.velocity.x = (moveDirX / moveMag) * speed;
-      this.velocity.z = (moveDirZ / moveMag) * speed;
-      this.group.position.x += this.velocity.x * delta;
-      this.group.position.z += this.velocity.z * delta;
-
-      // Facing Direction
-      if (lockedTargetPos) {
-        const dx = lockedTargetPos.x - this.group.position.x;
-        const dz = lockedTargetPos.z - this.group.position.z;
-        const targetAngle = Math.atan2(-dx, -dz);
-        let diff = targetAngle - this.group.rotation.y;
-        while (diff > Math.PI) diff -= Math.PI * 2;
-        while (diff < -Math.PI) diff += Math.PI * 2;
-        this.group.rotation.y += diff * Math.min(1.0, delta * 12.0);
-      } else {
-        const targetAngle = Math.atan2(-this.velocity.x, -this.velocity.z);
-        let diff = targetAngle - this.group.rotation.y;
-        while (diff > Math.PI) diff -= Math.PI * 2;
-        while (diff < -Math.PI) diff += Math.PI * 2;
-        this.group.rotation.y += diff * Math.min(1.0, delta * 14.0);
-      }
-
-      this.state = 'moving';
-      if (isSprinting) {
-        this.playAction('run', 0.15, THREE.LoopRepeat, false, 1.0);
-      } else {
-        const animSpeed = moveMag < 0.65 ? Math.max(0.7, moveMag / 0.65) : 1.0;
-        this.playAction('walk', 0.15, THREE.LoopRepeat, false, animSpeed);
-      }
-    } else {
-      this.velocity.set(0, 0, 0);
-      this.state = 'idle';
-
-      if (lockedTargetPos) {
-        const dx = lockedTargetPos.x - this.group.position.x;
-        const dz = lockedTargetPos.z - this.group.position.z;
-        const targetAngle = Math.atan2(-dx, -dz);
-        let diff = targetAngle - this.group.rotation.y;
-        while (diff > Math.PI) diff -= Math.PI * 2;
-        while (diff < -Math.PI) diff += Math.PI * 2;
-        this.group.rotation.y += diff * Math.min(1.0, delta * 10.0);
-      }
-
-      this.playAction('idle', 0.2, THREE.LoopRepeat, false, 1.0);
-    }
-  }
-
   public startDodge(inputs?: CombatInputs, cameraYaw = 0, explicitDirection?: THREE.Vector3): void {
-    this.state = 'dodge';
-    this.dodgeTimer = 0;
-    this.isInvulnerable = false;
-    this.stamina = Math.max(0, this.stamina - this.dodgeConfig.staminaCost);
-    this.staminaRegenDelay = 1.0;
-
-    // Compute dodge direction
-    if (explicitDirection) {
-      this.dodgeDirection.copy(explicitDirection).normalize();
-    } else if (inputs && inputs.move.lengthSq() > 0.05) {
-      const sinYaw = Math.sin(cameraYaw);
-      const cosYaw = Math.cos(cameraYaw);
-      const fwdX = -sinYaw;
-      const fwdZ = -cosYaw;
-      const rightX = cosYaw;
-      const rightZ = -sinYaw;
-
-      this.dodgeDirection.set(
-        inputs.move.x * rightX - inputs.move.y * fwdX,
-        0,
-        inputs.move.x * rightZ - inputs.move.y * fwdZ,
-      ).normalize();
-    } else {
-      this.dodgeDirection.set(
-        Math.sin(this.group.rotation.y),
-        0,
-        Math.cos(this.group.rotation.y),
-      ).normalize();
-    }
-
-    this.group.rotation.y = Math.atan2(-this.dodgeDirection.x, -this.dodgeDirection.z);
-    const action = this.playAction('dodge', 0.04, THREE.LoopOnce, true, 1.0);
-    if (action) {
-      action.time = 0;
-      action.paused = true;
-    }
+    PlayerDodgeHandler.startDodge(this, inputs, cameraYaw, explicitDirection);
   }
 
-  private setDodgeAnimTime(targetTime: number): void {
-    let action = this.actions.get('dodge');
-    if (!action) {
-      const clip = ModelLoader.findClip(this.rawClips, 'dodge');
-      if (clip) action = this.actions.get(clip.name);
-    }
-    if (action) {
-      action.time = targetTime;
-    }
-  }
-
-  private setDodgeIFrameVisual(active: boolean): void {
-    if (!this.modelScene) return;
-    const flashColor = new THREE.Color(0xff4433);
-    this.modelScene.traverse((obj) => {
-      if (
-        obj.name.toLowerCase().includes('sword') ||
-        obj.name.toLowerCase().includes('hitbox')
-      ) {
-        return;
-      }
-      if (obj instanceof THREE.Mesh && obj.material) {
-        const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
-        for (const mat of mats) {
-          if (mat instanceof THREE.MeshStandardMaterial) {
-            if (active) {
-              mat.emissive.copy(flashColor);
-              mat.emissiveIntensity = 0.65;
-            } else {
-              mat.emissive.setHex(0x000000);
-              mat.emissiveIntensity = 0;
-            }
-          }
-        }
-      }
-    });
+  public setDodgeIFrameVisual(active: boolean): void {
+    PlayerDodgeHandler.setDodgeIFrameVisual(this.modelScene, active);
   }
 
   private updateDodge(delta: number, _inputs: CombatInputs): void {
-    this.dodgeTimer += delta;
-
-    const {
-      startupStartFrame,
-      startupEndFrame,
-      startupDuration,
-      iframeStartFrame,
-      iframeEndFrame,
-      iframeDuration,
-      recoveryStartFrame,
-      recoveryEndFrame,
-      recoveryDuration,
-      totalDistanceMeters,
-    } = DODGE_CONFIG;
-
-    const TOTAL_DURATION = startupDuration + iframeDuration + recoveryDuration;
-    const IFRAME_END = startupDuration + iframeDuration;
-
-    // Peak speed for half-sine traversal curve:
-    // average speed = peakSpeed * (2 / PI); activeDistance = average * iframeDuration
-    const peakSpeed = (totalDistanceMeters * 0.9) / ((2 / Math.PI) * iframeDuration);
-
-    if (this.dodgeTimer < startupDuration) {
-      // 1. Startup / Delay (Windup dive anticipation: startupStartFrame to startupEndFrame)
-      // Fully vulnerable to damage during these frames
-      this.isInvulnerable = false;
-      this.setDodgeIFrameVisual(false);
-
-      const progress = Math.min(1.0, this.dodgeTimer / startupDuration);
-      const frame = startupStartFrame + progress * (startupEndFrame - startupStartFrame);
-      this.setDodgeAnimTime((frame - 1) / 60);
-
-      const startupSpeed = (totalDistanceMeters * 0.1) / startupDuration;
-      this.group.position.addScaledVector(this.dodgeDirection, startupSpeed * delta);
-    } else if (this.dodgeTimer < IFRAME_END) {
-      // 2. Active I-Frames (Core invulnerability: iframeStartFrame to iframeEndFrame)
-      // Attacks pass through cleanly, character flashes slightly reddish to visualize it
-      this.isInvulnerable = true;
-      this.setDodgeIFrameVisual(true);
-
-      const progress = Math.min(1.0, (this.dodgeTimer - startupDuration) / iframeDuration);
-      const frame = iframeStartFrame + progress * (iframeEndFrame - iframeStartFrame);
-      this.setDodgeAnimTime((frame - 1) / 60);
-
-      const speedCurve = Math.sin(progress * Math.PI);
-      this.group.position.addScaledVector(this.dodgeDirection, peakSpeed * speedCurve * delta);
-    } else if (this.dodgeTimer < TOTAL_DURATION) {
-      // 3. Recovery (Landing and standing up: recoveryStartFrame to recoveryEndFrame)
-      // Fully vulnerable again, reddish flash clears, input locked until recovery finishes
-      this.isInvulnerable = false;
-      this.setDodgeIFrameVisual(false);
-
-      const progress = Math.min(1.0, (this.dodgeTimer - IFRAME_END) / recoveryDuration);
-      const frame = recoveryStartFrame + progress * (recoveryEndFrame - recoveryStartFrame);
-      this.setDodgeAnimTime((frame - 1) / 60);
-
-      const decaySpeed = (1.0 - progress) * 0.8;
-      this.group.position.addScaledVector(this.dodgeDirection, decaySpeed * delta);
-    } else {
-      // 4. Roll Complete
-      this.state = 'idle';
-      this.isInvulnerable = false;
-      this.setDodgeIFrameVisual(false);
-      const action = this.actions.get('dodge');
-      if (action) action.paused = false;
-      this.playAction('idle', 0.15);
-    }
+    PlayerDodgeHandler.updateDodge(this, delta, this.modelScene);
   }
 
   public startAttack(attack: AttackDefinition, comboStep: number): void {
-    this.state = 'attack';
-    this.currentAttack = attack;
-    this.attackTimer = 0;
-    this.attackPhase = 'startup';
-    this.comboStep = comboStep;
-    this.comboQueued = false;
-    this.hasHitCurrentSwing = false;
-    this.hasSpawnedSlashArc = false;
-
-    this.stamina = Math.max(0, this.stamina - attack.staminaCost);
-    this.staminaRegenDelay = 1.1;
-
-    if (attack.isHeavy) {
-      this.playAction('attack_heavy', 0.08, THREE.LoopOnce, true, 0.95);
-    } else {
-      this.playAction('attack_light', 0.08, THREE.LoopOnce, true, 1.15);
-    }
+    PlayerCombat.startAttack(this, attack, comboStep);
   }
 
-  private updateAttack(delta: number, inputs: CombatInputs, lockedTargetPos: THREE.Vector3 | null = null): void {
-    if (!this.currentAttack) {
-      this.state = 'idle';
-      return;
-    }
-
-    this.attackTimer += delta;
-
-    if (this.attackPhase === 'recovery') {
-      if (inputs.dodge && this.stamina > 0) {
-        this.currentAttack = null;
-        this.attackPhase = 'none';
-        this.comboStep = 0;
-        this.comboQueued = false;
-        this.startDodge(inputs);
-        return;
-      }
-      if (inputs.lightAttack && this.comboStep > 0 && this.comboStep < 3) {
-        this.comboQueued = true;
-      }
-    }
-
-    const { startup, active, recovery, forwardImpulse } = this.currentAttack;
-
-    if (this.attackTimer < startup) {
-      this.attackPhase = 'startup';
-      if (lockedTargetPos) {
-        const dx = lockedTargetPos.x - this.group.position.x;
-        const dz = lockedTargetPos.z - this.group.position.z;
-        const targetAngle = Math.atan2(-dx, -dz);
-        let diff = targetAngle - this.group.rotation.y;
-        while (diff > Math.PI) diff -= Math.PI * 2;
-        while (diff < -Math.PI) diff += Math.PI * 2;
-        this.group.rotation.y += diff * Math.min(1.0, delta * 8.0);
-      }
-      const step = (delta / startup) * forwardImpulse * 0.2;
-      const fwd = new THREE.Vector3(-Math.sin(this.group.rotation.y), 0, -Math.cos(this.group.rotation.y));
-      this.group.position.addScaledVector(fwd, step);
-    } else if (this.attackTimer < startup + active) {
-      if (this.attackPhase !== 'active') {
-        this.attackPhase = 'active';
-        if (!this.hasSpawnedSlashArc) {
-          this.hasSpawnedSlashArc = true;
-          this.vfxSystem?.spawnAttackSlashArc(
-            this.group.position,
-            this.group.rotation.y,
-            this.currentAttack.name,
-            this.currentAttack.isHeavy,
-            false,
-          );
-        }
-      }
-      const step = (delta / active) * forwardImpulse * 0.8;
-      const fwd = new THREE.Vector3(-Math.sin(this.group.rotation.y), 0, -Math.cos(this.group.rotation.y));
-      this.group.position.addScaledVector(fwd, step);
-    } else if (this.attackTimer < startup + active + recovery) {
-      this.attackPhase = 'recovery';
-    } else {
-      if (this.comboQueued && this.comboStep === 1 && this.stamina >= PLAYER_ATTACKS.light2.staminaCost) {
-        this.startAttack(PLAYER_ATTACKS.light2, 2);
-      } else if (this.comboQueued && this.comboStep === 2 && this.stamina >= PLAYER_ATTACKS.light3.staminaCost) {
-        this.startAttack(PLAYER_ATTACKS.light3, 3);
-      } else {
-        this.state = 'idle';
-        this.currentAttack = null;
-        this.attackPhase = 'none';
-        this.comboStep = 0;
-        this.comboQueued = false;
-        this.playAction('idle', 0.15);
-      }
-    }
+  public updateAttack(delta: number, inputs: CombatInputs, lockedTargetPos: THREE.Vector3 | null = null): void {
+    PlayerCombat.updateAttack(this, delta, inputs, lockedTargetPos);
   }
 
   public takeDamage(damage: number, isHeavy: boolean): boolean {
-    if (this.isInvulnerable || this.state === 'dead') return false;
-
-    this.hp = Math.max(0, this.hp - damage);
-
-    if (this.hp <= 0) {
-      this.state = 'dead';
-      this.setDodgeIFrameVisual(false);
-      const dodgeAct = this.actions.get('dodge');
-      if (dodgeAct) dodgeAct.paused = false;
-      this.velocity.set(0, 0, 0);
-      this.playAction('death', 0.1, THREE.LoopOnce, true, 1.0);
-      return true;
-    }
-
-    if (isHeavy || this.state !== 'attack') {
-      this.state = 'stagger';
-      this.setDodgeIFrameVisual(false);
-      const dodgeAct = this.actions.get('dodge');
-      if (dodgeAct) dodgeAct.paused = false;
-      this.staggerTimer = isHeavy ? 0.45 : 0.25;
-      this.currentAttack = null;
-      // High-impact stagger reaction animation
-      this.playAction('hit', 0.05, THREE.LoopOnce, true, isHeavy ? 1.0 : 1.3);
-    }
-
-    return true;
+    return PlayerCombat.takeDamage(this, damage, isHeavy);
   }
 
-  private updateStagger(delta: number): void {
-    this.staggerTimer -= delta;
-    if (this.staggerTimer <= 0) {
-      this.state = 'idle';
-      this.playAction('idle', 0.15);
-    }
+  public updateStagger(delta: number): void {
+    PlayerCombat.updateStagger(this, delta);
   }
 
   public reset(spawnPos = new THREE.Vector3(0, 0, 10)): void {
@@ -797,6 +637,16 @@ export class PlayerCharacter {
     this.isInvulnerable = false;
     this.setDodgeIFrameVisual(false);
 
+    this.isGrounded = true;
+    this.verticalVelocity = 0;
+    this.isAirborneAttack = false;
+    this.currentTiltAngle = 0;
+
+    this.isDrinking = false;
+    this.drinkTimer = 0;
+    this.hasHealedDuringDrink = false;
+    if (this.flaskMesh) this.flaskMesh.visible = false;
+
     this.dodgeTimer = 0;
     this.staggerTimer = 0;
 
@@ -806,6 +656,24 @@ export class PlayerCharacter {
     // 2. Stop all actions and restore enabled + baseline weight 1.0
     if (this.mixer) {
       this.mixer.stopAllAction();
+    }
+    for (const action of this.upperActions.values()) {
+      action.stop();
+      action.reset();
+      action.enabled = true;
+      action.setEffectiveWeight(1.0);
+      action.setEffectiveTimeScale(1.0);
+      action.clampWhenFinished = false;
+      action.paused = false;
+    }
+    for (const action of this.lowerActions.values()) {
+      action.stop();
+      action.reset();
+      action.enabled = true;
+      action.setEffectiveWeight(1.0);
+      action.setEffectiveTimeScale(1.0);
+      action.clampWhenFinished = false;
+      action.paused = false;
     }
     for (const action of this.actions.values()) {
       action.stop();
@@ -817,11 +685,16 @@ export class PlayerCharacter {
       action.paused = false;
     }
 
+    this.upperBodyAction = null;
+    this.lowerBodyAction = null;
+    this.currentUpperActionName = '';
+    this.currentLowerActionName = '';
     this.currentAction = null;
     this.currentActionName = '';
+    this.isUpperBodyOverride = false;
 
-    // 3. Play Idle via playAction so kinematicController and mixer are unified
-    this.playAction('idle', 0.05);
+    // 3. Play Idle via playFullBodyAction
+    this.playFullBodyAction('idle', 0.05);
     this.mixer?.update(0);
 
     // 4. Coordinates, rotation & physics reset
@@ -834,8 +707,6 @@ export class PlayerCharacter {
 
   public dispose(): void {
     this.setDodgeIFrameVisual(false);
-    const dodgeAct = this.actions.get('dodge');
-    if (dodgeAct) dodgeAct.paused = false;
     this.hitboxDebugger.dispose();
     if (this.mixer) {
       this.mixer.stopAllAction();
@@ -843,6 +714,19 @@ export class PlayerCharacter {
     if (this.swordObject && this.swordObject.parent) {
       this.swordObject.parent.remove(this.swordObject);
     }
+    if (this.flaskMesh && this.flaskMesh.parent) {
+      this.flaskMesh.parent.remove(this.flaskMesh);
+    }
+    this.flaskMesh?.traverse((obj) => {
+      if (obj instanceof THREE.Mesh) {
+        obj.geometry.dispose();
+        if (Array.isArray(obj.material)) {
+          obj.material.forEach((m) => m.dispose());
+        } else {
+          obj.material?.dispose();
+        }
+      }
+    });
     this.swordObject?.traverse((obj) => {
       if (obj instanceof THREE.Mesh) {
         obj.geometry.dispose();
