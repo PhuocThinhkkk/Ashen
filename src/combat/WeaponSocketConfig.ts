@@ -31,6 +31,16 @@ export const DEFAULT_BOSS_WEAPON_SOCKET: WeaponSocketTransform = {
   scale: 160,
 };
 
+export const DEFAULT_PLAYER_POTION_SOCKET: WeaponSocketTransform = {
+  posX: 0.05,
+  posY: 0.05,
+  posZ: 0,
+  rotX: 0,
+  rotY: 0,
+  rotZ: 90,
+  scale: 0.28,
+};
+
 export function loadSocketConfig(key: string, fallback: WeaponSocketTransform): WeaponSocketTransform {
   try {
     const raw = localStorage.getItem(`weapon_socket_${key}`);

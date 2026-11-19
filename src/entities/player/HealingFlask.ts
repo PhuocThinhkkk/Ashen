@@ -1,8 +1,46 @@
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import {
+  DEFAULT_PLAYER_POTION_SOCKET,
+  loadSocketConfig,
+  applyWeaponSocketTransform,
+} from '../../combat/WeaponSocketConfig';
+
+/**
+ * Loads the 3D health potion model from assets/items/health_potions.glb,
+ * configuring socket transforms and enabling shadows.
+ * Falls back to the procedural glass flask if unavailable.
+ */
+export async function loadHealingFlaskMesh(loader: GLTFLoader): Promise<THREE.Group> {
+  try {
+    const gltf = await loader.loadAsync('/assets/items/health_potions.glb');
+    const flaskGroup = new THREE.Group();
+    flaskGroup.name = 'HealthPotion';
+
+    gltf.scene.traverse((obj) => {
+      if (obj instanceof THREE.Mesh) {
+        obj.castShadow = true;
+        obj.receiveShadow = true;
+      }
+    });
+
+    flaskGroup.add(gltf.scene);
+
+    // Apply socket transform from config
+    const socketCfg = loadSocketConfig('player_potion', DEFAULT_PLAYER_POTION_SOCKET);
+    applyWeaponSocketTransform(flaskGroup, socketCfg);
+    flaskGroup.visible = false;
+
+    return flaskGroup;
+  } catch (err) {
+    console.warn('[HealingFlask] Failed to load health_potions.glb, using procedural fallback:', err);
+    return createHealingFlaskMesh();
+  }
+}
 
 /**
  * Creates a procedural estus-style glass healing flask mesh
- * that can be attached to the player's left hand socket.
+ * that can be attached to the player's left hand socket as a fallback.
  */
 export function createHealingFlaskMesh(): THREE.Group {
   const flaskGroup = new THREE.Group();
