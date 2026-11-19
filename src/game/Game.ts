@@ -1,6 +1,4 @@
 import * as THREE from 'three';
-import { BOSS_ATTACKS } from '../combat/FrameCombat';
-import { checkAttackHit } from '../combat/HitDetection';
 import { type CombatInputs } from '../core/types';
 import { InputController } from '../core/InputController';
 import { Loop } from '../core/Loop';
@@ -16,8 +14,11 @@ import { SettingsManager, type ShadowQuality } from '../systems/SettingsManager'
 import { PerformanceProfiler } from '../systems/PerformanceProfiler';
 import { UnifiedSettingsModal } from '../ui/UnifiedSettingsModal';
 import { MobileDeviceController } from '../ui/MobileDeviceController';
-import { NetworkManager, type RemoteHitData } from '../network/NetworkManager';
+import { NetworkManager } from '../network/NetworkManager';
 import { RemotePlayerProxy } from '../network/RemotePlayerProxy';
+import { resolveCombatCollisions } from './GameCollisionResolver';
+import { installGameTestHooks } from './GameTestHooks';
+import { GameMultiplayerHandler } from './GameMultiplayerHandler';
 
 export const AVAILABLE_PLAYER_MODELS = [
   { id: 'knight', name: 'Knight' },
@@ -44,6 +45,7 @@ export class Game {
   private readonly hud: Hud;
   private readonly settingsModal: UnifiedSettingsModal;
   private readonly mobileDeviceController: MobileDeviceController;
+  private readonly multiplayerHandler: GameMultiplayerHandler;
 
   private readonly settingsManager = SettingsManager.getInstance();
   private readonly profiler = PerformanceProfiler.getInstance();
@@ -69,6 +71,8 @@ export class Game {
     heavyAttack: false,
     toggleLockOn: false,
     restart: false,
+    heal: false,
+    jump: false,
   };
 
   private readonly mouseDelta = new THREE.Vector2();
@@ -151,6 +155,7 @@ export class Game {
     this.mobileDeviceController = new MobileDeviceController({
       onRestart: () => this.resetRun(),
     });
+    this.multiplayerHandler = new GameMultiplayerHandler(this);
 
     this.buildScene();
     this.applySettings();
@@ -204,7 +209,11 @@ export class Game {
       setProgress(60, 'Pre-warming WebGL Shaders, Shadows & VFX Pools...');
       // Pre-warm all AnimationMixer action tracks upfront so first-time action plays have zero binding hitch
       if (this.player.mixer) {
-        for (const action of (this.player as unknown as { actions: Map<string, THREE.AnimationAction> }).actions.values()) {
+        for (const action of this.player.upperActions.values()) {
+          action.play();
+          action.setEffectiveWeight(0.0001);
+        }
+        for (const action of this.player.lowerActions.values()) {
           action.play();
           action.setEffectiveWeight(0.0001);
         }
@@ -244,103 +253,11 @@ export class Game {
   }
 
   private setupNetworkHandlers(): void {
-    this.network.onMatchStart = (data) => {
-      void this.startMultiplayerDuel(data);
-    };
-
-    this.network.onRemoteUpdate = (data) => {
-      if (this.remotePlayer && this.isMultiplayerDuel) {
-        this.remotePlayer.applyRemoteState(data);
-      }
-    };
-
-    this.network.onCombatHit = (hitData) => {
-      this.handleRemoteCombatHit(hitData);
-    };
-
-    this.network.onMatchOver = (data) => {
-      this.handleMultiplayerMatchOver(data);
-    };
-
-    this.network.onOpponentDisconnect = () => {
-      this.handleOpponentDisconnect();
-    };
+    this.multiplayerHandler.setupNetworkHandlers();
   }
 
   public async startMultiplayerDuel(data: { p1SessionId: string; p2SessionId: string | null }): Promise<void> {
-    this.isMultiplayerDuel = true;
-    this.boss.group.visible = false;
-    this.settingsModal.close();
-
-    const isHost = this.network.mySessionId === data.p1SessionId;
-    this.opponentSessionId = isHost ? (data.p2SessionId || '') : data.p1SessionId;
-
-    // Reset local player to dedicated spawn
-    const mySpawn = isHost ? new THREE.Vector3(0, 0, 7) : new THREE.Vector3(0, 0, -7);
-    this.player.reset(mySpawn);
-    if (!isHost) {
-      this.player.group.rotation.set(0, Math.PI, 0);
-    }
-
-    // Spawn or update remote player proxy
-    const oppSpawn = isHost ? new THREE.Vector3(0, 0, -7) : new THREE.Vector3(0, 0, 7);
-    if (!this.remotePlayer) {
-      this.remotePlayer = new RemotePlayerProxy(isHost ? 'samurai' : 'knight');
-      this.remotePlayer.setVfx(this.vfx);
-      this.scene.add(this.remotePlayer.group);
-    }
-    this.remotePlayer.group.visible = true;
-    this.remotePlayer.reset(oppSpawn);
-
-    // Update camera to target remote opponent
-    this.cameraRig.setLockedTarget(this.remotePlayer.group.position);
-    this.cameraRig.snapTo(this.player.group.position, this.arena.radius);
-    this.hud.reset();
-  }
-
-  private handleRemoteCombatHit(hitData: RemoteHitData): void {
-    const contact = new THREE.Vector3(hitData.hitPoint.x, hitData.hitPoint.y, hitData.hitPoint.z);
-    const dir = new THREE.Vector3(hitData.hitDir.x, hitData.hitDir.y, hitData.hitDir.z);
-
-    this.vfx.spawnBloodBurst(contact, dir, hitData.isHeavy);
-
-    // If I was the target, take damage locally
-    if (hitData.targetSessionId === this.network.mySessionId) {
-      this.player.takeDamage(hitData.damage, hitData.isHeavy);
-      const screenPos = this.projectToScreen(this.player.group.position, 1.2);
-      this.hud.spawnDamageNumber(hitData.damage, screenPos.x, screenPos.y, true);
-      this.audio.hitConfirm(hitData.isHeavy);
-      this.audio.damageTaken(hitData.isHeavy, false);
-      if (this.settingsManager.data.vfx.cameraShake) {
-        this.cameraRig.addShake(hitData.isHeavy ? 0.42 : 0.22);
-      }
-      this.hitstopTimer = 0.05;
-    } else if (this.remotePlayer) {
-      // Opponent was target
-      this.remotePlayer.hp = Math.max(0, this.remotePlayer.hp - hitData.damage);
-      const screenPos = this.projectToScreen(this.remotePlayer.group.position, 1.2);
-      this.hud.spawnDamageNumber(hitData.damage, screenPos.x, screenPos.y, false);
-      this.audio.hitConfirm(hitData.isHeavy);
-      this.audio.damageTaken(hitData.isHeavy, true);
-    }
-  }
-
-  private handleMultiplayerMatchOver(data: { winnerSessionId: string }): void {
-    const won = data.winnerSessionId === this.network.mySessionId;
-    if (won) {
-      this.audio.victoryStinger();
-    } else {
-      this.audio.deathStinger();
-    }
-  }
-
-  private handleOpponentDisconnect(): void {
-    if (this.remotePlayer) {
-      this.remotePlayer.group.visible = false;
-    }
-    this.isMultiplayerDuel = false;
-    this.boss.group.visible = true;
-    this.resetRun();
+    await this.multiplayerHandler.startMultiplayerDuel(data);
   }
 
   private applySettings(): void {
@@ -643,185 +560,24 @@ export class Game {
   }
 
   private resolveCombatCollisions(): void {
-    if (this.isMultiplayerDuel && this.remotePlayer && this.remotePlayer.hp > 0) {
-      const playerHitboxActive = this.player.isHitboxActive();
-      if (
-        this.player.state === 'attack' &&
-        (this.player.attackPhase === 'active' || playerHitboxActive) &&
-        this.player.currentAttack &&
-        !this.player.hasHitCurrentSwing
-      ) {
-        const hit = checkAttackHit(
-          this.player.group.position,
-          this.player.group.rotation.y,
-          this.player.currentAttack,
-          this.remotePlayer.group.position,
-          this.remotePlayer.radius,
-          this.remotePlayer.isInvulnerable,
-        );
-
-        if (hit.hit) {
-          this.player.hasHitCurrentSwing = true;
-          const hitPoint = hit.contactPoint || this.player.getHitboxWorldPosition();
-          const fwdAngle = this.player.group.rotation.y;
-          const hitDir = new THREE.Vector3(-Math.sin(fwdAngle), 0.25, -Math.cos(fwdAngle)).normalize();
-
-          this.network.sendCombatHit({
-            targetSessionId: this.opponentSessionId,
-            damage: hit.damage,
-            isHeavy: hit.isHeavy,
-            hitPoint: { x: hitPoint.x, y: hitPoint.y, z: hitPoint.z },
-            hitDir: { x: hitDir.x, y: hitDir.y, z: hitDir.z },
-          });
-
-          this.vfx.spawnBloodBurst(hitPoint, hitDir, hit.isHeavy);
-          this.audio.hitConfirm(hit.isHeavy);
-          this.audio.damageTaken(hit.isHeavy, true);
-
-          if (this.settingsManager.data.vfx.cameraShake) {
-            this.cameraRig.addShake(hit.isHeavy ? 0.32 : 0.16);
-          }
-          this.hitstopTimer = 0.05;
-        }
-      }
-      return;
-    }
-
-    // A. Player Attack Hits Boss
-    const playerHitboxActive = this.player.isHitboxActive();
-    if (
-      this.player.state === 'attack' &&
-      (this.player.attackPhase === 'active' || playerHitboxActive) &&
-      this.player.currentAttack &&
-      !this.player.hasHitCurrentSwing &&
-      this.boss.state !== 'dead'
-    ) {
-      const hit = checkAttackHit(
-        this.player.group.position,
-        this.player.group.rotation.y,
-        this.player.currentAttack,
-        this.boss.group.position,
-        this.boss.radius,
-        false,
-      );
-
-      if (hit.hit) {
-        this.boss.takeDamage(hit.damage, hit.poiseDamage);
-        this.player.hasHitCurrentSwing = true;
-
-        // Visual & Audio Feedback
-        const screenPos = this.projectToScreen(this.boss.group.position, 1.5);
-        this.hud.spawnDamageNumber(hit.damage, screenPos.x, screenPos.y, false);
-
-        // Combat VFX: Minimal Elden Ring blade-slash blood spit right on target surface
-        const toBoss = this.boss.group.position.clone().sub(this.player.group.position);
-        toBoss.y = 0;
-        let hitPoint: THREE.Vector3;
-        if (toBoss.length() > 0.01) {
-          toBoss.normalize();
-          hitPoint = this.boss.group.position.clone().addScaledVector(toBoss, -this.boss.radius * 0.75);
-          hitPoint.y = this.boss.group.position.y + 1.15;
-        } else {
-          hitPoint = hit.contactPoint || this.boss.group.position.clone().add(new THREE.Vector3(0, 1.15, 0));
-        }
-
-        const fwdAngle = this.player.group.rotation.y;
-        const hitDir = new THREE.Vector3(
-          Math.cos(fwdAngle) * 0.75 - Math.sin(fwdAngle) * 0.35,
-          0.15,
-          -Math.sin(fwdAngle) * 0.75 - Math.cos(fwdAngle) * 0.35,
-        ).normalize();
-
-        this.vfx.spawnBloodBurst(hitPoint, hitDir, hit.isHeavy);
-
-        this.profiler.markCombatEvent('PLAYER_HIT_BOSS', { damage: hit.damage, isHeavy: hit.isHeavy });
-
-        this.audio.hitConfirm(hit.isHeavy);
-        this.audio.damageTaken(hit.isHeavy, true);
-
-        if (this.settingsManager.data.vfx.cameraShake) {
-          this.cameraRig.addShake(hit.isHeavy ? 0.32 : 0.16);
-        }
-
-        if (hit.isHeavy) {
-          this.hitstopTimer = 0.05;
-        }
-
-        if ((this.boss.state as string) === 'dead') {
-          this.audio.victoryStinger();
-          this.cameraRig.setLockedTarget(null);
-        } else if (this.boss.state === 'stagger') {
-          this.audio.staggerClang();
-        }
-      }
-    }
-
-    // B. Boss Attack Hits Player
-    const bossHitboxActive = this.boss.isHitboxActive();
-    if (
-      (this.boss.state === 'active' || bossHitboxActive) &&
-      this.boss.currentAttack &&
-      !this.boss.hasHitCurrentSwing &&
-      this.player.state !== 'dead'
-    ) {
-      const bladeHitboxPos = this.boss.getBladeHitboxWorldPosition();
-      const distToBlade = this.player.group.position.distanceTo(bladeHitboxPos);
-      const bladeHit = distToBlade <= (this.player.radius + 2.0);
-
-      const hit = checkAttackHit(
-        this.boss.group.position,
-        this.boss.group.rotation.y,
-        this.boss.currentAttack,
-        this.player.group.position,
-        this.player.radius,
-        this.player.isInvulnerable,
-      );
-
-      if ((bladeHit || hit.hit) && !this.player.isInvulnerable) {
-        const damageDealt = this.player.takeDamage(hit.damage || this.boss.currentAttack.damage, hit.isHeavy);
-        this.boss.hasHitCurrentSwing = true;
-
-        if (damageDealt) {
-          const screenPos = this.projectToScreen(this.player.group.position, 1.2);
-          this.hud.spawnDamageNumber(hit.damage, screenPos.x, screenPos.y, true);
-
-          // Combat VFX: Minimal Elden Ring blade-slash blood spit right on player surface
-          const toPlayer = this.player.group.position.clone().sub(this.boss.group.position);
-          toPlayer.y = 0;
-          let hitPoint: THREE.Vector3;
-          if (toPlayer.length() > 0.01) {
-            toPlayer.normalize();
-            hitPoint = this.player.group.position.clone().addScaledVector(toPlayer, -this.player.radius * 0.75);
-            hitPoint.y = this.player.group.position.y + 1.10;
-          } else {
-            hitPoint = hit.contactPoint || this.player.group.position.clone().add(new THREE.Vector3(0, 1.10, 0));
-          }
-
-          const fwdAngle = this.boss.group.rotation.y;
-          const hitDir = new THREE.Vector3(
-            -Math.cos(fwdAngle) * 0.75 - Math.sin(fwdAngle) * 0.35,
-            0.15,
-            Math.sin(fwdAngle) * 0.75 - Math.cos(fwdAngle) * 0.35,
-          ).normalize();
-
-          this.vfx.spawnBloodBurst(hitPoint, hitDir, true);
-
-          this.profiler.markCombatEvent('BOSS_HIT_PLAYER', { damage: hit.damage });
-
-          this.audio.hitConfirm(true);
-          this.audio.damageTaken(true, false);
-
-          if (this.settingsManager.data.vfx.cameraShake) {
-            this.cameraRig.addShake(0.42);
-          }
-          this.hitstopTimer = 0.06;
-
-          if ((this.player.state as string) === 'dead') {
-            this.audio.deathStinger();
-          }
-        }
-      }
-    }
+    resolveCombatCollisions({
+      player: this.player,
+      boss: this.boss,
+      remotePlayer: this.remotePlayer,
+      isMultiplayerDuel: this.isMultiplayerDuel,
+      opponentSessionId: this.opponentSessionId,
+      network: this.network,
+      vfx: this.vfx,
+      audio: this.audio,
+      hud: this.hud,
+      cameraRig: this.cameraRig,
+      settingsManager: this.settingsManager,
+      profiler: this.profiler,
+      projectToScreen: (pos, offset) => this.projectToScreen(pos, offset),
+      setHitstop: (time) => {
+        this.hitstopTimer = time;
+      },
+    });
   }
 
   private updateAudioTriggers(): void {
@@ -884,7 +640,7 @@ export class Game {
     this.render();
   }
 
-  private syncHud(delta = 0): void {
+  public syncHud(delta = 0): void {
     const oppHp = this.isMultiplayerDuel && this.remotePlayer ? this.remotePlayer.hp : this.boss.hp;
     const oppMaxHp = this.isMultiplayerDuel && this.remotePlayer ? this.remotePlayer.maxHp : this.boss.maxHp;
     const isOppDead = this.isMultiplayerDuel && this.remotePlayer ? this.remotePlayer.hp <= 0 : this.boss.state === 'dead';
@@ -905,116 +661,7 @@ export class Game {
   }
 
   private installTestHooks(): void {
-    window.__THREE_GAME_TEST_HOOKS__ = {
-      seed: (_n: number) => {},
-      setState: (stateName: string) => {
-        if (stateName === 'initial' || stateName === 'default') {
-          this.resetRun();
-        } else if (stateName === 'player_dead') {
-          this.player.hp = 0;
-          this.player.state = 'dead';
-          this.player.playAction('death', 0.1, THREE.LoopOnce, true, 1.0);
-        } else if (stateName === 'boss_dead') {
-          this.boss.hp = 0;
-          this.boss.state = 'dead';
-          this.boss.playAction('die', 0.1, THREE.LoopOnce, true, 1.0);
-        } else if (stateName === 'boss_phase2') {
-          this.boss.hp = this.boss.maxHp * 0.45;
-          this.boss.triggerPhase2(this.player.group.position);
-        } else {
-          throw new Error(`Unknown state: ${stateName}`);
-        }
-        this.syncHud();
-        this.render();
-        this.publishDiagnostics();
-        return { state: stateName };
-      },
-      setPausedForScreenshot: (paused: boolean) => {
-        this.pausedForScreenshot = paused;
-        if (paused) {
-          this.player.velocity.set(0, 0, 0);
-        }
-        this.render();
-        this.publishDiagnostics();
-      },
-      hideDebugUi: (_hidden: boolean) => {
-        this.settingsModal.close();
-      },
-      toggleHitboxDebug: (visible?: boolean) => {
-        return this.toggleHitboxDebug(visible);
-      },
-      isHitboxDebugVisible: () => {
-        return this.player.hitboxDebugger.isVisible;
-      },
-      setPlayerModel: async (modelId: string) => {
-        await this.setPlayerModel(modelId);
-        return { playerModel: modelId };
-      },
-      setBossModel: async (modelId: string) => {
-        await this.setBossModel(modelId);
-        return { bossModel: modelId };
-      },
-      getPlayerWeaponDistanceToHand: () => {
-        if (!this.player.handBone || !this.player.swordObject) return 999;
-        const handPos = new THREE.Vector3();
-        const swordPos = new THREE.Vector3();
-        this.player.handBone.updateMatrixWorld(true);
-        this.player.swordObject.updateMatrixWorld(true);
-        this.player.handBone.getWorldPosition(handPos);
-        this.player.swordObject.getWorldPosition(swordPos);
-        return handPos.distanceTo(swordPos);
-      },
-      getBossWeaponDistanceToHand: () => {
-        if (!this.boss.handBone || !this.boss.greatswordGroup) return 999;
-        const handPos = new THREE.Vector3();
-        const swordPos = new THREE.Vector3();
-        this.boss.handBone.updateMatrixWorld(true);
-        this.boss.greatswordGroup.updateMatrixWorld(true);
-        this.boss.handBone.getWorldPosition(handPos);
-        this.boss.greatswordGroup.getWorldPosition(swordPos);
-        return handPos.distanceTo(swordPos);
-      },
-      triggerBossAttack: (attackKey: string) => {
-        const atk = BOSS_ATTACKS[attackKey];
-        if (atk) {
-          (this.boss as unknown as { chooseAttack: (a: unknown) => void }).chooseAttack(atk);
-        }
-      },
-      triggerGroundSlam: (pos?: any) => {
-        const p = pos
-          ? (pos instanceof THREE.Vector3 ? pos : new THREE.Vector3(pos.x, pos.y, pos.z))
-          : this.boss.group.position.clone().add(new THREE.Vector3(0, 0, 2));
-        this.vfx.triggerGroundSlam(p, this.arena.floorMesh);
-      },
-      triggerBloodBurst: (pos?: any, dir?: any) => {
-        const p = pos
-          ? (pos instanceof THREE.Vector3 ? pos : new THREE.Vector3(pos.x, pos.y, pos.z))
-          : this.player.group.position.clone().add(new THREE.Vector3(0, 1, 0));
-        const d = dir
-          ? (dir instanceof THREE.Vector3 ? dir : new THREE.Vector3(dir.x, dir.y, dir.z))
-          : new THREE.Vector3(0, 0.5, 1);
-        this.vfx.spawnBloodBurst(p, d, true);
-      },
-      triggerHitSparks: (pos?: any, dir?: any) => {
-        const p = pos
-          ? (pos instanceof THREE.Vector3 ? pos : new THREE.Vector3(pos.x, pos.y, pos.z))
-          : this.player.group.position.clone().add(new THREE.Vector3(0, 1, 0));
-        const d = dir
-          ? (dir instanceof THREE.Vector3 ? dir : new THREE.Vector3(dir.x, dir.y, dir.z))
-          : new THREE.Vector3(0, 0.8, 0.6).normalize();
-        this.vfx.spawnHitSparks(p, d, true);
-      },
-      triggerSlashArc: (origin?: THREE.Vector3, rotation?: THREE.Euler, color?: number | string) => {
-        const o = origin || this.player.group.position.clone().add(new THREE.Vector3(0, 1, 0));
-        const r = rotation || new THREE.Euler(0, this.player.group.rotation.y, 0);
-        this.vfx.spawnSlashArc(o, r, 1.2, color || 0xffe066);
-      },
-      getVfxSystem: () => this.vfx,
-      getProfiler: () => this.profiler,
-      triggerRestart: () => this.resetRun(),
-      getInputController: () => this.input,
-      getMobileDeviceController: () => this.mobileDeviceController,
-    };
+    installGameTestHooks(this);
   }
 
   private publishDiagnostics(): void {
@@ -1040,6 +687,12 @@ export class Game {
         isInvulnerable: this.player.isInvulnerable,
         loaded: this.player.isLoaded,
         activeClip: this.player.currentActionName,
+        upperClip: this.player.currentUpperActionName,
+        lowerClip: this.player.currentLowerActionName,
+        isGrounded: this.player.isGrounded,
+        isDrinking: this.player.isDrinking,
+        isAirborneAttack: this.player.isAirborneAttack,
+        tiltAngle: this.player.currentTiltAngle,
         modelId: this.player.modelId,
       },
       boss: {
