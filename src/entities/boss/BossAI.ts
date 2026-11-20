@@ -3,6 +3,46 @@ import { BOSS_ATTACKS, type AttackDefinition } from '../../combat/FrameCombat';
 import { ModelLoader } from '../../utils/ModelLoader';
 import type { BossCharacter } from '../BossCharacter';
 
+/**
+ * ============================================================================
+ * BOSS SPEED & MOVEMENT CONFIGURATION
+ * Edit these values to adjust all boss speeds, movement, turning, and lunges.
+ * ============================================================================
+ */
+export const BOSS_CONFIG = {
+  // 1. Forward Walk / Approach Speeds (m/s)
+  approachSpeedPhase1: 3.2,
+  approachSpeedPhase2: 4.2,
+
+  // 2. Lateral Strafe / Circling Speeds (m/s)
+  strafeSpeedPhase1: 2.8,
+  strafeSpeedPhase2: 3.4,
+
+  // 3. Rotation & Tracking Speed (degrees per second)
+  turnRateDegreesPerSec: 140, // 140 deg/sec
+
+  // 4. Attack Animation Speed Multipliers
+  attackSpeedPhase1: 1.0,
+  attackSpeedPhase2: 1.15, // Phase 2 attacks execute 15% faster
+
+  // 5. Preferred Orbit Distance (meters)
+  preferredOrbitRadius: 5.5,
+
+  // 6. Heavy Jump Attack Speeds (m/s)
+  jumpRunStartSpeed: 2.2, // Run-up acceleration start (m/s)
+  jumpRunEndSpeed: 5.0,   // Run-up acceleration peak (m/s)
+  jumpLeapSpeed: 9.32,    // Airborne forward leap speed (m/s)
+
+  // 7. Forward Lunge Impulses per Attack (meters)
+  impulses: {
+    combo: 2.4,
+    jump: 7.0,
+    downward: 0.05,
+    spin360: 0.0,
+    kick: 0.1,
+  },
+};
+
 export type BossSubgoalType = 'STRAFE_INSPECT' | 'APPROACH' | 'ATTACK' | 'COMBO_CHECK';
 
 export interface BossSubgoal {
@@ -31,8 +71,8 @@ export class BossAI {
   public isAttackActiveFrames = false;
 
   private readonly raycaster = new THREE.Raycaster();
-  public readonly preferredOrbitRadius = 5.5; // ~5.5m preferred radius
-  public readonly maxTurnRate = THREE.MathUtils.degToRad(140); // 140 deg/sec
+  public readonly preferredOrbitRadius = BOSS_CONFIG.preferredOrbitRadius;
+  public readonly maxTurnRate = THREE.MathUtils.degToRad(BOSS_CONFIG.turnRateDegreesPerSec);
 
   constructor(boss: BossCharacter) {
     this.boss = boss;
@@ -94,7 +134,7 @@ export class BossAI {
     b.telegraphGlow = 0;
     this.isAttackActiveFrames = false;
 
-    const speedMod = b.isPhase2 ? 1.15 : 1.0;
+    const speedMod = b.isPhase2 ? BOSS_CONFIG.attackSpeedPhase2 : BOSS_CONFIG.attackSpeedPhase1;
     const totalDuration = (attack.startup + attack.active + attack.recovery) / speedMod;
 
     const clipName = attack.animationClip || 'attack_heavy';
@@ -315,7 +355,7 @@ export class BossAI {
           strafeVec = right.clone().multiplyScalar(inverted);
         }
 
-        const strafeSpeed = b.isPhase2 ? 3.4 : 2.8;
+        const strafeSpeed = b.isPhase2 ? BOSS_CONFIG.strafeSpeedPhase2 : BOSS_CONFIG.strafeSpeedPhase1;
         const moveStep = strafeVec.multiplyScalar(strafeSpeed);
         if (radialFactor !== 0) {
           moveStep.addScaledVector(fwd, radialFactor * (strafeSpeed * 0.65));
@@ -340,7 +380,7 @@ export class BossAI {
         b.faceTarget(player.position, this.maxTurnRate, dt);
 
         const dist = b.distanceTo(player.position);
-        const speed = b.isPhase2 ? 4.2 : 3.2;
+        const speed = b.isPhase2 ? BOSS_CONFIG.approachSpeedPhase2 : BOSS_CONFIG.approachSpeedPhase1;
         const yaw = b.group.rotation.y;
         const fwd = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw)).normalize();
 
@@ -383,7 +423,7 @@ export class BossAI {
     }
 
     b.attackTimer += dt;
-    const speedMod = b.isPhase2 ? 1.15 : 1.0;
+    const speedMod = b.isPhase2 ? BOSS_CONFIG.attackSpeedPhase2 : BOSS_CONFIG.attackSpeedPhase1;
     const startup = b.currentAttack.startup / speedMod;
     const active = b.currentAttack.active / speedMod;
     const recovery = b.currentAttack.recovery / speedMod;
@@ -422,7 +462,9 @@ export class BossAI {
       const fwd = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw)).normalize();
 
       if (b.currentAttack.animationClip !== 'attack_jump') {
-        const impulse = (b.currentAttack.forwardImpulse / active) * dt;
+        const clipKey = (b.currentAttack.animationClip || '').replace('attack_', '');
+        const impulseDist = (BOSS_CONFIG.impulses as Record<string, number>)[clipKey] ?? b.currentAttack.forwardImpulse;
+        const impulse = (impulseDist / active) * dt;
         b.group.position.addScaledVector(fwd, impulse);
       }
     } else if (b.attackTimer < startup + active + recovery) {
