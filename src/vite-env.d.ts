@@ -96,6 +96,10 @@ interface ThreeGameTestHooks {
   setBossPosition?(pos: { x: number; y: number; z: number }): void;
   setBossAttackCooldown?(cd: number): void;
   setBossSubgoal?(subgoal: any): void;
+  getMusicState?(): any;
+  startBossMusic?(): void;
+  stopBossMusic?(fade?: number): void;
+  transitionToBossPhase2?(): void;
 }
 
 interface Window {

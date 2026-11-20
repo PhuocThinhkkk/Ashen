@@ -100,6 +100,8 @@ export class Game {
   // Previous states for audio & profiler triggers
   private prevPlayerState = 'idle';
   private prevBossState = 'idle';
+  private prevBossIsPhase2 = false;
+  private currentMusicTrackId = '';
 
   constructor(private readonly canvas: HTMLCanvasElement) {
     this.renderer = createRenderer(canvas);
@@ -253,6 +255,7 @@ export class Game {
       await new Promise((r) => setTimeout(r, 60));
 
       this.isReady = true;
+      this.audio.startBossMusic();
       if (screen) {
         screen.classList.add('fade-out');
         setTimeout(() => screen.remove(), 250);
@@ -292,6 +295,14 @@ export class Game {
     // Controls guide
     const guideEl = document.querySelector<HTMLElement>('#controls-guide');
     if (guideEl) guideEl.style.display = s.general.showControlsGuide ? '' : 'none';
+
+    // Audio settings sync
+    this.audio.setMusicVolume(s.audio.bossMusicVolume);
+    this.audio.setSfxVolume(s.audio.sfxVolume);
+    if (this.currentMusicTrackId !== s.audio.selectedTrackId) {
+      this.currentMusicTrackId = s.audio.selectedTrackId;
+      void this.audio.setBossMusicTrack(s.audio.selectedTrackId);
+    }
   }
 
   private applyShadowQuality(quality: ShadowQuality): void {
@@ -625,6 +636,13 @@ export class Game {
       this.profiler.markCombatEvent('BOSS_ATTACK', { attack: this.boss.currentAttack?.name });
     }
     this.prevBossState = this.boss.state;
+
+    // Boss Phase 2 Transition
+    if (this.boss.isPhase2 && !this.prevBossIsPhase2) {
+      this.audio.transitionToBossPhase2();
+      this.profiler.markCombatEvent('BOSS_PHASE2_TRANSITION');
+    }
+    this.prevBossIsPhase2 = this.boss.isPhase2;
   }
 
   private projectToScreen(worldPos: THREE.Vector3, heightOffset = 0): THREE.Vector2 {
@@ -659,6 +677,9 @@ export class Game {
     this.hud.reset();
     this.prevPlayerState = 'idle';
     this.prevBossState = 'idle';
+    this.prevBossIsPhase2 = false;
+    this.audio.stopBossMusic(0.2);
+    this.audio.startBossMusic();
     this.pausedForScreenshot = false;
     this.profiler.markCombatEvent('TRIAL_RESET');
     this.render();

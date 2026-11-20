@@ -37,8 +37,8 @@
         box-shadow: 0 4px 20px rgba(0, 0, 0, 0.75);
         display: flex;
         align-items: center;
-        gap: 6px;
-        padding: 0 8px;
+        gap: 5px;
+        padding: 0 6px;
         z-index: 1000;
         backdrop-filter: blur(8px);
         border-radius: 6px;
@@ -47,14 +47,15 @@
         background: #141c28;
         border: 1px solid #7a5e2a;
         color: #c8c0b4;
-        padding: 5px 12px;
+        padding: 5px 8px;
         font-family: monospace;
         font-size: 11px;
         cursor: pointer;
         border-radius: 4px;
         font-weight: 600;
-        letter-spacing: 0.04em;
+        letter-spacing: 0.03em;
         transition: all 0.15s ease;
+        white-space: nowrap;
       }
       .mode-tab-btn:hover {
         background: #273549;
@@ -92,9 +93,9 @@
         box-shadow: 0 4px 20px rgba(0, 0, 0, 0.75);
         display: flex;
         align-items: center;
-        gap: 8px;
-        padding: 0 10px;
-        z-index: 1000;
+        gap: 5px;
+        padding: 0 8px;
+        z-index: 990;
         backdrop-filter: blur(8px);
         border-radius: 6px;
       }
@@ -445,6 +446,7 @@
       <button id="btn-toggle-win-1" class="mode-tab-btn active" data-mode="raw" title="Raw Animation (Key: 1)">1. Raw Animation</button>
       <button id="btn-toggle-win-2" class="mode-tab-btn" data-mode="combat" title="Combat & Player (Key: 2)">2. Combat & Player</button>
       <button id="btn-toggle-win-3" class="mode-tab-btn" data-mode="socket" title="Weapon Socket (Key: 3)">3. Weapon Socket</button>
+      <button id="btn-toggle-win-4" class="mode-tab-btn" data-mode="music" title="Boss Music (Key: 4)">4. Boss Music</button>
       <button id="btn-toggle-ui" class="mode-tab-btn btn-hide-ui" title="Hide/Show UI (Key: H or Tab)">Hide UI</button>
     </nav>
 
@@ -700,6 +702,171 @@
                 <button id="btn-close-code-box" style="padding: 1px 4px; font-size: 9px;">&times;</button>
               </div>
               <pre id="socket-code-output" style="background: #06090e; border: 1px solid #7a5e2a; padding: 6px; border-radius: 4px; font-size: 10px; color: #38d665; max-height: 140px; overflow-y: auto; margin: 0;"></pre>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- ================= WINDOW 4: BOSS MUSIC EDITOR ================= -->
+      <aside id="win-boss-music" class="test-window hidden" data-window="4">
+        <div class="win-header">
+          <span>4. Boss Music Editor</span>
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <span id="music-state-badge" class="active-badge" style="color: #ffd777; border-color: #ffd777;">IDLE</span>
+            <button id="btn-min-win-4" class="panel-toggle-btn" title="Minimize / Expand Window">_</button>
+          </div>
+        </div>
+
+        <div class="win-body">
+          <!-- Mode Switcher -->
+          <div style="display: flex; gap: 6px; margin-bottom: 8px;">
+            <button id="btn-music-mode-single" class="btn-util active" style="flex: 1; border-color: #d4af37; color: #ffd777;">Single-Track</button>
+            <button id="btn-music-mode-dual" class="btn-util" style="flex: 1; border-color: #8bb2d6; color: #8bb2d6;">Dual-Track</button>
+          </div>
+
+          <!-- Preset Management -->
+          <div class="section" style="margin-top: 0; padding-top: 0; border-top: none;">
+            <div style="display: flex; gap: 6px; margin-bottom: 6px;">
+              <select id="music-preset-select" style="flex: 1; background: #0c121c; border: 1px solid rgba(181, 149, 74, 0.4); color: #ffd777; padding: 4px 6px; border-radius: 4px; font-family: monospace; font-size: 11px;"></select>
+              <button id="btn-new-preset" class="btn-util" title="Create New Preset">+ New</button>
+              <button id="btn-delete-preset" class="btn-util" style="border-color: #8b2b2b; color: #f0c0c0;" title="Delete Preset">Del</button>
+            </div>
+            <div style="margin-bottom: 8px;">
+              <input type="text" id="music-preset-name" placeholder="Preset Display Name" style="width: 100%; box-sizing: border-box; background: #0c121c; border: 1px solid #7a5e2a; color: #e5ded2; padding: 4px 6px; border-radius: 4px; font-family: monospace; font-size: 11px;" />
+            </div>
+          </div>
+
+          <!-- Single-Track Mode Container -->
+          <div id="container-single-track" class="section">
+            <div class="section-header util">
+              <span>Single Audio Track (public/)</span>
+            </div>
+            <div style="margin-bottom: 8px;">
+              <div style="display: flex; gap: 4px; align-items: center;">
+                <input type="text" id="inp-single-url" placeholder="/audio/boss_theme.mp3" style="flex: 1; background: #0c121c; border: 1px solid #7a5e2a; color: #ffd777; padding: 4px 6px; border-radius: 4px; font-family: monospace; font-size: 11px;" />
+                <button id="btn-single-load-url" class="btn-util" style="padding: 4px 8px; font-weight: 700; border-color: #ffd700; color: #ffd777;">Load</button>
+              </div>
+              <div id="single-file-info" class="diag-line" style="margin-top: 4px; font-size: 10.5px;">Track: [Built-in Procedural Theme] (16.0s)</div>
+              <div style="font-size: 9.5px; color: #7f776a; margin-top: 2px;">Place audio in public/ (e.g. public/audio/theme.mp3) &amp; enter path above</div>
+            </div>
+
+            <!-- Phase 1 Timestamps -->
+            <div style="background: rgba(30, 25, 10, 0.5); border: 1px solid rgba(212, 175, 55, 0.3); border-radius: 4px; padding: 6px 8px; margin-bottom: 8px;">
+              <div class="section-header player" style="margin-bottom: 4px;">
+                <span>Phase 1 Timestamps</span>
+              </div>
+              <div class="slider-row">
+                <span class="slider-label" style="width: 90px;">Intro Start (s):</span>
+                <input type="number" id="inp-single-p1-start" class="slider-input" min="0" step="0.1" value="0.0" style="background: #06090e; color: #ffd700; border: 1px solid #7a5e2a; padding: 2px 4px; font-family: monospace;" />
+              </div>
+              <div class="slider-row">
+                <span class="slider-label" style="width: 90px;">Loop Start (s):</span>
+                <input type="number" id="inp-single-p1-loop-start" class="slider-input" min="0" step="0.1" value="0.0" style="background: #06090e; color: #ffd700; border: 1px solid #7a5e2a; padding: 2px 4px; font-family: monospace;" />
+              </div>
+              <div class="slider-row">
+                <span class="slider-label" style="width: 90px;">Loop End (s):</span>
+                <input type="number" id="inp-single-p1-loop-end" class="slider-input" min="0" step="0.1" value="16.0" style="background: #06090e; color: #ffd700; border: 1px solid #7a5e2a; padding: 2px 4px; font-family: monospace;" />
+              </div>
+            </div>
+
+            <!-- Phase 2 Timestamps -->
+            <div style="background: rgba(40, 15, 15, 0.5); border: 1px solid rgba(255, 85, 85, 0.3); border-radius: 4px; padding: 6px 8px;">
+              <div class="section-header boss" style="margin-bottom: 4px;">
+                <span>Phase 2 Timestamps</span>
+              </div>
+              <div class="slider-row">
+                <span class="slider-label" style="width: 90px;">Intro Start (s):</span>
+                <input type="number" id="inp-single-p2-start" class="slider-input" min="0" step="0.1" value="0.0" style="background: #06090e; color: #ff9999; border: 1px solid #752828; padding: 2px 4px; font-family: monospace;" />
+              </div>
+              <div class="slider-row">
+                <span class="slider-label" style="width: 90px;">Loop Start (s):</span>
+                <input type="number" id="inp-single-p2-loop-start" class="slider-input" min="0" step="0.1" value="0.0" style="background: #06090e; color: #ff9999; border: 1px solid #752828; padding: 2px 4px; font-family: monospace;" />
+              </div>
+              <div class="slider-row">
+                <span class="slider-label" style="width: 90px;">Loop End (s):</span>
+                <input type="number" id="inp-single-p2-loop-end" class="slider-input" min="0" step="0.1" value="16.0" style="background: #06090e; color: #ff9999; border: 1px solid #752828; padding: 2px 4px; font-family: monospace;" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Dual-Track Mode Container -->
+          <div id="container-dual-track" class="section" style="display: none;">
+            <!-- Phase 1 Audio Track -->
+            <div style="background: rgba(30, 25, 10, 0.5); border: 1px solid rgba(212, 175, 55, 0.3); border-radius: 4px; padding: 6px 8px; margin-bottom: 8px;">
+              <div class="section-header player" style="margin-bottom: 4px;">
+                <span>Phase 1 Track (public/)</span>
+              </div>
+              <div style="display: flex; gap: 4px; align-items: center; margin-bottom: 4px;">
+                <input type="text" id="inp-dual-p1-url" placeholder="/audio/boss_phase1.mp3" style="flex: 1; background: #0c121c; border: 1px solid #7a5e2a; color: #ffd777; padding: 3px 6px; border-radius: 4px; font-family: monospace; font-size: 11px;" />
+                <button id="btn-dual-p1-load-url" class="btn-util" style="padding: 3px 8px; font-weight: 700; border-color: #ffd700; color: #ffd777;">Load</button>
+              </div>
+              <div id="dual-p1-file-info" class="diag-line" style="margin: 2px 0 6px 0; font-size: 10px;">Track 1: Built-in Theme (16.0s)</div>
+              <div class="slider-row">
+                <span class="slider-label" style="width: 90px;">Loop Start (s):</span>
+                <input type="number" id="inp-dual-p1-loop-start" class="slider-input" min="0" step="0.1" value="0.0" style="background: #06090e; color: #ffd700; border: 1px solid #7a5e2a; padding: 2px 4px; font-family: monospace;" />
+              </div>
+              <div class="slider-row">
+                <span class="slider-label" style="width: 90px;">Loop End (s):</span>
+                <input type="number" id="inp-dual-p1-loop-end" class="slider-input" min="0" step="0.1" value="16.0" style="background: #06090e; color: #ffd700; border: 1px solid #7a5e2a; padding: 2px 4px; font-family: monospace;" />
+              </div>
+            </div>
+
+            <!-- Phase 2 Audio Track -->
+            <div style="background: rgba(40, 15, 15, 0.5); border: 1px solid rgba(255, 85, 85, 0.3); border-radius: 4px; padding: 6px 8px;">
+              <div class="section-header boss" style="margin-bottom: 4px;">
+                <span>Phase 2 Track (public/)</span>
+              </div>
+              <div style="display: flex; gap: 4px; align-items: center; margin-bottom: 4px;">
+                <input type="text" id="inp-dual-p2-url" placeholder="/audio/boss_phase2.mp3" style="flex: 1; background: #0c121c; border: 1px solid #752828; color: #ff9999; padding: 3px 6px; border-radius: 4px; font-family: monospace; font-size: 11px;" />
+                <button id="btn-dual-p2-load-url" class="btn-util" style="padding: 3px 8px; font-weight: 700; border-color: #ff5555; color: #ff9999;">Load</button>
+              </div>
+              <div id="dual-p2-file-info" class="diag-line" style="margin: 2px 0 6px 0; font-size: 10px;">Track 2: Built-in Theme (16.0s)</div>
+              <div class="slider-row">
+                <span class="slider-label" style="width: 90px;">Loop Start (s):</span>
+                <input type="number" id="inp-dual-p2-loop-start" class="slider-input" min="0" step="0.1" value="0.0" style="background: #06090e; color: #ff9999; border: 1px solid #752828; padding: 2px 4px; font-family: monospace;" />
+              </div>
+              <div class="slider-row">
+                <span class="slider-label" style="width: 90px;">Loop End (s):</span>
+                <input type="number" id="inp-dual-p2-loop-end" class="slider-input" min="0" step="0.1" value="16.0" style="background: #06090e; color: #ff9999; border: 1px solid #752828; padding: 2px 4px; font-family: monospace;" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Live Preview & Transition Testing Controls -->
+          <div class="section">
+            <div class="section-header util">
+              <span>Live Preview & Transition Testing</span>
+            </div>
+            <div class="btn-group" style="margin-bottom: 8px;">
+              <button id="btn-preview-p1" class="btn-player" style="border-color: #ffd700; font-weight: 700;">▶ Play P1</button>
+              <button id="btn-preview-p2" class="btn-boss" style="border-color: #ff5555; font-weight: 700;">▶ Play P2</button>
+              <button id="btn-preview-transition" class="btn-util" style="border-color: #ffaa33; color: #ffaa33; font-weight: 700;">⚡ Trigger P2 Transition</button>
+              <button id="btn-preview-stop" class="btn-util" style="border-color: #777;">⏹ Stop</button>
+            </div>
+            <div class="slider-row">
+              <span class="slider-label" style="width: 70px;">Volume:</span>
+              <input type="range" id="inp-music-preview-vol" class="slider-input" min="0" max="100" step="1" value="75" />
+              <span id="val-music-preview-vol" class="slider-val">75%</span>
+            </div>
+            <div id="music-preview-telemetry" class="diag-line" style="color: #ffd777; font-size: 10.5px;">Status: Standby | Loop: Ready</div>
+          </div>
+
+          <!-- Save & Export Section -->
+          <div class="section">
+            <div class="section-header" style="color: #38d665;">
+              <span>Save & Export</span>
+              <span id="music-save-status" class="active-badge" style="color: #38d665; border-color: #38d665;">READY</span>
+            </div>
+            <div class="btn-group">
+              <button id="btn-save-music-preset" style="background: #1c3824; border-color: #38d665; color: #38d665; font-weight: 700;">Save to Game</button>
+              <button id="btn-export-music-ts" class="btn-util">Copy TypeScript Preset</button>
+            </div>
+            <div id="music-code-container" style="margin-top: 6px; display: none;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                <span style="font-size: 10px; color: #ffaa33;">BossMusicPreset.ts:</span>
+                <button id="btn-close-music-code" style="padding: 1px 4px; font-size: 9px;">&times;</button>
+              </div>
+              <pre id="music-code-output" style="background: #06090e; border: 1px solid #7a5e2a; padding: 6px; border-radius: 4px; font-size: 10px; color: #38d665; max-height: 140px; overflow-y: auto; margin: 0;"></pre>
             </div>
           </div>
         </div>

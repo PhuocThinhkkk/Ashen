@@ -6,6 +6,7 @@ import { RawAnimationStage } from './asset-test/track1/RawAnimationStage';
 import { CombatDuelStage } from './asset-test/track2/CombatDuelStage';
 import { DuelCombatResolver } from './asset-test/track2/DuelCombatResolver';
 import { WeaponSocketGUI } from './asset-test/ui/WeaponSocketGUI';
+import { BossMusicGUI } from './asset-test/ui/BossMusicGUI';
 import { RawInspectorUI } from './asset-test/ui/RawInspectorUI';
 import { CombatDuelUI } from './asset-test/ui/CombatDuelUI';
 import { CONFIG } from './asset-test/config';
@@ -71,9 +72,9 @@ let duelPlaybackSpeed = 1.0;
 let isDuelPaused = false;
 const keysPressed: Record<string, boolean> = {};
 
-type ActiveMode = 'raw' | 'combat' | 'socket' | null;
+type ActiveMode = 'raw' | 'combat' | 'socket' | 'music' | null;
 let activeMode: ActiveMode = 'raw';
-let lastActiveMode: 'raw' | 'combat' | 'socket' = 'raw';
+let lastActiveMode: 'raw' | 'combat' | 'socket' | 'music' = 'raw';
 
 function setTabMode(mode: ActiveMode): void {
   activeMode = mode;
@@ -85,6 +86,7 @@ function setTabMode(mode: ActiveMode): void {
   dom.btnToggleWin1?.classList.toggle('active', mode === 'raw');
   dom.btnToggleWin2?.classList.toggle('active', mode === 'combat');
   dom.btnToggleWin3?.classList.toggle('active', mode === 'socket');
+  dom.btnToggleWin4?.classList.toggle('active', mode === 'music');
 
   const btnToggleUi = document.querySelector<HTMLButtonElement>('#btn-toggle-ui');
   btnToggleUi?.classList.toggle('active', mode === null);
@@ -92,7 +94,7 @@ function setTabMode(mode: ActiveMode): void {
     btnToggleUi.textContent = mode === null ? 'Show UI' : 'Hide UI';
   }
 
-  // Docked single panel slot: show only selected panel, hide other two with display: none
+  // Docked single panel slot: show only selected panel, hide other three with display: none
   if (dom.overlay) {
     dom.overlay.classList.toggle('hidden', mode !== 'raw');
   }
@@ -101,6 +103,9 @@ function setTabMode(mode: ActiveMode): void {
   }
   if (dom.winWeaponOffsets) {
     dom.winWeaponOffsets.classList.toggle('hidden', mode !== 'socket');
+  }
+  if (dom.winBossMusic) {
+    dom.winBossMusic.classList.toggle('hidden', mode !== 'music');
   }
 
   const panelSlot = document.querySelector<HTMLElement>('#single-panel-slot');
@@ -215,6 +220,7 @@ const cameraMgr = new AssetTestCameraManager(dom.canvas, (roamActive) => {
 const rawStage = new RawAnimationStage();
 const duelStage = new CombatDuelStage(scene);
 const socketGui = new WeaponSocketGUI(rawStage, dom);
+const musicGui = new BossMusicGUI(dom);
 
 const duelUI = new CombatDuelUI(
   dom,
@@ -369,6 +375,8 @@ window.addEventListener('keydown', (e) => {
     setTabMode('combat');
   } else if (e.code === 'Digit3' && !e.repeat && !e.ctrlKey && !e.altKey && !e.metaKey) {
     setTabMode('socket');
+  } else if (e.code === 'Digit4' && !e.repeat && !e.ctrlKey && !e.altKey && !e.metaKey) {
+    setTabMode('music');
   } else if (e.code === 'KeyR' && !e.repeat) {
     duelStage.resetPositions((text) => duelUI.logCombat(text));
   } else if (e.code === 'Escape') {
@@ -417,10 +425,11 @@ dom.btnOpenSettings?.addEventListener('click', () => {
   }
 });
 
-// Top Mode Switcher Bar (3 Tabs + Hide UI)
+// Top Mode Switcher Bar (4 Tabs + Hide UI)
 dom.btnToggleWin1?.addEventListener('click', () => setTabMode('raw'));
 dom.btnToggleWin2?.addEventListener('click', () => setTabMode('combat'));
 dom.btnToggleWin3?.addEventListener('click', () => setTabMode('socket'));
+dom.btnToggleWin4?.addEventListener('click', () => setTabMode('music'));
 document.querySelector('#btn-toggle-ui')?.addEventListener('click', () => toggleUI());
 
 // Camera quick switches auto-orient active tab to relevant stage
@@ -438,6 +447,11 @@ dom.cameraButtons?.querySelectorAll<HTMLButtonElement>('button').forEach((btn) =
 dom.btnMinWin3?.addEventListener('click', () => {
   const isCollapsed = dom.winWeaponOffsets?.classList.toggle('collapsed');
   if (dom.btnMinWin3) dom.btnMinWin3.textContent = isCollapsed ? '□' : '_';
+});
+
+dom.btnMinWin4?.addEventListener('click', () => {
+  const isCollapsed = dom.winBossMusic?.classList.toggle('collapsed');
+  if (dom.btnMinWin4) dom.btnMinWin4.textContent = isCollapsed ? '□' : '_';
 });
 
 // Auto-switch mode if test suite or caller queries/inspects element inside another mode
@@ -519,6 +533,7 @@ async function initHarness(): Promise<void> {
     rawUI.populateBossButtons();
     rawUI.updateDiagnosticsInfo();
     socketGui.init();
+    await musicGui.init();
 
     // Load Track 2 (Logic Models)
     if (dom.loadStatus) dom.loadStatus.textContent = 'Loading Track 2 Combat Duel Models...';
@@ -618,6 +633,8 @@ window.__ASSET_TEST__ = {
     bladeToPlayerDistance: DuelCombatResolver.lastBladeToPlayerDistance,
     bladeToBossDistance: DuelCombatResolver.lastBladeToBossDistance,
   }),
+  bossMusicController: musicGui.musicController,
+  bossMusicGui: musicGui,
 };
 
 // 8. Main Render Loop

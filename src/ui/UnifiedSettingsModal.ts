@@ -8,6 +8,7 @@ import { renderModelsTab } from './settings/ModelsTab';
 import { renderGameplayTab } from './settings/GameplayTab';
 import { renderGeneralTab } from './settings/GeneralTab';
 import { renderMultiplayerTab } from './settings/MultiplayerTab';
+import { renderAudioTab } from './settings/AudioTab';
 
 export type { ModelOption, UnifiedSettingsModalConfig };
 
@@ -83,6 +84,7 @@ export class UnifiedSettingsModal {
               <button class="settings-tab-btn" data-tab="gameplay"><span class="tab-num">V</span> KINEMATICS</button>
               <button class="settings-tab-btn" data-tab="general"><span class="tab-num">VI</span> SYSTEM</button>
               <button class="settings-tab-btn" data-tab="multiplayer"><span class="tab-num">VII</span> ONLINE DUEL</button>
+              <button class="settings-tab-btn" data-tab="audio"><span class="tab-num">VIII</span> AUDIO</button>
             </nav>
           </aside>
 
@@ -202,6 +204,9 @@ export class UnifiedSettingsModal {
         break;
       case 'multiplayer':
         renderMultiplayerTab(ctx);
+        break;
+      case 'audio':
+        renderAudioTab(ctx);
         break;
     }
   }

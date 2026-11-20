@@ -18,13 +18,16 @@ export function installGameTestHooks(game: Game): void {
         g.player.hp = 0;
         g.player.state = 'dead';
         g.player.playAction('death', 0.1, THREE.LoopOnce, true, 1.0);
+        g.audio.stopBossMusic(1.5);
       } else if (stateName === 'boss_dead') {
         g.boss.hp = 0;
         g.boss.state = 'dead';
         g.boss.playAction('die', 0.1, THREE.LoopOnce, true, 1.0);
+        g.audio.stopBossMusic(2.0);
       } else if (stateName === 'boss_phase2') {
         g.boss.hp = g.boss.maxHp * 0.45;
         g.boss.triggerPhase2(g.player.group.position);
+        g.audio.transitionToBossPhase2();
       } else {
         throw new Error(`Unknown state: ${stateName}`);
       }
@@ -188,6 +191,10 @@ export function installGameTestHooks(game: Game): void {
     getProfiler: () => g.profiler,
     triggerRestart: () => g.resetRun(),
     getInputController: () => g.input,
+    getMusicState: () => g.audio.bossMusic.getState(),
+    startBossMusic: () => g.audio.startBossMusic(),
+    stopBossMusic: (fade?: number) => g.audio.stopBossMusic(fade),
+    transitionToBossPhase2: () => g.audio.transitionToBossPhase2(),
     getMobileDeviceController: () => g.mobileDeviceController,
   };
 }

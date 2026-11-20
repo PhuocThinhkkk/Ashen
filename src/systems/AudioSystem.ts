@@ -1,3 +1,8 @@
+import { BossMusicController } from '../audio/BossMusicController';
+import { BossMusicStorage } from '../audio/BossMusicStorage';
+import { DEFAULT_PROCEDURAL_PRESET } from '../audio/types';
+import { SettingsManager } from './SettingsManager';
+
 export type SoundKey =
   | 'swingLight'
   | 'swingHeavy'
@@ -7,10 +12,20 @@ export type SoundKey =
   | 'footstepHeavy';
 
 export class AudioSystem {
-  private context: AudioContext | null = null;
+  public context: AudioContext | null = null;
   private unlocked = false;
+  private masterGain: GainNode | null = null;
+  private sfxGain: GainNode | null = null;
+  private musicGain: GainNode | null = null;
+
+  public readonly bossMusic = new BossMusicController();
+  private pendingStartBossMusic = false;
 
   private soundBuffers: Partial<Record<SoundKey, AudioBuffer>> = {};
+
+  private get sfxDestination(): AudioNode {
+    return this.sfxGain ?? this.context!.destination;
+  }
 
   constructor() {
     const unlock = () => {
@@ -37,8 +52,74 @@ export class AudioSystem {
     if (this.context.state === 'suspended') {
       await this.context.resume();
     }
+
+    // Set up master routing
+    this.masterGain = this.context.createGain();
+    this.masterGain.gain.setValueAtTime(1.0, this.context.currentTime);
+    this.masterGain.connect(this.context.destination);
+
+    const initialSettings = SettingsManager.getInstance().data.audio;
+
+    this.sfxGain = this.context.createGain();
+    this.sfxGain.gain.setValueAtTime(initialSettings.sfxVolume, this.context.currentTime);
+    this.sfxGain.connect(this.masterGain);
+
+    this.musicGain = this.context.createGain();
+    this.musicGain.gain.setValueAtTime(initialSettings.bossMusicVolume, this.context.currentTime);
+    this.musicGain.connect(this.masterGain);
+
+    this.bossMusic.init(this.context, this.musicGain);
+
+    // Load active preset from settings
+    const activePreset = BossMusicStorage.getPresetById(initialSettings.selectedTrackId) || DEFAULT_PROCEDURAL_PRESET;
+    await this.bossMusic.loadPreset(activePreset);
+
     this.unlocked = true;
     await this.loadAllSounds();
+
+    if (this.pendingStartBossMusic) {
+      this.pendingStartBossMusic = false;
+      this.bossMusic.startPhase1();
+    }
+  }
+
+  public async setBossMusicTrack(presetId: string): Promise<void> {
+    const preset = BossMusicStorage.getPresetById(presetId) || DEFAULT_PROCEDURAL_PRESET;
+    if (this.unlocked && this.context) {
+      await this.bossMusic.loadPreset(preset);
+    }
+  }
+
+  public setMusicVolume(volume: number): void {
+    if (this.context && this.musicGain) {
+      this.musicGain.gain.setValueAtTime(Math.max(0, Math.min(1, volume)), this.context.currentTime);
+    }
+    this.bossMusic.setVolume(volume);
+  }
+
+  public setSfxVolume(volume: number): void {
+    if (this.context && this.sfxGain) {
+      this.sfxGain.gain.setValueAtTime(Math.max(0, Math.min(1, volume)), this.context.currentTime);
+    }
+  }
+
+  public async startBossMusic(): Promise<void> {
+    if (!this.unlocked || !this.context) {
+      this.pendingStartBossMusic = true;
+      await this.unlock();
+      return;
+    }
+    this.bossMusic.startPhase1();
+  }
+
+  public transitionToBossPhase2(): void {
+    if (!this.unlocked || !this.context) return;
+    this.bossMusic.transitionToPhase2();
+  }
+
+  public stopBossMusic(fadeDuration = 1.0): void {
+    this.pendingStartBossMusic = false;
+    this.bossMusic.stop(fadeDuration);
   }
 
   private async loadAllSounds(): Promise<void> {
@@ -86,7 +167,7 @@ export class AudioSystem {
       const gain = this.context.createGain();
       gain.gain.value = volume;
 
-      source.connect(gain).connect(this.context.destination);
+      source.connect(gain).connect(this.sfxDestination);
       source.start();
       return true;
     } catch {
@@ -130,7 +211,7 @@ export class AudioSystem {
     gain.gain.linearRampToValueAtTime(heavy ? 0.35 : 0.22, now + 0.04);
     gain.gain.exponentialRampToValueAtTime(0.0001, now + (heavy ? 0.28 : 0.18));
 
-    noise.connect(filter).connect(gain).connect(this.context.destination);
+    noise.connect(filter).connect(gain).connect(this.sfxDestination);
     noise.start(now);
   }
 
@@ -149,7 +230,7 @@ export class AudioSystem {
     gain.gain.linearRampToValueAtTime(0.18, now + 0.05);
     gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.28);
 
-    osc.connect(gain).connect(this.context.destination);
+    osc.connect(gain).connect(this.sfxDestination);
     osc.start(now);
     osc.stop(now + 0.3);
   }
@@ -168,7 +249,7 @@ export class AudioSystem {
     oscGain.gain.setValueAtTime(isHeavy ? 0.45 : 0.28, now);
     oscGain.gain.exponentialRampToValueAtTime(0.0001, now + (isHeavy ? 0.24 : 0.14));
 
-    osc.connect(oscGain).connect(this.context.destination);
+    osc.connect(oscGain).connect(this.sfxDestination);
     osc.start(now);
     osc.stop(now + 0.25);
 
@@ -180,7 +261,7 @@ export class AudioSystem {
     ringGain.gain.setValueAtTime(isHeavy ? 0.25 : 0.15, now);
     ringGain.gain.exponentialRampToValueAtTime(0.0001, now + (isHeavy ? 0.35 : 0.18));
 
-    ring.connect(ringGain).connect(this.context.destination);
+    ring.connect(ringGain).connect(this.sfxDestination);
     ring.start(now);
     ring.stop(now + 0.36);
   }
@@ -207,7 +288,7 @@ export class AudioSystem {
     gain.gain.setValueAtTime(isHeavy ? 0.4 : 0.28, now);
     gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.14);
 
-    osc.connect(filter).connect(gain).connect(this.context.destination);
+    osc.connect(filter).connect(gain).connect(this.sfxDestination);
     osc.start(now);
     osc.stop(now + 0.15);
 
@@ -233,7 +314,7 @@ export class AudioSystem {
     gain.gain.setValueAtTime(isHeavy ? 0.45 : 0.3, now);
     gain.gain.exponentialRampToValueAtTime(0.0001, now + (isHeavy ? 0.32 : 0.2));
 
-    osc.connect(gain).connect(this.context.destination);
+    osc.connect(gain).connect(this.sfxDestination);
     osc.start(now);
     osc.stop(now + 0.35);
   }
@@ -266,7 +347,7 @@ export class AudioSystem {
     gain.gain.linearRampToValueAtTime(0.35, now + 0.2);
     gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.75);
 
-    osc.connect(filter).connect(gain).connect(this.context.destination);
+    osc.connect(filter).connect(gain).connect(this.sfxDestination);
     osc.start(now);
     osc.stop(now + 0.8);
   }
@@ -292,7 +373,7 @@ export class AudioSystem {
       gain.gain.linearRampToValueAtTime(0.35, now + 0.4);
       gain.gain.exponentialRampToValueAtTime(0.0001, now + 1.9);
 
-      osc.connect(filter).connect(gain).connect(this.context!.destination);
+      osc.connect(filter).connect(gain).connect(this.sfxDestination);
       osc.start(now);
       osc.stop(now + 2.0);
     });
@@ -311,7 +392,7 @@ export class AudioSystem {
     gain.gain.setValueAtTime(0.2, now);
     gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.2);
 
-    osc.connect(gain).connect(this.context.destination);
+    osc.connect(gain).connect(this.sfxDestination);
     osc.start(now);
     osc.stop(now + 0.22);
   }
@@ -330,7 +411,7 @@ export class AudioSystem {
     gain.gain.linearRampToValueAtTime(0.25, now + 0.15);
     gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.5);
 
-    osc.connect(gain).connect(this.context.destination);
+    osc.connect(gain).connect(this.sfxDestination);
     osc.start(now);
     osc.stop(now + 0.55);
   }
@@ -352,7 +433,7 @@ export class AudioSystem {
       gain.gain.setValueAtTime(0.25 / (idx + 1), now);
       gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.85);
 
-      osc.connect(gain).connect(this.context!.destination);
+      osc.connect(gain).connect(this.sfxDestination);
       osc.start(now);
       osc.stop(now + 0.9);
     });
@@ -372,7 +453,7 @@ export class AudioSystem {
       gain.gain.linearRampToValueAtTime(0.18, now + i * 0.12 + 0.08);
       gain.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.12 + 1.6);
 
-      osc.connect(gain).connect(this.context!.destination);
+      osc.connect(gain).connect(this.sfxDestination);
       osc.start(now + i * 0.12);
       osc.stop(now + i * 0.12 + 1.8);
     });
@@ -395,7 +476,7 @@ export class AudioSystem {
       gain.gain.setValueAtTime(0.2, now);
       gain.gain.exponentialRampToValueAtTime(0.0001, now + 2.4);
 
-      osc.connect(filter).connect(gain).connect(this.context!.destination);
+      osc.connect(filter).connect(gain).connect(this.sfxDestination);
       osc.start(now);
       osc.stop(now + 2.5);
     });
@@ -426,7 +507,7 @@ export class AudioSystem {
     gain.gain.linearRampToValueAtTime(peakGain, now + duration * 0.2);
     gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
 
-    osc.connect(filter).connect(gain).connect(this.context.destination);
+    osc.connect(filter).connect(gain).connect(this.sfxDestination);
     osc.start(now);
     osc.stop(now + duration + 0.05);
   }
@@ -447,7 +528,7 @@ export class AudioSystem {
     gain.gain.setValueAtTime(0.22, now);
     gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.08);
 
-    osc.connect(gain).connect(this.context.destination);
+    osc.connect(gain).connect(this.sfxDestination);
     osc.start(now);
     osc.stop(now + 0.09);
   }
@@ -473,7 +554,7 @@ export class AudioSystem {
     gain.gain.setValueAtTime(0.45, now);
     gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.24);
 
-    osc.connect(gain).connect(this.context.destination);
+    osc.connect(gain).connect(this.sfxDestination);
     osc.start(now);
     osc.stop(now + 0.26);
   }
@@ -502,12 +583,16 @@ export class AudioSystem {
     gain.gain.setValueAtTime(0.7, now);
     gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.95);
 
-    osc.connect(filter).connect(gain).connect(this.context.destination);
+    osc.connect(filter).connect(gain).connect(this.sfxDestination);
     osc.start(now);
     osc.stop(now + 1.0);
   }
 
   public dispose(): void {
+    this.bossMusic.dispose();
+    this.masterGain?.disconnect();
+    this.sfxGain?.disconnect();
+    this.musicGain?.disconnect();
     void this.context?.close();
     this.context = null;
   }

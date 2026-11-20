@@ -152,6 +152,7 @@ export function resolveCombatCollisions(ctx: CollisionResolverContext): void {
 
       if ((boss.state as string) === 'dead') {
         audio.victoryStinger();
+        audio.stopBossMusic(2.0);
         cameraRig.setLockedTarget(null);
       } else if (boss.state === 'stagger') {
         audio.staggerClang();
@@ -220,6 +221,7 @@ export function resolveCombatCollisions(ctx: CollisionResolverContext): void {
 
         if ((player.state as string) === 'dead') {
           audio.deathStinger();
+          audio.stopBossMusic(1.5);
         }
       }
     }

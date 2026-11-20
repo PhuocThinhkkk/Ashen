@@ -1,3 +1,6 @@
+import { type AudioSettings, BUILTIN_PROCEDURAL_ID } from '../audio/types';
+
+export type { AudioSettings };
 export type ShadowQuality = 'off' | 'low' | 'medium' | 'high';
 export type VFXPreset = 'full' | 'balanced' | 'performance' | 'custom';
 
@@ -41,6 +44,7 @@ export interface GameSettingsData {
   vfx: VFXSettings;
   gameplay: GameplaySettings;
   general: GeneralSettings;
+  audio: AudioSettings;
 }
 
 export type SettingsChangeListener = (settings: GameSettingsData) => void;
@@ -78,6 +82,11 @@ export const DEFAULT_SETTINGS: GameSettingsData = {
     showBossBar: true,
     showHitboxDebug: false,
     invertCameraY: false,
+  },
+  audio: {
+    bossMusicVolume: 0.75,
+    sfxVolume: 1.0,
+    selectedTrackId: BUILTIN_PROCEDURAL_ID,
   },
 };
 
@@ -185,6 +194,11 @@ export class SettingsManager {
     this.notify();
   }
 
+  public updateAudio(partial: Partial<AudioSettings>): void {
+    Object.assign(this.data.audio, partial);
+    this.notify();
+  }
+
   public resetToDefaults(): void {
     this.data = JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
     this.notify();
@@ -203,6 +217,7 @@ export class SettingsManager {
         vfx: { ...DEFAULT_SETTINGS.vfx, ...(parsed.vfx || {}) },
         gameplay: { ...DEFAULT_SETTINGS.gameplay, ...(parsed.gameplay || {}) },
         general: { ...DEFAULT_SETTINGS.general, ...(parsed.general || {}) },
+        audio: { ...DEFAULT_SETTINGS.audio, ...(parsed.audio || {}) },
       };
     } catch {
       return JSON.parse(JSON.stringify(DEFAULT_SETTINGS));

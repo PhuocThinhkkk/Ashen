@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import * as THREE from 'three';
 import { BOSS_ATTACKS } from '../src/combat/FrameCombat';
-import { BossAI, type PlayerCombatSnapshot } from '../src/entities/boss/BossAI';
+import { BossAI, BOSS_CONFIG, type PlayerCombatSnapshot } from '../src/entities/boss/BossAI';
 
 test.describe('FromSoftware-Style Boss AI & Strafe Subgoal Stack', () => {
   // ---------------------------------------------------------------------------
@@ -23,7 +23,7 @@ test.describe('FromSoftware-Style Boss AI & Strafe Subgoal Stack', () => {
     expect(ai.goalStack.length).toBe(0);
     expect(ai.attackCooldown).toBe(0);
     expect(ai.preferredOrbitRadius).toBe(5.5);
-    expect(ai.maxTurnRate).toBeCloseTo(THREE.MathUtils.degToRad(140), 4);
+    expect(ai.maxTurnRate).toBeCloseTo(THREE.MathUtils.degToRad(BOSS_CONFIG.turnRateDegreesPerSec), 4);
 
     ai.pushSubgoal({ type: 'STRAFE_INSPECT', duration: 2.0 });
     expect(ai.getCurrentSubgoal()?.type).toBe('STRAFE_INSPECT');

@@ -58,7 +58,7 @@ declare global {
       isHitboxVisible?: () => boolean;
       stepFrame?: (frames: number) => void;
       togglePause?: () => boolean;
-      setTabMode?: (mode: 'raw' | 'combat' | 'socket' | null) => void;
+      setTabMode?: (mode: 'raw' | 'combat' | 'socket' | 'music' | null) => void;
       setMode?: (mode: 'orbit' | 'walk') => void;
       getHitboxDebugState?: () => { playerActive: boolean; bossActive: boolean };
       triggerPlayerAction?: (actionKey: string) => void;
@@ -69,6 +69,8 @@ declare global {
       toggleTrajectory?: (enabled?: boolean) => boolean;
       setRoamMode?: (enabled: boolean) => void;
       getWeaponLocations?: () => any;
+      bossMusicController?: any;
+      bossMusicGui?: any;
     };
   }
 }

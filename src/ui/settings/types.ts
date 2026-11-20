@@ -24,7 +24,8 @@ export type SettingsTabId =
   | 'performance'
   | 'models'
   | 'gameplay'
-  | 'multiplayer';
+  | 'multiplayer'
+  | 'audio';
 
 export interface TabRenderContext {
   container: HTMLElement;
