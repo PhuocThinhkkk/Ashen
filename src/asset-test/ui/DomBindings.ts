@@ -48,6 +48,8 @@ export interface DomBindings {
   musicPresetName: HTMLInputElement | null;
   containerSingleTrack: HTMLElement | null;
   containerDualTrack: HTMLElement | null;
+  selSingleScanned: HTMLSelectElement | null;
+  btnRescanAudio: HTMLButtonElement | null;
   inpSingleUrl: HTMLInputElement | null;
   btnSingleLoadUrl: HTMLButtonElement | null;
   singleFileInfo: HTMLElement | null;
@@ -57,11 +59,14 @@ export interface DomBindings {
   inpSingleP2Start: HTMLInputElement | null;
   inpSingleP2LoopStart: HTMLInputElement | null;
   inpSingleP2LoopEnd: HTMLInputElement | null;
+  btnRescanAudioDual: HTMLButtonElement | null;
+  selDualP1Scanned: HTMLSelectElement | null;
   inpDualP1Url: HTMLInputElement | null;
   btnDualP1LoadUrl: HTMLButtonElement | null;
   dualP1FileInfo: HTMLElement | null;
   inpDualP1LoopStart: HTMLInputElement | null;
   inpDualP1LoopEnd: HTMLInputElement | null;
+  selDualP2Scanned: HTMLSelectElement | null;
   inpDualP2Url: HTMLInputElement | null;
   btnDualP2LoadUrl: HTMLButtonElement | null;
   dualP2FileInfo: HTMLElement | null;
@@ -243,6 +248,8 @@ export function getDomBindings(): DomBindings {
     musicPresetName: document.querySelector<HTMLInputElement>('#music-preset-name'),
     containerSingleTrack: document.querySelector<HTMLElement>('#container-single-track'),
     containerDualTrack: document.querySelector<HTMLElement>('#container-dual-track'),
+    selSingleScanned: document.querySelector<HTMLSelectElement>('#sel-single-scanned'),
+    btnRescanAudio: document.querySelector<HTMLButtonElement>('#btn-rescan-audio'),
     inpSingleUrl: document.querySelector<HTMLInputElement>('#inp-single-url'),
     btnSingleLoadUrl: document.querySelector<HTMLButtonElement>('#btn-single-load-url'),
     singleFileInfo: document.querySelector<HTMLElement>('#single-file-info'),
@@ -252,11 +259,14 @@ export function getDomBindings(): DomBindings {
     inpSingleP2Start: document.querySelector<HTMLInputElement>('#inp-single-p2-start'),
     inpSingleP2LoopStart: document.querySelector<HTMLInputElement>('#inp-single-p2-loop-start'),
     inpSingleP2LoopEnd: document.querySelector<HTMLInputElement>('#inp-single-p2-loop-end'),
+    btnRescanAudioDual: document.querySelector<HTMLButtonElement>('#btn-rescan-audio-dual'),
+    selDualP1Scanned: document.querySelector<HTMLSelectElement>('#sel-dual-p1-scanned'),
     inpDualP1Url: document.querySelector<HTMLInputElement>('#inp-dual-p1-url'),
     btnDualP1LoadUrl: document.querySelector<HTMLButtonElement>('#btn-dual-p1-load-url'),
     dualP1FileInfo: document.querySelector<HTMLElement>('#dual-p1-file-info'),
     inpDualP1LoopStart: document.querySelector<HTMLInputElement>('#inp-dual-p1-loop-start'),
     inpDualP1LoopEnd: document.querySelector<HTMLInputElement>('#inp-dual-p1-loop-end'),
+    selDualP2Scanned: document.querySelector<HTMLSelectElement>('#sel-dual-p2-scanned'),
     inpDualP2Url: document.querySelector<HTMLInputElement>('#inp-dual-p2-url'),
     btnDualP2LoadUrl: document.querySelector<HTMLButtonElement>('#btn-dual-p2-load-url'),
     dualP2FileInfo: document.querySelector<HTMLElement>('#dual-p2-file-info'),

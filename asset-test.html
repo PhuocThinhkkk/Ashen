@@ -738,16 +738,21 @@
 
           <!-- Single-Track Mode Container -->
           <div id="container-single-track" class="section">
-            <div class="section-header util">
-              <span>Single Audio Track (public/)</span>
+            <div class="section-header util" style="display: flex; justify-content: space-between; align-items: center;">
+              <span>Single Audio Track (public/audio/)</span>
+              <button id="btn-rescan-audio" class="btn-util" style="padding: 1px 6px; font-size: 10px;" title="Rescan public/audio/ directory">⟳ Scan</button>
             </div>
             <div style="margin-bottom: 8px;">
-              <div style="display: flex; gap: 4px; align-items: center;">
-                <input type="text" id="inp-single-url" placeholder="/audio/boss_theme.mp3" style="flex: 1; background: #0c121c; border: 1px solid #7a5e2a; color: #ffd777; padding: 4px 6px; border-radius: 4px; font-family: monospace; font-size: 11px;" />
+              <div style="display: flex; gap: 4px; align-items: center; margin-bottom: 4px;">
+                <select id="sel-single-scanned" style="flex: 1; background: #0c121c; border: 1px solid #7a5e2a; color: #ffd777; padding: 4px 6px; border-radius: 4px; font-family: monospace; font-size: 11px;">
+                  <option value="">-- Detected in public/audio/ --</option>
+                </select>
                 <button id="btn-single-load-url" class="btn-util" style="padding: 4px 8px; font-weight: 700; border-color: #ffd700; color: #ffd777;">Load</button>
               </div>
+              <div style="display: flex; gap: 4px; align-items: center;">
+                <input type="text" id="inp-single-url" placeholder="/audio/AbyssWatchers.mp3" style="flex: 1; background: #0c121c; border: 1px solid rgba(122, 94, 42, 0.4); color: #c0b8ac; padding: 2px 4px; border-radius: 3px; font-family: monospace; font-size: 10px;" />
+              </div>
               <div id="single-file-info" class="diag-line" style="margin-top: 4px; font-size: 10.5px;">Track: [Built-in Procedural Theme] (16.0s)</div>
-              <div style="font-size: 9.5px; color: #7f776a; margin-top: 2px;">Place audio in public/ (e.g. public/audio/theme.mp3) &amp; enter path above</div>
             </div>
 
             <!-- Phase 1 Timestamps -->
@@ -793,13 +798,17 @@
           <div id="container-dual-track" class="section" style="display: none;">
             <!-- Phase 1 Audio Track -->
             <div style="background: rgba(30, 25, 10, 0.5); border: 1px solid rgba(212, 175, 55, 0.3); border-radius: 4px; padding: 6px 8px; margin-bottom: 8px;">
-              <div class="section-header player" style="margin-bottom: 4px;">
-                <span>Phase 1 Track (public/)</span>
+              <div class="section-header player" style="margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center;">
+                <span>Phase 1 Track</span>
+                <button id="btn-rescan-audio-dual" class="btn-util" style="padding: 1px 6px; font-size: 10px;" title="Rescan public/audio/ directory">⟳ Scan</button>
               </div>
               <div style="display: flex; gap: 4px; align-items: center; margin-bottom: 4px;">
-                <input type="text" id="inp-dual-p1-url" placeholder="/audio/boss_phase1.mp3" style="flex: 1; background: #0c121c; border: 1px solid #7a5e2a; color: #ffd777; padding: 3px 6px; border-radius: 4px; font-family: monospace; font-size: 11px;" />
+                <select id="sel-dual-p1-scanned" style="flex: 1; background: #0c121c; border: 1px solid #7a5e2a; color: #ffd777; padding: 3px 6px; border-radius: 4px; font-family: monospace; font-size: 11px;">
+                  <option value="">-- Detected in public/audio/ --</option>
+                </select>
                 <button id="btn-dual-p1-load-url" class="btn-util" style="padding: 3px 8px; font-weight: 700; border-color: #ffd700; color: #ffd777;">Load</button>
               </div>
+              <input type="text" id="inp-dual-p1-url" placeholder="/audio/AbyssWatchers.mp3" style="width: 100%; box-sizing: border-box; background: #0c121c; border: 1px solid rgba(122, 94, 42, 0.4); color: #c0b8ac; padding: 2px 4px; border-radius: 3px; font-family: monospace; font-size: 9.5px; margin-bottom: 4px;" />
               <div id="dual-p1-file-info" class="diag-line" style="margin: 2px 0 6px 0; font-size: 10px;">Track 1: Built-in Theme (16.0s)</div>
               <div class="slider-row">
                 <span class="slider-label" style="width: 90px;">Loop Start (s):</span>
@@ -814,12 +823,15 @@
             <!-- Phase 2 Audio Track -->
             <div style="background: rgba(40, 15, 15, 0.5); border: 1px solid rgba(255, 85, 85, 0.3); border-radius: 4px; padding: 6px 8px;">
               <div class="section-header boss" style="margin-bottom: 4px;">
-                <span>Phase 2 Track (public/)</span>
+                <span>Phase 2 Track</span>
               </div>
               <div style="display: flex; gap: 4px; align-items: center; margin-bottom: 4px;">
-                <input type="text" id="inp-dual-p2-url" placeholder="/audio/boss_phase2.mp3" style="flex: 1; background: #0c121c; border: 1px solid #752828; color: #ff9999; padding: 3px 6px; border-radius: 4px; font-family: monospace; font-size: 11px;" />
+                <select id="sel-dual-p2-scanned" style="flex: 1; background: #0c121c; border: 1px solid #752828; color: #ff9999; padding: 3px 6px; border-radius: 4px; font-family: monospace; font-size: 11px;">
+                  <option value="">-- Detected in public/audio/ --</option>
+                </select>
                 <button id="btn-dual-p2-load-url" class="btn-util" style="padding: 3px 8px; font-weight: 700; border-color: #ff5555; color: #ff9999;">Load</button>
               </div>
+              <input type="text" id="inp-dual-p2-url" placeholder="/audio/DarkSoul.mp3" style="width: 100%; box-sizing: border-box; background: #0c121c; border: 1px solid rgba(117, 40, 40, 0.4); color: #c0b8ac; padding: 2px 4px; border-radius: 3px; font-family: monospace; font-size: 9.5px; margin-bottom: 4px;" />
               <div id="dual-p2-file-info" class="diag-line" style="margin: 2px 0 6px 0; font-size: 10px;">Track 2: Built-in Theme (16.0s)</div>
               <div class="slider-row">
                 <span class="slider-label" style="width: 90px;">Loop Start (s):</span>
