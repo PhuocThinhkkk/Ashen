@@ -44,6 +44,7 @@ export class MobileDeviceController {
 
     if (this.orientationFsBtn) {
       this.orientationFsBtn.addEventListener('click', async () => {
+        window.dispatchEvent(new Event('pointerdown'));
         await this.toggleFullscreen(true);
         this.isPortraitDismissed = true;
         this.updateOrientationState();
@@ -52,6 +53,7 @@ export class MobileDeviceController {
 
     if (this.orientationDismissBtn) {
       this.orientationDismissBtn.addEventListener('click', () => {
+        window.dispatchEvent(new Event('pointerdown'));
         this.isPortraitDismissed = true;
         this.updateOrientationState();
       });

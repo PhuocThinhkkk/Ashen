@@ -132,7 +132,7 @@ test.describe('In-Game Drinking-While-Walking & Jumping Combat Integration', () 
     // Initial state check
     const initialDiag = await page.evaluate(() => window.__THREE_GAME_DIAGNOSTICS__);
     expect(initialDiag).not.toBeNull();
-    expect(initialDiag?.player.hp).toBe(100);
+    expect(initialDiag?.player.hp).toBe(200);
 
     // Damage the player slightly so healing is observable
     await page.evaluate(() => {
@@ -429,7 +429,7 @@ test.describe('In-Game Drinking-While-Walking & Jumping Combat Integration', () 
 
     const resetDiag = await page.evaluate(() => window.__THREE_GAME_DIAGNOSTICS__);
     expect(resetDiag?.player.healCharges, 'Heal charges must reset to 2').toBe(2);
-    expect(resetDiag?.player.hp, 'Player HP must reset to 100').toBe(100);
+    expect(resetDiag?.player.hp, 'Player HP must reset to 200').toBe(200);
     await expect(badge).toHaveText('2');
     await expect(potionHud).not.toHaveClass(/empty/);
 

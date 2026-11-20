@@ -49,25 +49,36 @@ export interface GameSettingsData {
 
 export type SettingsChangeListener = (settings: GameSettingsData) => void;
 
+export function isMobileDevice(): boolean {
+  if (typeof window === 'undefined') return false;
+  return (
+    'ontouchstart' in window ||
+    navigator.maxTouchPoints > 0 ||
+    /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) ||
+    (window.innerWidth <= 920 && window.innerHeight <= 920)
+  );
+}
+
 const STORAGE_KEY = 'ashen_souls_settings_v1';
+const mobile = isMobileDevice();
 
 export const DEFAULT_SETTINGS: GameSettingsData = {
   graphics: {
-    maxDpr: typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 2) : 2,
-    shadowQuality: 'high',
+    maxDpr: mobile ? 1.0 : (typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 2) : 2),
+    shadowQuality: mobile ? 'low' : 'high',
     exposure: 1.1,
   },
   vfx: {
     slashArcs: true,
     bloodBursts: true,
     hitSparks: true,
-    groundSlamShockwave: true,
-    groundDecals: true,
-    groundDust: true,
-    arenaDust: true,
+    groundSlamShockwave: !mobile,
+    groundDecals: !mobile,
+    groundDust: !mobile,
+    arenaDust: !mobile,
     damageNumbers: true,
     cameraShake: true,
-    preset: 'full',
+    preset: mobile ? 'balanced' : 'full',
   },
   gameplay: {
     speed: 4.8,
@@ -77,7 +88,7 @@ export const DEFAULT_SETTINGS: GameSettingsData = {
     hitstopDilation: 0.15,
   },
   general: {
-    showControlsGuide: true,
+    showControlsGuide: !mobile,
     showHudBars: true,
     showBossBar: true,
     showHitboxDebug: false,
@@ -212,8 +223,16 @@ export class SettingsManager {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
       const parsed = JSON.parse(raw);
+      const isMob = isMobileDevice();
+      const graphics = { ...DEFAULT_SETTINGS.graphics, ...(parsed.graphics || {}) };
+      if (isMob) {
+        graphics.maxDpr = Math.min(graphics.maxDpr, 1.25);
+        if (graphics.shadowQuality === 'high') {
+          graphics.shadowQuality = 'medium';
+        }
+      }
       return {
-        graphics: { ...DEFAULT_SETTINGS.graphics, ...(parsed.graphics || {}) },
+        graphics,
         vfx: { ...DEFAULT_SETTINGS.vfx, ...(parsed.vfx || {}) },
         gameplay: { ...DEFAULT_SETTINGS.gameplay, ...(parsed.gameplay || {}) },
         general: { ...DEFAULT_SETTINGS.general, ...(parsed.general || {}) },

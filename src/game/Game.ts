@@ -21,6 +21,7 @@ import { resolveCombatCollisions } from './GameCollisionResolver';
 import { installGameTestHooks } from './GameTestHooks';
 import { GameMultiplayerHandler } from './GameMultiplayerHandler';
 import { BossMusicStorage } from '../audio/BossMusicStorage';
+import { BUILTIN_PROCEDURAL_ID } from '../audio/types';
 
 export const AVAILABLE_PLAYER_MODELS = [
   { id: 'knight', name: 'Knight' },
@@ -216,11 +217,20 @@ export class Game {
 
     try {
       setProgress(25, 'Loading 3D Armatures, Weapon Sockets & Audio...');
-      await Promise.all([
+      const [, , externalPresets] = await Promise.all([
         this.player.loadPromise,
         this.boss.loadPromise,
         BossMusicStorage.loadExternalPresets(),
       ]);
+
+      if (
+        externalPresets &&
+        externalPresets.length > 0 &&
+        this.settingsManager.data.audio.selectedTrackId === BUILTIN_PROCEDURAL_ID
+      ) {
+        this.settingsManager.updateAudio({ selectedTrackId: externalPresets[0].id });
+        void this.audio.setBossMusicTrack(externalPresets[0].id);
+      }
 
       setProgress(60, 'Pre-warming WebGL Shaders, Shadows & VFX Pools...');
       // Pre-warm all AnimationMixer action tracks upfront so first-time action plays have zero binding hitch
@@ -641,6 +651,11 @@ export class Game {
       this.profiler.markCombatEvent('BOSS_ATTACK', { attack: this.boss.currentAttack?.name });
     }
     this.prevBossState = this.boss.state;
+
+    // Boss Phase 2 Preload (at <= 55% HP)
+    if (this.boss.hp <= this.boss.maxHp * 0.55 && !this.boss.isPhase2) {
+      this.audio.preloadBossPhase2();
+    }
 
     // Boss Phase 2 Transition
     if (this.boss.isPhase2 && !this.prevBossIsPhase2) {

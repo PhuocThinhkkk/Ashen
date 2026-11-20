@@ -32,9 +32,11 @@ export class AudioSystem {
       void this.unlock();
       window.removeEventListener('pointerdown', unlock);
       window.removeEventListener('keydown', unlock);
+      window.removeEventListener('touchstart', unlock);
     };
     window.addEventListener('pointerdown', unlock, { once: true });
     window.addEventListener('keydown', unlock, { once: true });
+    window.addEventListener('touchstart', unlock, { once: true, passive: true });
 
     // Pre-fetch SFX immediately if AudioContext can be initialized
     if (typeof window !== 'undefined') {
@@ -110,6 +112,10 @@ export class AudioSystem {
       return;
     }
     this.bossMusic.startPhase1();
+  }
+
+  public preloadBossPhase2(): void {
+    this.bossMusic.preloadPhase2();
   }
 
   public transitionToBossPhase2(): void {

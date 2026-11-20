@@ -1,17 +1,26 @@
 import * as THREE from 'three';
+import { isMobileDevice } from '../systems/SettingsManager';
 
 export function createRenderer(canvas: HTMLCanvasElement): THREE.WebGLRenderer {
+  const isMobile = isMobileDevice();
   const renderer = new THREE.WebGLRenderer({
     canvas,
-    antialias: true,
+    antialias: !isMobile, // Disable MSAA 4x on mobile to avoid GPU bandwidth & VRAM saturation
     alpha: false,
     powerPreference: 'high-performance',
+    precision: isMobile ? 'mediump' : 'highp',
   });
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.05;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;
+
+  canvas.addEventListener('webglcontextlost', (e) => {
+    e.preventDefault();
+    console.warn('[Renderer] WebGL context lost. Attempting recovery...');
+  });
+
   return renderer;
 }
 
