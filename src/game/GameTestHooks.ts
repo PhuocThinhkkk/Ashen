@@ -81,6 +81,9 @@ export function installGameTestHooks(game: Game): void {
     triggerHeal: () => {
       g.player.startDrink();
     },
+    triggerPlayerDamage: (damage: number, isHeavy = false) => {
+      return g.player.takeDamage(damage, isHeavy);
+    },
     triggerJump: () => {
       g.player.startJump();
     },

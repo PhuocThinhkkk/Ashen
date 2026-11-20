@@ -84,6 +84,7 @@ interface ThreeGameTestHooks {
   getInputController?(): any;
   getMobileDeviceController?(): any;
   setPlayerHp?(hp: number): void;
+  triggerPlayerDamage?(damage: number, isHeavy?: boolean): boolean;
   triggerHeal?(): void;
   triggerJump?(): void;
   triggerMidAirAttack?(heavy?: boolean): void;

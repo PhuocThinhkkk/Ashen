@@ -16,7 +16,6 @@ export class PlayerLocomotion {
       return;
     }
 
-    player.healCharges--;
     player.isDrinking = true;
     player.hasHealedDuringDrink = false;
     player.drinkTimer = 0;
@@ -90,9 +89,10 @@ export class PlayerLocomotion {
       const timerProgress = player.drinkTimer / player.drinkDuration;
       const progress = Math.max(actionProgress, timerProgress);
 
-      // Heal tick at ~55% progress
+      // Heal tick at ~55% progress: consume bottle charge and restore HP
       if (!player.hasHealedDuringDrink && progress >= 0.55) {
         player.hasHealedDuringDrink = true;
+        player.healCharges = Math.max(0, player.healCharges - 1);
         player.heal(40);
       }
 
@@ -214,8 +214,8 @@ export class PlayerLocomotion {
     cameraYaw: number,
     lockedTargetPos: THREE.Vector3 | null,
   ): void {
-    // Check Dodge input first (high priority) - disabled while drinking
-    if (!player.isDrinking && inputs.dodge && player.stamina > 0) {
+    // Check Dodge input first (high priority) - allows dodge-canceling drinking
+    if (inputs.dodge && player.stamina > 0) {
       player.startDodge(inputs, cameraYaw);
       return;
     }

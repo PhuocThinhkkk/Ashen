@@ -210,6 +210,12 @@ npx playwright test tests/boss-ai-strafe.spec.ts tests/debug-tools-sandbox.spec.
 - **Window 3 Potion Tab:** Added "Healing Potion" tab button to Window 3 in `asset-test.html` alongside Player Axe and Boss Sword. Supports real-time X/Y/Z position, rotation, and uniform scale sliders with localStorage caching and code export.
 - **Window 2 Combat Action:** Added "Drink Potion" button in Track 2 duel testing stage to test drinking in duel scenarios.
 
+### D. Potion Interrupt Handling & Charge Preservation
+- **Direct Consumption on Heal Tick:** In [`src/entities/player/PlayerLocomotion.ts`](./src/entities/player/PlayerLocomotion.ts), `player.healCharges` is decremented **only** when the heal tick actually occurs (~55% progress in `updateDrinkingState`, alongside `player.heal(40)`). Charges are not decremented in `startDrink()`, so interrupting before the heal tick (via taking damage, stagger, or dodge-canceling) naturally leaves the bottle of heal untouched without complex refund logic.
+- **Roll-Cancel Support:** In [`src/entities/player/PlayerLocomotion.ts`](./src/entities/player/PlayerLocomotion.ts), enabled dodge input during drinking to allow dodge-canceling an active heal when danger approaches.
+- **Agent Skill Index:** Documented in [`AGENTS.md`](./AGENTS.md) pointing agents to `.opencode/skills/` for domain expertise.
+- **Automated Verification:** Added dedicated test in [`tests/upper-lower-animation-layering.spec.ts`](./tests/upper-lower-animation-layering.spec.ts) validating charge preservation across damage interrupts and dodge cancels.
+
 ---
 
 ## 8. Commit Log & Next Steps for Incoming Engineers / Agents
@@ -219,8 +225,9 @@ npx playwright test tests/boss-ai-strafe.spec.ts tests/debug-tools-sandbox.spec.
 - `src/combat/WeaponSocketConfig.ts`: Baseline potion socket transform configuration (`scale: 18.0`).
 - `src/asset-test/track1/RawAnimationStage.ts`, `src/asset-test/track2/CombatDuelStage.ts`, `src/asset-test/ui/WeaponSocketGUI.ts`, `src/asset-test/ui/CombatDuelUI.ts`, `src/asset-test/ui/DomBindings.ts`, `asset-test.html`: Interactive potion socket tuning and drink testing in Window 3 & Window 2.
 - `src/entities/player/PlayerLocomotion.ts` & `src/entities/PlayerCharacter.ts`: Locomotion transition guards and hierarchy traversal pruning.
+- `src/entities/PlayerCharacter.ts`, `src/entities/player/PlayerCombat.ts`, `src/entities/player/PlayerDodge.ts`: Added `interruptDrink()` preserving potion charges on interrupt before heal tick, and enabled roll-cancel.
 - `src/game/Game.ts`: Shader pre-warming in `prepareMatch()` (`flaskMesh.visible = true` during `renderer.compile()`).
-- `tests/upper-lower-animation-layering.spec.ts`: Integration test positioning for match reset / heal charges test.
+- `tests/upper-lower-animation-layering.spec.ts`: Integration tests for heal charges, dodge/damage interrupt charge preservation.
 - `src/entities/boss/BossAI.ts`: Restored `turnRateDegreesPerSec: 140` matching unit test and specification.
 
 ### Key Guidelines for Next Tasks:

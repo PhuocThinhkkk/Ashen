@@ -462,6 +462,21 @@ export class PlayerCharacter {
   }
 
   /**
+   * Interrupts drinking action cleanly.
+   * Since heal charge is only decremented when the heal tick actually occurs (~55%),
+   * interrupting before the heal naturally leaves heal charges untouched.
+   */
+  public interruptDrink(): void {
+    if (!this.isDrinking) return;
+    this.isDrinking = false;
+    this.hasHealedDuringDrink = false;
+    if (this.flaskMesh) {
+      this.flaskMesh.visible = false;
+    }
+    this.clearUpperBodyOverride(0.12);
+  }
+
+  /**
    * Restores player HP and triggers visual/audio feedback.
    */
   public heal(amount = 40): void {

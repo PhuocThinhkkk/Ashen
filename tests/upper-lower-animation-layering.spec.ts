@@ -371,14 +371,14 @@ test.describe('In-Game Drinking-While-Walking & Jumping Combat Integration', () 
       return d?.player.isDrinking === true;
     });
 
-    // Verify charge decremented to 1
-    await expect(badge).toHaveText('1');
-
     // Wait for heal tick (~55% progress)
     await page.waitForFunction(() => {
       const d = window.__THREE_GAME_DIAGNOSTICS__;
       return d && d.player.hp >= 80;
     });
+
+    // Verify charge decremented to 1 when heal actually occurred
+    await expect(badge).toHaveText('1');
 
     // Wait for first drink to complete
     await page.waitForFunction(() => {
@@ -397,15 +397,15 @@ test.describe('In-Game Drinking-While-Walking & Jumping Combat Integration', () 
       return d?.player.isDrinking === true;
     });
 
-    // Verify charge decremented to 0 and empty class is added
-    await expect(badge).toHaveText('0');
-    await expect(potionHud).toHaveClass(/empty/);
-
     // Wait for second heal tick (~55% progress)
     await page.waitForFunction(() => {
       const d = window.__THREE_GAME_DIAGNOSTICS__;
       return d && d.player.hp >= 80;
     });
+
+    // Verify charge decremented to 0 and empty class is added when second heal occurred
+    await expect(badge).toHaveText('0');
+    await expect(potionHud).toHaveClass(/empty/);
 
     // Wait for second drink to complete
     await page.waitForFunction(() => {
@@ -444,6 +444,80 @@ test.describe('In-Game Drinking-While-Walking & Jumping Combat Integration', () 
     await expect(page.locator('.controls-guide-grid')).toBeVisible();
     await expect(page.locator('.controls-guide-grid')).toContainText('Space (Tap)');
     await expect(page.locator('.controls-guide-grid')).toContainText('Drink Health Potion');
+
+    expect(consoleErrors).toEqual([]);
+    expect(pageErrors).toEqual([]);
+  });
+
+  test('interrupting heal action via dodge or damage before heal tick does not decrease bottle of heal', async ({ page }) => {
+    const consoleErrors: string[] = [];
+    const pageErrors: string[] = [];
+
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') consoleErrors.push(msg.text());
+    });
+    page.on('pageerror', (err) => pageErrors.push(err.message));
+
+    await page.goto('/');
+    await page.waitForFunction(() => (window.__THREE_GAME_DIAGNOSTICS__?.frame ?? 0) > 10);
+
+    const potionHud = page.locator('#potion-hud');
+    await expect(potionHud).toBeVisible();
+    const badge = page.locator('#potion-charges-badge');
+    await expect(badge).toHaveText('2');
+
+    // Keep boss far away and damage player to 50 HP
+    await page.evaluate(() => {
+      window.__THREE_GAME_TEST_HOOKS__?.setBossPosition?.({ x: 0, y: 0, z: -20 });
+      window.__THREE_GAME_TEST_HOOKS__?.setPlayerHp?.(50);
+    });
+    await page.waitForFunction(() => window.__THREE_GAME_DIAGNOSTICS__?.player.hp === 50);
+
+    // 1. Test dodge-cancelling drinking before heal tick
+    await page.keyboard.press('KeyR');
+    await page.waitForFunction(() => window.__THREE_GAME_DIAGNOSTICS__?.player.isDrinking === true);
+
+    // Charge has NOT decremented yet because heal tick has not occurred
+    await expect(badge).toHaveText('2');
+
+    // Immediately dodge roll to interrupt drinking
+    await page.keyboard.press('Space');
+    await page.waitForFunction(() => {
+      const d = window.__THREE_GAME_DIAGNOSTICS__;
+      return d && d.player.state === 'dodge' && !d.player.isDrinking;
+    });
+
+    // Verify bottle of heal remains 2 because drink was interrupted before heal tick
+    await expect(badge).toHaveText('2');
+    const postDodgeDiag = await page.evaluate(() => window.__THREE_GAME_DIAGNOSTICS__);
+    expect(postDodgeDiag?.player.healCharges).toBe(2);
+    expect(postDodgeDiag?.player.hp).toBe(50); // HP not healed
+
+    // Wait for dodge recovery
+    await page.waitForFunction(() => window.__THREE_GAME_DIAGNOSTICS__?.player.state !== 'dodge');
+
+    // 2. Test damage interrupt before heal tick
+    await page.keyboard.press('KeyR');
+    await page.waitForFunction(() => window.__THREE_GAME_DIAGNOSTICS__?.player.isDrinking === true);
+    await expect(badge).toHaveText('2');
+
+    // Simulate damage stagger interrupt via player takeDamage
+    await page.evaluate(() => {
+      const hooks = (window as any).__THREE_GAME_TEST_HOOKS__;
+      if (hooks?.triggerPlayerDamage) {
+        hooks.triggerPlayerDamage(10, false);
+      }
+    });
+
+    await page.waitForFunction(() => {
+      const d = window.__THREE_GAME_DIAGNOSTICS__;
+      return d && !d.player.isDrinking && d.player.state === 'stagger';
+    });
+
+    // Verify bottle of heal remains 2
+    await expect(badge).toHaveText('2');
+    const postStaggerDiag = await page.evaluate(() => window.__THREE_GAME_DIAGNOSTICS__);
+    expect(postStaggerDiag?.player.healCharges).toBe(2);
 
     expect(consoleErrors).toEqual([]);
     expect(pageErrors).toEqual([]);

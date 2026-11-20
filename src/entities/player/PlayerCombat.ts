@@ -126,9 +126,8 @@ export class PlayerCombat {
 
     if (player.hp <= 0) {
       player.state = 'dead';
-      player.isDrinking = false;
+      player.interruptDrink();
       player.isAirborneAttack = false;
-      if (player.flaskMesh) player.flaskMesh.visible = false;
       player.setDodgeIFrameVisual(false);
       if (player.upperBodyAction) player.upperBodyAction.paused = false;
       if (player.lowerBodyAction) player.lowerBodyAction.paused = false;
@@ -139,9 +138,8 @@ export class PlayerCombat {
 
     if (isHeavy || player.state !== 'attack') {
       player.state = 'stagger';
-      player.isDrinking = false;
+      player.interruptDrink();
       player.isAirborneAttack = false;
-      if (player.flaskMesh) player.flaskMesh.visible = false;
       player.setDodgeIFrameVisual(false);
       if (player.upperBodyAction) player.upperBodyAction.paused = false;
       if (player.lowerBodyAction) player.lowerBodyAction.paused = false;

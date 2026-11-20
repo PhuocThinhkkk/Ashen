@@ -77,6 +77,12 @@ test.describe('Soulslike Boss Fight Combat System', () => {
     await page.waitForFunction(() => window.__THREE_GAME_DIAGNOSTICS__?.player.state !== 'dodge');
 
     // 5. Test Approaching Boss & Landing Attack
+    // Set boss attack cooldown so boss doesn't lethally combo while player walks in
+    await page.evaluate(() => {
+      window.__THREE_GAME_TEST_HOOKS__?.setBossAttackCooldown?.(4.0);
+      window.__THREE_GAME_TEST_HOOKS__?.setPlayerHp?.(100);
+    });
+
     // Walk forward close to the boss
     await page.keyboard.down('KeyW');
     await page.waitForFunction(

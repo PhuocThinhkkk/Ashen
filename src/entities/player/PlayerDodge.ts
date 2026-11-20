@@ -16,10 +16,9 @@ export class PlayerDodgeHandler {
     player.stamina = Math.max(0, player.stamina - player.dodgeConfig.staminaCost);
     player.staminaRegenDelay = 1.0;
 
-    // Interrupt drinking if active
+    // Interrupt drinking cleanly if active (refunds charge if interrupted before heal tick)
     if (player.isDrinking) {
-      player.isDrinking = false;
-      if (player.flaskMesh) player.flaskMesh.visible = false;
+      player.interruptDrink();
     }
 
     // Compute dodge direction
