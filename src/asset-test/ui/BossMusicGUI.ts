@@ -16,7 +16,6 @@ export class BossMusicGUI {
   private audioContext: AudioContext;
   public readonly musicController: BossMusicController;
   private telemetryTimer: number | null = null;
-  private scannedAudioFiles: string[] = [];
 
   constructor(private readonly dom: DomBindings) {
     const AudioContextClass =
@@ -27,8 +26,8 @@ export class BossMusicGUI {
   }
 
   public async init(): Promise<void> {
-    // 0. Auto-scan public/audio/ directory
-    await this.scanPublicAudio();
+    // 0. Load external presets from public/audio/presets.json
+    await BossMusicStorage.loadExternalPresets();
 
     // 1. Tab / Mode Switching (Single vs Dual)
     this.dom.btnMusicModeSingle?.addEventListener('click', () => {
@@ -40,7 +39,12 @@ export class BossMusicGUI {
     });
 
     // 2. Preset Select & Management
-    this.populatePresetSelect();
+    const presets = BossMusicStorage.getPresets();
+    if (presets.length > 1) {
+      // Automatically activate first custom or external preset from presets.json
+      this.currentPreset = JSON.parse(JSON.stringify(presets[1]));
+    }
+    this.populatePresetSelect(this.currentPreset.id);
 
     this.dom.musicPresetSelect?.addEventListener('change', async () => {
       const id = this.dom.musicPresetSelect?.value;
@@ -114,8 +118,8 @@ export class BossMusicGUI {
       this.savePresetToGame();
     });
 
-    this.dom.btnExportMusicTs?.addEventListener('click', () => {
-      this.exportTypeScriptPreset();
+    this.dom.btnExportMusicJson?.addEventListener('click', () => {
+      this.exportJsonPreset();
     });
 
     this.dom.btnCloseMusicCode?.addEventListener('click', () => {
@@ -161,60 +165,6 @@ export class BossMusicGUI {
     }
   }
 
-  public async scanPublicAudio(): Promise<string[]> {
-    try {
-      const res = await fetch('/api/audio-files');
-      if (res.ok) {
-        this.scannedAudioFiles = await res.json();
-      } else {
-        const fallback = await fetch('/audio/manifest.json');
-        if (fallback.ok) {
-          this.scannedAudioFiles = await fallback.json();
-        }
-      }
-    } catch {
-      try {
-        const fallback = await fetch('/audio/manifest.json');
-        if (fallback.ok) {
-          this.scannedAudioFiles = await fallback.json();
-        }
-      } catch {
-        this.scannedAudioFiles = [];
-      }
-    }
-
-    this.populateScannedSelects();
-    return this.scannedAudioFiles;
-  }
-
-  private populateScannedSelects(): void {
-    const files = this.scannedAudioFiles;
-    const makeOptions = (placeholder: string, selectedUrl?: string) => {
-      let html = `<option value="">${placeholder} (${files.length} found)</option>`;
-      for (const f of files) {
-        const name = f.split('/').pop() || f;
-        const isSel = f === selectedUrl ? 'selected' : '';
-        html += `<option value="${f}" ${isSel}>${name}</option>`;
-      }
-      return html;
-    };
-
-    if (this.dom.selSingleScanned) {
-      const curr = (this.currentPreset.config as SingleTrackConfig).url;
-      this.dom.selSingleScanned.innerHTML = makeOptions('-- Detected in public/audio/ --', curr);
-    }
-
-    if (this.dom.selDualP1Scanned) {
-      const curr = (this.currentPreset.config as DualTrackConfig).phase1Url;
-      this.dom.selDualP1Scanned.innerHTML = makeOptions('-- Detected in public/audio/ --', curr);
-    }
-
-    if (this.dom.selDualP2Scanned) {
-      const curr = (this.currentPreset.config as DualTrackConfig).phase2Url;
-      this.dom.selDualP2Scanned.innerHTML = makeOptions('-- Detected in public/audio/ --', curr);
-    }
-  }
-
   private populatePresetSelect(selectedId?: string): void {
     const presets = BossMusicStorage.getPresets();
     if (!this.dom.musicPresetSelect) return;
@@ -231,7 +181,6 @@ export class BossMusicGUI {
     const p = this.currentPreset;
     if (this.dom.musicPresetName) this.dom.musicPresetName.value = p.name;
     this.setMode(p.config.mode);
-    this.populateScannedSelects();
 
     if (p.config.mode === 'single') {
       const cfg = p.config as SingleTrackConfig;
@@ -437,47 +386,6 @@ export class BossMusicGUI {
     this.dom.inpDualP2Url?.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') void loadDualP2Url();
     });
-
-    // Re-scan public/audio/ directory
-    const triggerRescan = async () => {
-      const files = await this.scanPublicAudio();
-      const countMsg = `Scanned public/audio/: ${files.length} file(s) found.`;
-      if (this.dom.singleFileInfo) {
-        this.dom.singleFileInfo.textContent = countMsg;
-        this.dom.singleFileInfo.style.color = '#ffd777';
-      }
-      if (this.dom.dualP1FileInfo) {
-        this.dom.dualP1FileInfo.textContent = countMsg;
-        this.dom.dualP1FileInfo.style.color = '#ffd777';
-      }
-    };
-    this.dom.btnRescanAudio?.addEventListener('click', triggerRescan);
-    this.dom.btnRescanAudioDual?.addEventListener('click', triggerRescan);
-
-    // Dropdown change handlers: automatically fill input and load audio
-    this.dom.selSingleScanned?.addEventListener('change', () => {
-      const val = this.dom.selSingleScanned?.value;
-      if (val && this.dom.inpSingleUrl) {
-        this.dom.inpSingleUrl.value = val;
-        void loadSingleUrl();
-      }
-    });
-
-    this.dom.selDualP1Scanned?.addEventListener('change', () => {
-      const val = this.dom.selDualP1Scanned?.value;
-      if (val && this.dom.inpDualP1Url) {
-        this.dom.inpDualP1Url.value = val;
-        void loadDualP1Url();
-      }
-    });
-
-    this.dom.selDualP2Scanned?.addEventListener('change', () => {
-      const val = this.dom.selDualP2Scanned?.value;
-      if (val && this.dom.inpDualP2Url) {
-        this.dom.inpDualP2Url.value = val;
-        void loadDualP2Url();
-      }
-    });
   }
 
   private setupTransportControls(): void {
@@ -563,25 +471,20 @@ export class BossMusicGUI {
     }
   }
 
-  public exportTypeScriptPreset(): string {
+  public exportJsonPreset(): string {
     const p = this.currentPreset;
-    let code = `export const PRESET_${p.id.toUpperCase()}: BossMusicPreset = {\n`;
-    code += `  id: '${p.id}',\n`;
-    code += `  name: '${p.name}',\n`;
-    code += `  isCustom: true,\n`;
-    code += `  config: ${JSON.stringify(p.config, null, 4).replace(/\n/g, '\n  ')}\n`;
-    code += `};`;
+    const jsonStr = JSON.stringify([p], null, 2);
 
     if (navigator.clipboard) {
-      navigator.clipboard.writeText(code).catch(() => {});
+      navigator.clipboard.writeText(jsonStr).catch(() => {});
     }
 
     if (this.dom.musicCodeContainer && this.dom.musicCodeOutput) {
-      this.dom.musicCodeOutput.textContent = code;
+      this.dom.musicCodeOutput.textContent = jsonStr;
       this.dom.musicCodeContainer.style.display = 'block';
     }
 
-    return code;
+    return jsonStr;
   }
 
   public dispose(): void {

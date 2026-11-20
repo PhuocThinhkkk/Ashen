@@ -6,3 +6,11 @@ artifacts/
 .DS_Store
 __pycache__/
 *.pyc
+
+# Local audio tracks and custom presets (ignored from git)
+public/audio/*.mp3
+public/audio/*.wav
+public/audio/*.ogg
+public/audio/*.flac
+public/audio/*.m4a
+public/audio/presets.json

@@ -20,6 +20,7 @@ import { RemotePlayerProxy } from '../network/RemotePlayerProxy';
 import { resolveCombatCollisions } from './GameCollisionResolver';
 import { installGameTestHooks } from './GameTestHooks';
 import { GameMultiplayerHandler } from './GameMultiplayerHandler';
+import { BossMusicStorage } from '../audio/BossMusicStorage';
 
 export const AVAILABLE_PLAYER_MODELS = [
   { id: 'knight', name: 'Knight' },
@@ -214,8 +215,12 @@ export class Game {
     };
 
     try {
-      setProgress(25, 'Loading 3D Armatures & Weapon Sockets...');
-      await Promise.all([this.player.loadPromise, this.boss.loadPromise]);
+      setProgress(25, 'Loading 3D Armatures, Weapon Sockets & Audio...');
+      await Promise.all([
+        this.player.loadPromise,
+        this.boss.loadPromise,
+        BossMusicStorage.loadExternalPresets(),
+      ]);
 
       setProgress(60, 'Pre-warming WebGL Shaders, Shadows & VFX Pools...');
       // Pre-warm all AnimationMixer action tracks upfront so first-time action plays have zero binding hitch

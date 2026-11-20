@@ -11,6 +11,28 @@ const PRESETS_STORAGE_KEY = 'ashen_souls_boss_music_presets_v1';
 
 class BossMusicStorageManager {
   private dbPromise: Promise<IDBDatabase> | null = null;
+  private externalPresets: BossMusicPreset[] = [];
+  private externalPresetsLoaded = false;
+
+  public async loadExternalPresets(): Promise<BossMusicPreset[]> {
+    if (this.externalPresetsLoaded) return this.externalPresets;
+    try {
+      const res = await fetch('/audio/presets.json');
+      if (res.ok) {
+        const data = await res.json();
+        const list: BossMusicPreset[] = Array.isArray(data)
+          ? data
+          : Array.isArray(data.presets)
+            ? data.presets
+            : [data];
+        this.externalPresets = list.filter((p) => p && p.id && p.config);
+      }
+    } catch {
+      // Ignore if /audio/presets.json does not exist
+    }
+    this.externalPresetsLoaded = true;
+    return this.externalPresets;
+  }
 
   private getDB(): Promise<IDBDatabase> {
     if (this.dbPromise) return this.dbPromise;
@@ -89,20 +111,34 @@ class BossMusicStorageManager {
   }
 
   public getPresets(): BossMusicPreset[] {
-    const defaultList: BossMusicPreset[] = [DEFAULT_PROCEDURAL_PRESET];
+    const list: BossMusicPreset[] = [DEFAULT_PROCEDURAL_PRESET];
+
+    // Include external presets loaded from /audio/presets.json
+    for (const ep of this.externalPresets) {
+      if (!list.some((p) => p.id === ep.id)) {
+        list.push(ep);
+      }
+    }
+
     if (typeof window === 'undefined' || !window.localStorage) {
-      return defaultList;
+      return list;
     }
 
     try {
       const raw = localStorage.getItem(PRESETS_STORAGE_KEY);
-      if (!raw) return defaultList;
+      if (!raw) return list;
       const parsed: BossMusicPreset[] = JSON.parse(raw);
-      // Ensure built-in preset is always present
-      const hasBuiltIn = parsed.some((p) => p.id === BUILTIN_PROCEDURAL_ID);
-      return hasBuiltIn ? parsed : [DEFAULT_PROCEDURAL_PRESET, ...parsed];
+      for (const p of parsed) {
+        const existingIdx = list.findIndex((item) => item.id === p.id);
+        if (existingIdx >= 0) {
+          list[existingIdx] = p;
+        } else {
+          list.push(p);
+        }
+      }
+      return list;
     } catch {
-      return defaultList;
+      return list;
     }
   }
 

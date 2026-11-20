@@ -97,15 +97,15 @@ test.describe('Dynamic Boss Music System', () => {
     await expect(stateBadge).toHaveText('PLAYING P2');
     await btnStop.click();
 
-    // 5. Test Export TypeScript Preset
-    const btnExport = page.locator('#btn-export-music-ts');
+    // 5. Test Export JSON Preset
+    const btnExport = page.locator('#btn-export-music-json');
     await btnExport.click();
     const codeBox = page.locator('#music-code-container');
     await expect(codeBox).toBeVisible();
     const codeOutput = page.locator('#music-code-output');
     const text = await codeOutput.textContent();
-    expect(text).toContain('BossMusicPreset');
-    expect(text).toContain('config:');
+    expect(text).toContain('"mode"');
+    expect(text).toContain('"config"');
 
     // Screenshot of Window 4 editor
     await page.screenshot({
