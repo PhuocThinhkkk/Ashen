@@ -256,7 +256,6 @@ export class BossCharacter {
 
     for (const clip of bossGltf.animations) {
       this.kinematicController.stripRootMotion(clip);
-      ModelLoader.stripRootMotionXZ(clip);
       const action = this.mixer.clipAction(clip);
       this.actions.set(clip.name, action);
     }
@@ -422,27 +421,9 @@ export class BossCharacter {
     // Cross-fade out of locomotion blend layer (~0.15s)
     this.isLocomotionActive = false;
 
-    const clip = ModelLoader.findClip(this.rawClips, clipName);
-    const actionName = clip ? clip.name : clipName;
-    let action = this.actions.get(actionName);
-    if (!action && clip && this.mixer) {
-      action = this.mixer.clipAction(clip);
-      this.actions.set(actionName, action);
-    }
-    if (!action) return null;
-
-    action.reset();
-    action.enabled = true;
-    action.setLoop(THREE.LoopOnce, 1);
-    action.clampWhenFinished = true;
-    action.setEffectiveTimeScale(timeScale);
-    action.setEffectiveWeight(1.0);
-    action.fadeIn(0.15);
-    action.play();
-
+    // Route through playAction so kinematicController tracks frames, extracts root motion (approach run & jump leap), and triggers audio/VFX
+    const action = this.playAction(clipName, 0.15, THREE.LoopOnce, true, timeScale);
     this.currentAttackAction = action;
-    this.currentAction = action;
-    this.currentActionName = actionName;
     return action;
   }
 
@@ -453,6 +434,9 @@ export class BossCharacter {
     }
     // Cross-fade back into locomotion blend layer (~0.15s)
     this.isLocomotionActive = true;
+    if (this.kinematicController) {
+      this.kinematicController.reset();
+    }
   }
 
   public setVfxAndAudio(vfx: VFXSystem, audio: AudioSystem): void {

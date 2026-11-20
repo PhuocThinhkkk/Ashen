@@ -354,13 +354,17 @@ export class BossAI {
         if (dist <= prefDist || activeSubgoal.timer >= maxTime) {
           this.goalStack.pop();
           if (this.goalStack.length === 0) {
-            const roll = Math.random();
-            if (b.isPhase2 && roll < 0.4) {
-              this.startAttack(BOSS_ATTACKS.spin360);
-            } else if (roll < 0.6) {
-              this.queueCombo(BOSS_ATTACKS.combo, BOSS_ATTACKS.downward);
+            if (dist > 4.2 || Math.random() < 0.25) {
+              this.startAttack(BOSS_ATTACKS.jump);
             } else {
-              this.startAttack(BOSS_ATTACKS.downward);
+              const roll = Math.random();
+              if (b.isPhase2 && roll < 0.35) {
+                this.startAttack(BOSS_ATTACKS.spin360);
+              } else if (roll < 0.65) {
+                this.queueCombo(BOSS_ATTACKS.combo, BOSS_ATTACKS.downward);
+              } else {
+                this.startAttack(BOSS_ATTACKS.downward);
+              }
             }
           }
         }
