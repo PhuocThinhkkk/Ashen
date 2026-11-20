@@ -32,13 +32,13 @@ export const DEFAULT_BOSS_WEAPON_SOCKET: WeaponSocketTransform = {
 };
 
 export const DEFAULT_PLAYER_POTION_SOCKET: WeaponSocketTransform = {
-  posX: 0.05,
-  posY: 0.05,
-  posZ: 0,
-  rotX: 0,
-  rotY: 0,
-  rotZ: 90,
-  scale: 0.28,
+  posX: 3.5,
+  posY: 11.2,
+  posZ: -1.0,
+  rotX: -85,
+  rotY: 10,
+  rotZ: 15,
+  scale: 18.0,
 };
 
 export function loadSocketConfig(key: string, fallback: WeaponSocketTransform): WeaponSocketTransform {

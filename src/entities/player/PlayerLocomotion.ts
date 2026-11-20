@@ -304,11 +304,18 @@ export class PlayerLocomotion {
       }
 
       player.state = 'moving';
+      const currentAnim = player.isUpperBodyOverride ? player.currentLowerActionName : player.currentActionName;
       if (isSprinting) {
-        player.playAction('run', 0.15, THREE.LoopRepeat, false, 1.0);
+        if (currentAnim !== 'run') {
+          player.playAction('run', 0.15, THREE.LoopRepeat, false, 1.0);
+        }
       } else {
         const animSpeed = moveMag < 0.65 ? Math.max(0.7, moveMag / 0.65) : 1.0;
-        player.playAction('walk', 0.15, THREE.LoopRepeat, false, animSpeed);
+        if (currentAnim !== 'walk') {
+          player.playAction('walk', 0.15, THREE.LoopRepeat, false, animSpeed);
+        } else if (player.lowerBodyAction) {
+          player.lowerBodyAction.setEffectiveTimeScale(animSpeed);
+        }
       }
     } else {
       player.velocity.set(0, 0, 0);
@@ -324,7 +331,10 @@ export class PlayerLocomotion {
         player.group.rotation.y += diff * Math.min(1.0, delta * 10.0);
       }
 
-      player.playAction('idle', 0.2, THREE.LoopRepeat, false, 1.0);
+      const currentAnim = player.isUpperBodyOverride ? player.currentLowerActionName : player.currentActionName;
+      if (currentAnim !== 'idle') {
+        player.playAction('idle', 0.2, THREE.LoopRepeat, false, 1.0);
+      }
     }
   }
 }

@@ -1,6 +1,7 @@
 import {
   DEFAULT_PLAYER_WEAPON_SOCKET,
   DEFAULT_BOSS_WEAPON_SOCKET,
+  DEFAULT_PLAYER_POTION_SOCKET,
   saveSocketConfig,
   applyWeaponSocketTransform,
 } from '../../combat/WeaponSocketConfig';
@@ -8,7 +9,7 @@ import type { RawAnimationStage } from '../track1/RawAnimationStage';
 import type { DomBindings } from './DomBindings';
 
 export class WeaponSocketGUI {
-  private activeTab: 'player' | 'boss' = 'player';
+  private activeTab: 'player' | 'boss' | 'potion' = 'player';
 
   constructor(
     private readonly stage: RawAnimationStage,
@@ -21,6 +22,7 @@ export class WeaponSocketGUI {
       this.activeTab = 'player';
       this.dom.tabSocketPlayer?.classList.add('active');
       this.dom.tabSocketBoss?.classList.remove('active');
+      this.dom.tabSocketPotion?.classList.remove('active');
       this.syncInputsFromSocket();
     });
 
@@ -28,6 +30,15 @@ export class WeaponSocketGUI {
       this.activeTab = 'boss';
       this.dom.tabSocketBoss?.classList.add('active');
       this.dom.tabSocketPlayer?.classList.remove('active');
+      this.dom.tabSocketPotion?.classList.remove('active');
+      this.syncInputsFromSocket();
+    });
+
+    this.dom.tabSocketPotion?.addEventListener('click', () => {
+      this.activeTab = 'potion';
+      this.dom.tabSocketPotion?.classList.add('active');
+      this.dom.tabSocketPlayer?.classList.remove('active');
+      this.dom.tabSocketBoss?.classList.remove('active');
       this.syncInputsFromSocket();
     });
 
@@ -99,10 +110,13 @@ export class WeaponSocketGUI {
     this.dom.btnResetSocketConfig?.addEventListener('click', () => {
       Object.assign(this.stage.playerSocket, DEFAULT_PLAYER_WEAPON_SOCKET);
       Object.assign(this.stage.bossSocket, DEFAULT_BOSS_WEAPON_SOCKET);
+      Object.assign(this.stage.potionSocket, DEFAULT_PLAYER_POTION_SOCKET);
       saveSocketConfig('player', this.stage.playerSocket);
       saveSocketConfig('boss', this.stage.bossSocket);
+      saveSocketConfig('player_potion', this.stage.potionSocket);
       if (this.stage.axeObject) applyWeaponSocketTransform(this.stage.axeObject, this.stage.playerSocket);
       if (this.stage.bossSwordGroup) applyWeaponSocketTransform(this.stage.bossSwordGroup, this.stage.bossSocket);
+      if (this.stage.potionObject) applyWeaponSocketTransform(this.stage.potionObject, this.stage.potionSocket);
       this.syncInputsFromSocket();
     });
 
@@ -119,7 +133,12 @@ export class WeaponSocketGUI {
   }
 
   public syncInputsFromSocket(): void {
-    const socket = this.activeTab === 'player' ? this.stage.playerSocket : this.stage.bossSocket;
+    const socket =
+      this.activeTab === 'player'
+        ? this.stage.playerSocket
+        : this.activeTab === 'boss'
+          ? this.stage.bossSocket
+          : this.stage.potionSocket;
 
     if (this.dom.inpPosX) this.dom.inpPosX.value = String(socket.posX);
     if (this.dom.inpPosY) this.dom.inpPosY.value = String(socket.posY);
@@ -139,7 +158,12 @@ export class WeaponSocketGUI {
   }
 
   private readInputsToSocket(): void {
-    const socket = this.activeTab === 'player' ? this.stage.playerSocket : this.stage.bossSocket;
+    const socket =
+      this.activeTab === 'player'
+        ? this.stage.playerSocket
+        : this.activeTab === 'boss'
+          ? this.stage.bossSocket
+          : this.stage.potionSocket;
 
     if (this.dom.inpPosX) socket.posX = parseFloat(this.dom.inpPosX.value);
     if (this.dom.inpPosY) socket.posY = parseFloat(this.dom.inpPosY.value);
@@ -152,9 +176,12 @@ export class WeaponSocketGUI {
     if (this.activeTab === 'player') {
       if (this.stage.axeObject) applyWeaponSocketTransform(this.stage.axeObject, this.stage.playerSocket);
       saveSocketConfig('player', this.stage.playerSocket);
-    } else {
+    } else if (this.activeTab === 'boss') {
       if (this.stage.bossSwordGroup) applyWeaponSocketTransform(this.stage.bossSwordGroup, this.stage.bossSocket);
       saveSocketConfig('boss', this.stage.bossSocket);
+    } else {
+      if (this.stage.potionObject) applyWeaponSocketTransform(this.stage.potionObject, this.stage.potionSocket);
+      saveSocketConfig('player_potion', this.stage.potionSocket);
     }
 
     if (this.dom.valPosX) this.dom.valPosX.textContent = Number(socket.posX).toFixed(1);
@@ -169,9 +196,10 @@ export class WeaponSocketGUI {
   public printAndSaveConfig(): string {
     saveSocketConfig('player', this.stage.playerSocket);
     saveSocketConfig('boss', this.stage.bossSocket);
+    saveSocketConfig('player_potion', this.stage.potionSocket);
     const code = this.generateExportCode();
 
-    console.log('%cCURRENT WEAPON SOCKET CONFIG', 'color: #ffaa33; font-weight: bold;');
+    console.log('%cCURRENT WEAPON & POTION SOCKET CONFIG', 'color: #ffaa33; font-weight: bold;');
     console.log(code);
 
     if (navigator.clipboard) {
@@ -199,6 +227,7 @@ export class WeaponSocketGUI {
   private generateExportCode(): string {
     const p = this.stage.playerSocket;
     const b = this.stage.bossSocket;
+    const pot = this.stage.potionSocket;
     return `export const DEFAULT_PLAYER_WEAPON_SOCKET: WeaponSocketTransform = {
   posX: ${Number(p.posX.toFixed(2))},
   posY: ${Number(p.posY.toFixed(2))},
@@ -217,6 +246,16 @@ export const DEFAULT_BOSS_WEAPON_SOCKET: WeaponSocketTransform = {
   rotY: ${Number(b.rotY.toFixed(1))},
   rotZ: ${Number(b.rotZ.toFixed(1))},
   scale: ${b.scale},
+};
+
+export const DEFAULT_PLAYER_POTION_SOCKET: WeaponSocketTransform = {
+  posX: ${Number(pot.posX.toFixed(2))},
+  posY: ${Number(pot.posY.toFixed(2))},
+  posZ: ${Number(pot.posZ.toFixed(2))},
+  rotX: ${Number(pot.rotX.toFixed(1))},
+  rotY: ${Number(pot.rotY.toFixed(1))},
+  rotZ: ${Number(pot.rotZ.toFixed(1))},
+  scale: ${pot.scale},
 };`;
   }
 }

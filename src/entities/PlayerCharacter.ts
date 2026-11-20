@@ -533,12 +533,6 @@ export class PlayerCharacter {
     if (this.kinematicController) {
       this.kinematicController.update(delta, this.group.rotation.y);
     }
-    if (this.modelScene) {
-      this.modelScene.updateMatrixWorld(true);
-    }
-    if (this.handBone) {
-      this.handBone.updateMatrixWorld(true);
-    }
     this.hitboxDebugger.update(this.isHitboxActive());
 
     // 3. Airborne Physics & Ground Detection

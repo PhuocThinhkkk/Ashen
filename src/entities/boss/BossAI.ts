@@ -11,15 +11,15 @@ import type { BossCharacter } from '../BossCharacter';
  */
 export const BOSS_CONFIG = {
   // 1. Forward Walk / Approach Speeds (m/s)
-  approachSpeedPhase1: 3.2,
-  approachSpeedPhase2: 4.2,
+  approachSpeedPhase1: 2.2,
+  approachSpeedPhase2: 3.2,
 
   // 2. Lateral Strafe / Circling Speeds (m/s)
-  strafeSpeedPhase1: 2.8,
-  strafeSpeedPhase2: 3.4,
+  strafeSpeedPhase1: 1.4,
+  strafeSpeedPhase2: 2.0,
 
   // 3. Rotation & Tracking Speed (degrees per second)
-  turnRateDegreesPerSec: 140, // 140 deg/sec
+  turnRateDegreesPerSec: 140, // 140 deg/sec clamped angular tracking
 
   // 4. Attack Animation Speed Multipliers
   attackSpeedPhase1: 1.0,

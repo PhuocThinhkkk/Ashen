@@ -62,6 +62,8 @@ export interface DomBindings {
   // Window 3: Socket Sliders & Presets
   tabSocketPlayer: HTMLButtonElement | null;
   tabSocketBoss: HTMLButtonElement | null;
+  tabSocketPotion: HTMLButtonElement | null;
+  btnActDrink: HTMLButtonElement | null;
   socketSaveStatus: HTMLElement | null;
   inpPosX: HTMLInputElement | null;
   inpPosY: HTMLInputElement | null;
@@ -154,6 +156,8 @@ export function getDomBindings(): DomBindings {
     // Window 3: Socket Sliders & Presets
     tabSocketPlayer: document.querySelector<HTMLButtonElement>('#tab-socket-player'),
     tabSocketBoss: document.querySelector<HTMLButtonElement>('#tab-socket-boss'),
+    tabSocketPotion: document.querySelector<HTMLButtonElement>('#tab-socket-potion'),
+    btnActDrink: document.querySelector<HTMLButtonElement>('#btn-act-drink'),
     socketSaveStatus: document.querySelector<HTMLElement>('#socket-save-status'),
     inpPosX: document.querySelector<HTMLInputElement>('#inp-pos-x'),
     inpPosY: document.querySelector<HTMLInputElement>('#inp-pos-y'),

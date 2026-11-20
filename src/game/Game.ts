@@ -239,9 +239,15 @@ export class Game {
       if (this.player.state !== 'dead' && this.boss.state !== 'dead') {
         this.resetRun();
       }
+      if (this.player.flaskMesh) {
+        this.player.flaskMesh.visible = true;
+      }
       this.vfx.prewarm(this.renderer, this.camera);
       this.renderer.compile(this.scene, this.camera);
       this.render();
+      if (this.player.flaskMesh) {
+        this.player.flaskMesh.visible = false;
+      }
 
       setProgress(100, 'Trial Prepared. Entering Sanctuary...');
       await new Promise((r) => setTimeout(r, 60));

@@ -71,6 +71,9 @@ export class CombatDuelUI {
     document.querySelector('#btn-act-dodge-back')?.addEventListener('click', () =>
       this.duelStage.triggerPlayerAction('dodge_back', this.onCombatLog),
     );
+    document.querySelector('#btn-act-drink')?.addEventListener('click', () =>
+      this.duelStage.triggerPlayerAction('drink', this.onCombatLog),
+    );
 
     // 3. Action Boss Buttons
     document.querySelector('#btn-act-boss-downward')?.addEventListener('click', () =>

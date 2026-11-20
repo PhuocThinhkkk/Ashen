@@ -357,8 +357,11 @@ test.describe('In-Game Drinking-While-Walking & Jumping Combat Integration', () 
     const badge = page.locator('#potion-charges-badge');
     await expect(badge).toHaveText('2');
 
-    // 2. Damage player to 40 HP
-    await page.evaluate(() => window.__THREE_GAME_TEST_HOOKS__?.setPlayerHp?.(40));
+    // 2. Damage player to 40 HP and position boss far away to avoid interrupt kill
+    await page.evaluate(() => {
+      window.__THREE_GAME_TEST_HOOKS__?.setPlayerHp?.(40);
+      window.__THREE_GAME_TEST_HOOKS__?.setBossPosition?.({ x: 0, y: 0, z: -15 });
+    });
     await page.waitForTimeout(50);
 
     // 3. First heal: press Key R
@@ -383,8 +386,11 @@ test.describe('In-Game Drinking-While-Walking & Jumping Combat Integration', () 
       return d && d.player.isDrinking === false;
     });
 
-    // 4. Second heal: damage player again, press Key R
-    await page.evaluate(() => window.__THREE_GAME_TEST_HOOKS__?.setPlayerHp?.(40));
+    // 4. Second heal: damage player again and keep boss far away, press Key R
+    await page.evaluate(() => {
+      window.__THREE_GAME_TEST_HOOKS__?.setPlayerHp?.(40);
+      window.__THREE_GAME_TEST_HOOKS__?.setBossPosition?.({ x: 0, y: 0, z: -15 });
+    });
     await page.keyboard.press('KeyR');
     await page.waitForFunction(() => {
       const d = window.__THREE_GAME_DIAGNOSTICS__;

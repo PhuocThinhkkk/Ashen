@@ -133,6 +133,8 @@ export class CombatDuelStage {
       this.logicPlayer.startDodge(undefined, 0, new THREE.Vector3(0, 0, 1));
     } else if (actionKey === 'dodge_back') {
       this.logicPlayer.startDodge(undefined, 0, new THREE.Vector3(0, 0, -1));
+    } else if (actionKey === 'drink') {
+      this.logicPlayer.startDrink();
     }
 
     onCombatLog(`Player initiated ${actionKey}`);
@@ -306,8 +308,12 @@ export class CombatDuelStage {
 
     // 2. Boss Update
     if (this.bossAiMode === 'dummy') {
-      if (this.logicBoss.state === 'idle') {
+      if (!this.isBossActionActive) {
+        this.logicBoss.state = 'idle';
         this.logicBoss.stateTimer = 0;
+        this.logicBoss.ai.clearGoalStack();
+        this.logicBoss.ai.attackCooldown = 999;
+        this.logicBoss.group.position.copy(CONFIG.track2.bossHome);
         const toP = new THREE.Vector3().subVectors(
           this.logicPlayer.group.position,
           this.logicBoss.group.position,

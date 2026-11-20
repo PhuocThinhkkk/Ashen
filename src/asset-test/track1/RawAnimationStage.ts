@@ -6,11 +6,13 @@ import { ModelLoader } from '../../utils/ModelLoader';
 import {
   DEFAULT_PLAYER_WEAPON_SOCKET,
   DEFAULT_BOSS_WEAPON_SOCKET,
+  DEFAULT_PLAYER_POTION_SOCKET,
   loadSocketConfig,
   applyWeaponSocketTransform,
   type WeaponSocketTransform,
 } from '../../combat/WeaponSocketConfig';
 import { CONFIG } from '../config';
+import { loadHealingFlaskMesh } from '../../entities/player/HealingFlask';
 import type { AssetTestDiagnostics } from '../types';
 
 export class RawAnimationStage {
@@ -44,6 +46,10 @@ export class RawAnimationStage {
     'boss',
     DEFAULT_BOSS_WEAPON_SOCKET,
   );
+  public readonly potionSocket: WeaponSocketTransform = loadSocketConfig(
+    'player_potion',
+    DEFAULT_PLAYER_POTION_SOCKET,
+  );
 
   private readonly loader = new GLTFLoader();
   private scene: THREE.Scene | null = null;
@@ -60,7 +66,9 @@ export class RawAnimationStage {
   public currentBossAction: THREE.AnimationAction | null = null;
 
   public playerHandBone: THREE.Object3D | null = null;
+  public playerLeftHandBone: THREE.Object3D | null = null;
   public axeObject: THREE.Object3D | null = null;
+  public potionObject: THREE.Group | null = null;
   public bossHandBone: THREE.Object3D | null = null;
   public bossLeftFootBone: THREE.Object3D | null = null;
   public bossSwordGroup: THREE.Group | null = null;
@@ -102,9 +110,14 @@ export class RawAnimationStage {
       this.playerActions.clear();
       this.currentPlayerAction = null;
       this.playerHandBone = null;
+      this.playerLeftHandBone = null;
       if (this.axeObject && this.axeObject.parent) {
         this.axeObject.parent.remove(this.axeObject);
       }
+      if (this.potionObject && this.potionObject.parent) {
+        this.potionObject.parent.remove(this.potionObject);
+      }
+      this.potionObject = null;
       this.scene.remove(this.currentPlayerScene);
       this.currentPlayerScene.traverse((obj) => {
         if (obj instanceof THREE.Mesh) {
@@ -165,8 +178,30 @@ export class RawAnimationStage {
         ) {
           if (!this.playerHandBone) this.playerHandBone = obj;
         }
+        if (
+          obj.name === 'PalmL' ||
+          obj.name === 'Palm.L' ||
+          obj.name === 'hand.L' ||
+          obj.name.toLowerCase().includes('palml') ||
+          obj.name.toLowerCase().includes('hand.l') ||
+          obj.name.toLowerCase().includes('lefthand')
+        ) {
+          if (!this.playerLeftHandBone) this.playerLeftHandBone = obj;
+        }
       }
     });
+
+    if (!this.playerLeftHandBone) {
+      this.playerLeftHandBone = ModelLoader.findSocketBone(this.currentPlayerScene, [
+        'mixamorig:LeftHand',
+        'mixamorigLeftHand',
+        'LeftHand',
+        'Palm.L',
+        'PalmL',
+        'hand.L',
+        'handL',
+      ]);
+    }
 
     this.diagnostics.player.bonesCount = pBones;
     this.diagnostics.player.handBoneFound = !!this.playerHandBone;
@@ -186,6 +221,14 @@ export class RawAnimationStage {
       this.playerHandBone.add(this.axeObject);
       this.playerHitboxDebugger.attachToBone(this.playerHandBone);
       this.diagnostics.player.weaponAttached = true;
+    }
+
+    if (this.playerLeftHandBone) {
+      onStatusUpdate?.('Loading health_potions.glb...');
+      this.potionObject = await loadHealingFlaskMesh(this.loader);
+      this.potionObject.visible = true;
+      applyWeaponSocketTransform(this.potionObject, this.potionSocket);
+      this.playerLeftHandBone.add(this.potionObject);
     }
 
     this.playerMixer = new THREE.AnimationMixer(this.currentPlayerScene);
