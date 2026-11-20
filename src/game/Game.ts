@@ -4,6 +4,7 @@ import { InputController } from '../core/InputController';
 import { Loop } from '../core/Loop';
 import { createRenderer, resizeRenderer } from '../core/Renderer';
 import { BossCharacter } from '../entities/BossCharacter';
+import type { PlayerCombatSnapshot } from '../entities/boss/BossAI';
 import { PlayerCharacter } from '../entities/PlayerCharacter';
 import { AudioSystem } from '../systems/AudioSystem';
 import { Hud } from '../systems/Hud';
@@ -510,7 +511,14 @@ export class Game {
         });
       }
     } else {
-      this.boss.update(simDelta, elapsed, this.player.group.position, this.arena.radius);
+      const playerSnapshot: PlayerCombatSnapshot = {
+        position: this.player.group.position,
+        velocity: this.player.velocity,
+        isHealing: this.player.isDrinking,
+        isAttacking: this.player.state === 'attack' || this.player.attackPhase !== 'none',
+        isStaggered: this.player.state === 'stagger',
+      };
+      this.boss.update(simDelta, elapsed, playerSnapshot, this.arena.radius, this.arena);
 
       // Entity collision separation (player vs boss)
       const sepX = this.player.group.position.x - this.boss.group.position.x;
@@ -722,6 +730,10 @@ export class Game {
         loaded: this.boss.isLoaded,
         activeClip: this.boss.currentActionName,
         modelId: this.boss.modelId,
+        subgoal: this.boss.ai.getCurrentSubgoal()?.type,
+        attackCooldown: this.boss.ai.attackCooldown,
+        strafeDir: this.boss.ai.strafeDir,
+        locomotionWeights: { ...this.boss.currentWeights },
       },
       assetsLoaded: this.player.isLoaded && this.boss.isLoaded && this.isReady,
       renderer: {

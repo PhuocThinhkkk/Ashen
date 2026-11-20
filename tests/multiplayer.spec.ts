@@ -62,9 +62,16 @@ test.describe('Phase 2 Multiplayer Chamber Architecture & Animation Sanity', () 
     await page.goto('/');
     await page.waitForFunction(() => (window.__THREE_GAME_DIAGNOSTICS__?.frame ?? 0) > 10);
 
+    // Handle orientation overlay on mobile viewport
+    const orientationOverlay = page.locator('#orientation-overlay');
+    if (await orientationOverlay.isVisible().catch(() => false)) {
+      await page.setViewportSize({ width: 844, height: 390 });
+      await page.waitForTimeout(100);
+    }
+
     // Open Settings Modal
     const settingsBtn = page.locator('#game-settings-btn');
-    await settingsBtn.click();
+    await settingsBtn.click({ force: true });
     await expect(page.locator('#unified-settings-modal')).toBeVisible();
 
     // Click Online Duel Tab (Tab VII)

@@ -37,9 +37,11 @@ export class ModelLoader {
     // 2. Alias mapping table for smooth transition from legacy names
     const ALIAS_MAP: Record<string, string[]> = {
       idle: ['idle', 'Great Sword Idle', 'HumanArmature|Idle_swordRight', 'HumanArmature|Idle', 'Idle-loop', 'Boss_Idle'],
-      walk: ['walk', 'walking', 'Great Sword Walk forward', 'HumanArmature|Walking', 'Walk-loop'],
-      walking: ['walking', 'walk', 'Great Sword Walk forward', 'HumanArmature|Walking'],
-      walk_backward: ['walk_backward', 'backward', 'Great Sword Walk backward'],
+      walk: ['walk', 'walking', 'walk_forward', 'Great Sword Walk forward', 'HumanArmature|Walking', 'Walk-loop'],
+      walking: ['walking', 'walk', 'walk_forward', 'Great Sword Walk forward', 'HumanArmature|Walking'],
+      walk_forward: ['walk_forward', 'walking', 'walk', 'Great Sword Walk forward'],
+      walk_backward: ['walk_backward', 'walk_back', 'backward', 'Great Sword Walk backward'],
+      walk_back: ['walk_back', 'walk_backward', 'backward', 'Great Sword Walk backward'],
       strafe_left: ['strafe_left', 'Great Sword Strafe Left'],
       strafe_right: ['strafe_right', 'Great Sword Strafe right'],
       run: ['run', 'Great Sword Run', 'HumanArmature|Run', 'Run-loop'],
@@ -200,6 +202,38 @@ export class ModelLoader {
             v[i] = x0;      // Lock lateral X
             v[i + 1] = y0;  // Lock forward/backward horizontal translation Y
             // v[i + 2] is Z (vertical height) - preserved for natural hips jumping/bobbing
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Strips horizontal root XZ translation from root motion tracks in an AnimationClip
+   * for Three.js world space (X = lateral, Z = forward/backward, Y = vertical bobbing).
+   */
+  public static stripRootMotionXZ(
+    clip: THREE.AnimationClip,
+    rootBones: string[] | string = ['hips', 'mixamorig:hips', 'mixamorighips', 'body'],
+  ): void {
+    const roots = (Array.isArray(rootBones) ? rootBones : [rootBones]).map((r) => r.toLowerCase());
+    for (const track of clip.tracks) {
+      if (track instanceof THREE.VectorKeyframeTrack && track.name.toLowerCase().includes('position')) {
+        const boneName = track.name.split('.')[0].toLowerCase();
+        const isRoot = roots.some(
+          (r) =>
+            boneName === r ||
+            boneName.endsWith(`|${r}`) ||
+            boneName.endsWith(`:${r}`) ||
+            boneName.includes(r),
+        );
+        if (isRoot) {
+          const v = track.values;
+          const x0 = v[0];
+          const z0 = v[2];
+          for (let i = 0; i < v.length; i += 3) {
+            v[i] = x0;      // Strip lateral X
+            v[i + 2] = z0;  // Strip forward/backward Z
           }
         }
       }

@@ -34,6 +34,16 @@ interface ThreeGameDiagnostics {
     loaded?: boolean;
     activeClip?: string;
     modelId?: string;
+    subgoal?: string;
+    attackCooldown?: number;
+    strafeDir?: number;
+    locomotionWeights?: {
+      idle: number;
+      walkForward: number;
+      walkBack: number;
+      strafeLeft: number;
+      strafeRight: number;
+    };
   };
   assetsLoaded?: boolean;
   renderer: {
@@ -79,6 +89,12 @@ interface ThreeGameTestHooks {
   triggerMidAirAttack?(heavy?: boolean): void;
   getPlayerJumpDiagnostics?(): any;
   getPlayerDrinkDiagnostics?(): any;
+  getBossAIDiagnostics?(): any;
+  queueBossCombo?(openerKey: string, followupKey: string): void;
+  setPlayerPosition?(pos: { x: number; y: number; z: number }): void;
+  setBossPosition?(pos: { x: number; y: number; z: number }): void;
+  setBossAttackCooldown?(cd: number): void;
+  setBossSubgoal?(subgoal: any): void;
 }
 
 interface Window {

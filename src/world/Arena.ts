@@ -13,6 +13,7 @@ export class Arena {
   public readonly group = new THREE.Group();
   public readonly radius: number;
   public floorMesh!: THREE.Mesh;
+  public wallMesh!: THREE.Mesh;
   private readonly particleSystem: THREE.Points;
   private floorTexture?: THREE.CanvasTexture;
   private floorNormal?: THREE.CanvasTexture;
@@ -69,6 +70,21 @@ export class Arena {
     const boundary = new THREE.Mesh(boundaryGeo, boundaryMat);
     boundary.position.y = 0.01;
     this.group.add(boundary);
+
+    // Invisible perimeter cylinder wall for raycast obstacle/boundary collision detection
+    const wallGeo = new THREE.CylinderGeometry(this.radius, this.radius, 12, 64, 1, true);
+    const wallMat = new THREE.MeshBasicMaterial({
+      visible: false,
+      side: THREE.DoubleSide,
+    });
+    this.wallMesh = new THREE.Mesh(wallGeo, wallMat);
+    this.wallMesh.name = 'arena_wall';
+    this.wallMesh.position.y = 6;
+    this.group.add(this.wallMesh);
+  }
+
+  public getCollisionObstacles(): THREE.Object3D[] {
+    return this.wallMesh ? [this.wallMesh] : [];
   }
 
   private buildAmbientDust(): THREE.Points {

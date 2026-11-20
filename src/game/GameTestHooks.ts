@@ -121,6 +121,37 @@ export function installGameTestHooks(game: Game): void {
         g.boss.chooseAttack(atk);
       }
     },
+    getBossAIDiagnostics: () => ({
+      subgoal: g.boss.ai.getCurrentSubgoal()?.type ?? null,
+      subgoalData: g.boss.ai.getCurrentSubgoal(),
+      goalStack: g.boss.ai.goalStack.map((s: any) => ({ ...s })),
+      attackCooldown: g.boss.ai.attackCooldown,
+      strafeDir: g.boss.ai.strafeDir,
+      isAttackActiveFrames: g.boss.ai.isAttackActiveFrames,
+      locomotionWeights: { ...g.boss.currentWeights },
+      locomotionMasterWeight: g.boss.locomotionMasterWeight,
+      activeClip: g.boss.currentActionName,
+      yaw: g.boss.group.rotation.y,
+    }),
+    queueBossCombo: (openerKey: string, followupKey: string) => {
+      const opener = BOSS_ATTACKS[openerKey] || BOSS_ATTACKS.combo;
+      const followup = BOSS_ATTACKS[followupKey] || BOSS_ATTACKS.downward;
+      g.boss.ai.clearGoalStack();
+      g.boss.ai.queueCombo(opener, followup);
+    },
+    setPlayerPosition: (pos: { x: number; y: number; z: number }) => {
+      g.player.group.position.set(pos.x, pos.y, pos.z);
+    },
+    setBossPosition: (pos: { x: number; y: number; z: number }) => {
+      g.boss.group.position.set(pos.x, pos.y, pos.z);
+    },
+    setBossAttackCooldown: (cd: number) => {
+      g.boss.ai.attackCooldown = cd;
+    },
+    setBossSubgoal: (subgoal: any) => {
+      g.boss.ai.clearGoalStack();
+      g.boss.ai.pushSubgoal(subgoal);
+    },
     triggerGroundSlam: (pos?: any) => {
       const p = pos
         ? (pos instanceof THREE.Vector3 ? pos : new THREE.Vector3(pos.x, pos.y, pos.z))

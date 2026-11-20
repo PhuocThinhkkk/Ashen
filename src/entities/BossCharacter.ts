@@ -11,7 +11,7 @@ import {
   applyWeaponSocketTransform,
 } from '../combat/WeaponSocketConfig';
 import type { WeaponBladeSegment, BodyCapsule } from '../combat/WeaponCollisionSystem';
-import { BossAI } from './boss/BossAI';
+import { BossAI, type PlayerCombatSnapshot } from './boss/BossAI';
 import { BossWeapon } from './boss/BossWeapon';
 
 export type BossState =
@@ -37,12 +37,31 @@ export class BossCharacter {
   public isPhase2 = false;
 
   // AI & Frame State
+  public readonly ai: BossAI = new BossAI(this);
   public state: BossState = 'idle';
   public currentAttack: AttackDefinition | null = null;
   public attackTimer = 0;
   public stateTimer = 0;
   public hasHitCurrentSwing = false;
   public hasSpawnedSlashArc = false;
+  public isAttackActiveFrames = false;
+
+  // Locomotion Blend Layer Actions & Weights
+  public idleAction: THREE.AnimationAction | null = null;
+  public walkForwardAction: THREE.AnimationAction | null = null;
+  public walkBackAction: THREE.AnimationAction | null = null;
+  public strafeLeftAction: THREE.AnimationAction | null = null;
+  public strafeRightAction: THREE.AnimationAction | null = null;
+  public currentAttackAction: THREE.AnimationAction | null = null;
+  public locomotionMasterWeight = 1.0;
+  public isLocomotionActive = true;
+  public currentWeights = {
+    idle: 1.0,
+    walkForward: 0.0,
+    walkBack: 0.0,
+    strafeLeft: 0.0,
+    strafeRight: 0.0,
+  };
 
   // Telegraph warning indicator
   public telegraphGlow = 0;
@@ -237,6 +256,7 @@ export class BossCharacter {
 
     for (const clip of bossGltf.animations) {
       this.kinematicController.stripRootMotion(clip);
+      ModelLoader.stripRootMotionXZ(clip);
       const action = this.mixer.clipAction(clip);
       this.actions.set(clip.name, action);
     }
@@ -245,8 +265,194 @@ export class BossCharacter {
     this.currentModelId = modelId;
     this.isLoaded = true;
 
-    // Play initial idle animation
-    this.playAction('idle', 0.1);
+    // Initialize synchronized locomotion blend layer
+    this.initLocomotionBlendLayer();
+  }
+
+  public findAction(name: string): THREE.AnimationAction | null {
+    let action = this.actions.get(name);
+    if (!action) {
+      const clip = ModelLoader.findClip(this.rawClips, name);
+      if (clip) {
+        action = this.actions.get(clip.name);
+        if (!action && this.mixer) {
+          action = this.mixer.clipAction(clip);
+          this.actions.set(clip.name, action);
+        }
+      }
+    }
+    return action || null;
+  }
+
+  public initLocomotionBlendLayer(): void {
+    this.idleAction = this.findAction('idle');
+    this.walkForwardAction =
+      this.findAction('walk_forward') ||
+      this.findAction('walking') ||
+      this.findAction('walk');
+    this.walkBackAction =
+      this.findAction('walk_back') ||
+      this.findAction('walk_backward');
+    this.strafeLeftAction = this.findAction('strafe_left');
+    this.strafeRightAction = this.findAction('strafe_right');
+
+    const locoActions = [
+      this.idleAction,
+      this.walkForwardAction,
+      this.walkBackAction,
+      this.strafeLeftAction,
+      this.strafeRightAction,
+    ];
+
+    for (const action of locoActions) {
+      if (!action) continue;
+      action.enabled = true;
+      action.setLoop(THREE.LoopRepeat, Infinity);
+      action.setEffectiveTimeScale(1.0);
+      action.clampWhenFinished = false;
+      action.setEffectiveWeight(action === this.idleAction ? 1.0 : 0.0);
+      action.play();
+    }
+
+    this.currentWeights = {
+      idle: 1.0,
+      walkForward: 0.0,
+      walkBack: 0.0,
+      strafeLeft: 0.0,
+      strafeRight: 0.0,
+    };
+    this.locomotionMasterWeight = 1.0;
+    this.isLocomotionActive = true;
+    this.currentActionName = 'idle';
+  }
+
+  public updateLocomotionWeights(delta: number, strafeDir: number, radialFactor: number): void {
+    // 1. Keep walk_forward, walk_back, strafe_left, and strafe_right synchronized in locomotion layer
+    if (this.walkForwardAction) {
+      const fwdDur = this.walkForwardAction.getClip().duration;
+      if (fwdDur > 0) {
+        const phase = (this.walkForwardAction.time % fwdDur) / fwdDur;
+        if (this.walkBackAction) {
+          this.walkBackAction.time = phase * this.walkBackAction.getClip().duration;
+        }
+        if (this.strafeLeftAction) {
+          this.strafeLeftAction.time = phase * this.strafeLeftAction.getClip().duration;
+        }
+        if (this.strafeRightAction) {
+          this.strafeRightAction.time = phase * this.strafeRightAction.getClip().duration;
+        }
+      }
+    }
+
+    // 2. Smoothly calculate directional target weights based on movement input (strafeDir: -1 / 0 / 1 and radial forward/back factor)
+    const moveMag = Math.min(1.0, Math.sqrt(strafeDir * strafeDir + radialFactor * radialFactor));
+    let targetIdle = 1.0;
+    let targetFwd = 0.0;
+    let targetBack = 0.0;
+    let targetLeft = 0.0;
+    let targetRight = 0.0;
+
+    if (moveMag > 0.05) {
+      const rawFwd = Math.max(0, radialFactor);
+      const rawBack = Math.max(0, -radialFactor);
+      const rawLeft = Math.max(0, -strafeDir);
+      const rawRight = Math.max(0, strafeDir);
+      const sum = rawFwd + rawBack + rawLeft + rawRight;
+
+      if (sum > 0.001) {
+        targetFwd = (rawFwd / sum) * moveMag;
+        targetBack = (rawBack / sum) * moveMag;
+        targetLeft = (rawLeft / sum) * moveMag;
+        targetRight = (rawRight / sum) * moveMag;
+      }
+      targetIdle = Math.max(0, 1.0 - moveMag);
+    }
+
+    // 3. Smooth interpolation (damp)
+    const blendRate = 10.0;
+    this.currentWeights.idle = THREE.MathUtils.damp(this.currentWeights.idle, targetIdle, blendRate, delta);
+    this.currentWeights.walkForward = THREE.MathUtils.damp(this.currentWeights.walkForward, targetFwd, blendRate, delta);
+    this.currentWeights.walkBack = THREE.MathUtils.damp(this.currentWeights.walkBack, targetBack, blendRate, delta);
+    this.currentWeights.strafeLeft = THREE.MathUtils.damp(this.currentWeights.strafeLeft, targetLeft, blendRate, delta);
+    this.currentWeights.strafeRight = THREE.MathUtils.damp(this.currentWeights.strafeRight, targetRight, blendRate, delta);
+
+    // 4. Smooth locomotionMasterWeight crossfade (fade in/out ~0.15s)
+    const targetMaster = this.isLocomotionActive ? 1.0 : 0.0;
+    this.locomotionMasterWeight = THREE.MathUtils.damp(
+      this.locomotionMasterWeight,
+      targetMaster,
+      1.0 / 0.15,
+      delta,
+    );
+
+    // 5. Apply effective weights to mixer actions
+    const master = this.locomotionMasterWeight;
+    this.idleAction?.setEffectiveWeight(this.currentWeights.idle * master);
+    this.walkForwardAction?.setEffectiveWeight(this.currentWeights.walkForward * master);
+    this.walkBackAction?.setEffectiveWeight(this.currentWeights.walkBack * master);
+    this.strafeLeftAction?.setEffectiveWeight(this.currentWeights.strafeLeft * master);
+    this.strafeRightAction?.setEffectiveWeight(this.currentWeights.strafeRight * master);
+
+    // 6. Dominant clip reflects active locomotion state
+    if (this.isLocomotionActive && master > 0.3) {
+      let maxWeight = this.currentWeights.idle;
+      let dominant = 'idle';
+
+      if (this.currentWeights.strafeLeft > maxWeight) {
+        maxWeight = this.currentWeights.strafeLeft;
+        dominant = 'strafe_left';
+      }
+      if (this.currentWeights.strafeRight > maxWeight) {
+        maxWeight = this.currentWeights.strafeRight;
+        dominant = 'strafe_right';
+      }
+      if (this.currentWeights.walkForward > maxWeight) {
+        maxWeight = this.currentWeights.walkForward;
+        dominant = 'walking';
+      }
+      if (this.currentWeights.walkBack > maxWeight) {
+        maxWeight = this.currentWeights.walkBack;
+        dominant = 'walk_back';
+      }
+      this.currentActionName = dominant;
+    }
+  }
+
+  public startAttackAction(clipName: string, timeScale: number): THREE.AnimationAction | null {
+    // Cross-fade out of locomotion blend layer (~0.15s)
+    this.isLocomotionActive = false;
+
+    const clip = ModelLoader.findClip(this.rawClips, clipName);
+    const actionName = clip ? clip.name : clipName;
+    let action = this.actions.get(actionName);
+    if (!action && clip && this.mixer) {
+      action = this.mixer.clipAction(clip);
+      this.actions.set(actionName, action);
+    }
+    if (!action) return null;
+
+    action.reset();
+    action.enabled = true;
+    action.setLoop(THREE.LoopOnce, 1);
+    action.clampWhenFinished = true;
+    action.setEffectiveTimeScale(timeScale);
+    action.setEffectiveWeight(1.0);
+    action.fadeIn(0.15);
+    action.play();
+
+    this.currentAttackAction = action;
+    this.currentAction = action;
+    this.currentActionName = actionName;
+    return action;
+  }
+
+  public endAttackAction(): void {
+    if (this.currentAttackAction) {
+      this.currentAttackAction.fadeOut(0.15);
+      this.currentAttackAction = null;
+    }
+    // Cross-fade back into locomotion blend layer (~0.15s)
+    this.isLocomotionActive = true;
   }
 
   public setVfxAndAudio(vfx: VFXSystem, audio: AudioSystem): void {
@@ -362,7 +568,13 @@ export class BossCharacter {
     return action;
   }
 
-  public update(delta: number, _elapsed: number, playerPos: THREE.Vector3, arenaRadius: number): void {
+  public update(
+    delta: number,
+    _elapsed: number,
+    player: THREE.Vector3 | PlayerCombatSnapshot,
+    arenaRadius: number,
+    arena?: any,
+  ): void {
     if (this.mixer) {
       this.mixer.update(delta);
     }
@@ -394,6 +606,16 @@ export class BossCharacter {
       return;
     }
 
+    const playerSnapshot: PlayerCombatSnapshot = (player instanceof THREE.Vector3)
+      ? {
+          position: player,
+          velocity: new THREE.Vector3(),
+          isHealing: false,
+          isAttacking: false,
+          isStaggered: false,
+        }
+      : player;
+
     // Poise passive regeneration
     if (this.poise < this.maxPoise && this.state !== 'stagger') {
       this.poise = Math.min(this.maxPoise, this.poise + delta * 12.0);
@@ -401,30 +623,12 @@ export class BossCharacter {
 
     // Phase 2 check (under 50% HP)
     if (!this.isPhase2 && this.hp <= this.maxHp * 0.5 && this.state !== 'phaseTransition') {
-      this.triggerPhase2(playerPos);
+      this.triggerPhase2(playerSnapshot.position);
       return;
     }
 
-    // Finite State Machine
-    switch (this.state) {
-      case 'idle':
-        BossAI.updateIdle(this, delta, playerPos);
-        break;
-      case 'approach':
-        BossAI.updateApproach(this, delta, playerPos);
-        break;
-      case 'windup':
-      case 'active':
-      case 'recovery':
-        BossAI.updateAttackFrames(this, delta, playerPos);
-        break;
-      case 'stagger':
-        BossAI.updateStagger(this, delta);
-        break;
-      case 'phaseTransition':
-        BossAI.updatePhaseTransition(this, delta, playerPos);
-        break;
-    }
+    // Update Goal-Stack Boss AI
+    this.ai.update(delta, playerSnapshot, arena, arenaRadius);
 
     // Keep boss inside arena bounds
     const maxR = arenaRadius - this.radius - 0.5;
@@ -437,7 +641,9 @@ export class BossCharacter {
   }
 
   public chooseAttack(attack: AttackDefinition): void {
-    BossAI.chooseAttack(this, attack);
+    this.ai.clearGoalStack();
+    this.ai.pushSubgoal({ type: 'ATTACK', attack });
+    this.ai.startAttack(attack);
   }
 
   public getBladeHitboxWorldPosition(target: THREE.Vector3 = new THREE.Vector3()): THREE.Vector3 {
@@ -499,14 +705,21 @@ export class BossCharacter {
     this.state = 'phaseTransition';
     this.stateTimer = 0;
     this.currentAttack = null;
+    this.ai.clearGoalStack();
+    this.ai.attackCooldown = 0;
     if (playerPos) {
-      this.faceTarget(playerPos, 1.0);
+      this.faceTarget(playerPos, this.ai.maxTurnRate, 0.05);
     }
 
     this.playAction('special', 0.2, THREE.LoopOnce, true, 1.0);
   }
 
-  public faceTarget(targetPos: THREE.Vector3, turnRate: number): void {
+  public faceTarget(targetPos: THREE.Vector3, turnRateOrMaxTurnRate: number, delta?: number): void {
+    // Rotation tracking is frozen during active attack frames
+    if (this.ai?.isAttackActiveFrames) {
+      return;
+    }
+
     const dx = targetPos.x - this.group.position.x;
     const dz = targetPos.z - this.group.position.z;
     const targetAngle = Math.atan2(-dx, -dz);
@@ -514,7 +727,14 @@ export class BossCharacter {
     let diff = targetAngle - this.group.rotation.y;
     while (diff > Math.PI) diff -= Math.PI * 2;
     while (diff < -Math.PI) diff += Math.PI * 2;
-    this.group.rotation.y += diff * Math.min(1.0, turnRate);
+
+    if (delta !== undefined) {
+      const maxStep = turnRateOrMaxTurnRate * delta;
+      const step = Math.sign(diff) * Math.min(Math.abs(diff), maxStep);
+      this.group.rotation.y += step;
+    } else {
+      this.group.rotation.y += diff * Math.min(1.0, turnRateOrMaxTurnRate);
+    }
   }
 
   public distanceTo(pos: THREE.Vector3): number {
@@ -535,6 +755,10 @@ export class BossCharacter {
     this.hasSpawnedSlashArc = false;
     this.hasTriggeredGroundSlam = false;
     this.telegraphGlow = 0;
+    this.isAttackActiveFrames = false;
+
+    // Reset Goal-Stack AI
+    this.ai.reset();
 
     // 1. Reset kinematic controller
     this.kinematicController?.reset();
@@ -554,10 +778,11 @@ export class BossCharacter {
     }
 
     this.currentAction = null;
-    this.currentActionName = '';
+    this.currentAttackAction = null;
+    this.currentActionName = 'idle';
 
-    // 3. Play Idle via playAction so kinematicController and mixer are unified
-    this.playAction('idle', 0.05);
+    // 3. Initialize synchronized locomotion blend layer
+    this.initLocomotionBlendLayer();
     this.mixer?.update(0);
 
     // 4. Coordinates, rotation & material reset
