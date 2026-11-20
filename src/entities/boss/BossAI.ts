@@ -41,6 +41,9 @@ export const BOSS_CONFIG = {
     spin360: 0.0,
     kick: 0.1,
   },
+
+  // 8. Heal Punish Behavior (Set true to automatically interrupt drink with jump attack)
+  punishHealWithJump: false,
 };
 
 export type BossSubgoalType = 'STRAFE_INSPECT' | 'APPROACH' | 'ATTACK' | 'COMBO_CHECK';
@@ -177,7 +180,7 @@ export class BossAI {
       b.state === 'approach' ||
       (this.getCurrentSubgoal()?.type === 'STRAFE_INSPECT' || this.getCurrentSubgoal()?.type === 'APPROACH');
 
-    if (isStrafeOrApproach && player.isHealing) {
+    if (BOSS_CONFIG.punishHealWithJump && isStrafeOrApproach && player.isHealing) {
       this.clearGoalStack();
       this.attackCooldown = 0;
       const punishAttack = BOSS_ATTACKS.jump; // fast gap-closing punish lunge (7m forward impulse, 6m range)

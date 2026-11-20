@@ -32,8 +32,8 @@ export class PlayerCharacter {
   public readonly radius = 0.55;
 
   // Stats
-  public maxHp = 100;
-  public hp = 100;
+  public maxHp = 200;
+  public hp = 200;
   public maxStamina = 100;
   public stamina = 100;
   public staminaRegenDelay = 0;

@@ -30,8 +30,8 @@ export class BossCharacter {
 
   // Stats
   public readonly name = 'MALAKHOR, THE ASHEN KNIGHT';
-  public maxHp = 420;
-  public hp = 420;
+  public maxHp = 800;
+  public hp = 800;
   public maxPoise = 100;
   public poise = 100;
   public isPhase2 = false;

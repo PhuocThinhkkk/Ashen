@@ -93,7 +93,7 @@ export class PlayerLocomotion {
       if (!player.hasHealedDuringDrink && progress >= 0.55) {
         player.hasHealedDuringDrink = true;
         player.healCharges = Math.max(0, player.healCharges - 1);
-        player.heal(40);
+        player.heal(70);
       }
 
       // Finish drinking

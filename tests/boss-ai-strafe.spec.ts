@@ -146,7 +146,7 @@ test.describe('FromSoftware-Style Boss AI & Strafe Subgoal Stack', () => {
     expect(mockBoss.currentAttack?.name).toBe(BOSS_ATTACKS.downward.name);
   });
 
-  test('Frame-1 Punish: Immediately clears goalStack, resets attackCooldown = 0, and pushes jump attack when player drinks', () => {
+  test('Frame-1 Punish: Respects punishHealWithJump configuration', () => {
     const mockBoss: any = {
       state: 'idle',
       stateTimer: 0,
@@ -166,20 +166,24 @@ test.describe('FromSoftware-Style Boss AI & Strafe Subgoal Stack', () => {
     const playerSnapshot: PlayerCombatSnapshot = {
       position: new THREE.Vector3(0, 0, 5.5),
       velocity: new THREE.Vector3(),
-      isHealing: true, // FRAME 1 HEALING DETECTED!
+      isHealing: true, // FRAME 1 HEALING DETECTED
       isAttacking: false,
       isStaggered: false,
     };
 
+    // By default (punishHealWithJump = false), drinking does not interrupt strafing:
     ai.update(0.016, playerSnapshot);
+    expect(ai.getCurrentSubgoal()?.type).toBe('STRAFE_INSPECT');
+    expect(ai.attackCooldown).toBeCloseTo(2.5 - 0.016, 2);
 
-    // Stack cleared and replaced with punish attack
+    // When explicitly enabled in BOSS_CONFIG:
+    BOSS_CONFIG.punishHealWithJump = true;
+    ai.update(0.016, playerSnapshot);
     expect(ai.attackCooldown).toBe(0);
     expect(ai.goalStack.length).toBe(1);
     expect(ai.getCurrentSubgoal()?.type).toBe('ATTACK');
     expect(ai.getCurrentSubgoal()?.attack?.name).toBe(BOSS_ATTACKS.jump.name);
-    expect(mockBoss.state).toBe('windup');
-    expect(mockBoss.currentAttack?.name).toBe(BOSS_ATTACKS.jump.name);
+    BOSS_CONFIG.punishHealWithJump = false; // Reset to false
   });
 
   test('Short raycaster / arena boundary inverts strafeDir when obstacle is hit', () => {
@@ -324,7 +328,7 @@ test.describe('FromSoftware-Style Boss AI & Strafe Subgoal Stack', () => {
     expect(consoleErrors).toEqual([]);
   });
 
-  test('Browser: Frame-1 Punish interrupts strafing to execute gap-closing jump attack when player drinks', async ({
+  test('Browser: Player drinking does not automatically trigger gap-closing jump attack', async ({
     page,
   }) => {
     test.setTimeout(45_000);
@@ -351,15 +355,11 @@ test.describe('FromSoftware-Style Boss AI & Strafe Subgoal Stack', () => {
       window.__THREE_GAME_TEST_HOOKS__?.triggerHeal?.();
     });
 
-    // Within next frames, boss must immediately cancel strafe and switch to attack_jump
-    await page.waitForFunction(() => {
-      const diag = window.__THREE_GAME_TEST_HOOKS__?.getBossAIDiagnostics?.();
-      return diag && diag.subgoal === 'ATTACK' && (diag.activeClip === 'attack_jump' || diag.subgoalData?.attack?.animationClip === 'attack_jump');
-    }, { timeout: 3000 });
-
-    const postPunishDiag = await page.evaluate(() => window.__THREE_GAME_TEST_HOOKS__?.getBossAIDiagnostics?.());
-    expect(postPunishDiag.subgoal).toBe('ATTACK');
-    expect(postPunishDiag.attackCooldown).toBe(0);
+    // Boss must NOT automatically interrupt strafing with a jump attack
+    await page.waitForTimeout(600);
+    const postHealDiag = await page.evaluate(() => window.__THREE_GAME_TEST_HOOKS__?.getBossAIDiagnostics?.());
+    expect(postHealDiag.subgoal).toBe('STRAFE_INSPECT');
+    expect(postHealDiag.attackCooldown).toBeGreaterThan(0);
   });
 
   test('Browser: Mid-combo distance branching aborts Hit 2 if player rolls away (> 4.2m)', async ({

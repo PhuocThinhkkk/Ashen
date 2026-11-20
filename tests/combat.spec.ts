@@ -27,9 +27,9 @@ test.describe('Soulslike Boss Fight Combat System', () => {
 
     const initialDiag = await page.evaluate(() => window.__THREE_GAME_DIAGNOSTICS__);
     expect(initialDiag).not.toBeNull();
-    expect(initialDiag?.player.hp).toBe(100);
+    expect(initialDiag?.player.hp).toBe(200);
     expect(initialDiag?.player.stamina).toBe(100);
-    expect(initialDiag?.boss.hp).toBe(420);
+    expect(initialDiag?.boss.hp).toBe(800);
 
     // Capture arena start screenshot
     await page.screenshot({ path: 'artifacts/screenshots/combat-arena-start.png', fullPage: true });
@@ -115,13 +115,13 @@ test.describe('Soulslike Boss Fight Combat System', () => {
     await page.waitForFunction(
       () => {
         const d = window.__THREE_GAME_DIAGNOSTICS__;
-        return d ? d.boss.hp < 420 : false;
+        return d ? d.boss.hp < 800 : false;
       },
       { timeout: 4000 },
     );
 
     const postAttackDiag = await page.evaluate(() => window.__THREE_GAME_DIAGNOSTICS__);
-    expect(postAttackDiag!.boss.hp).toBeLessThan(420);
+    expect(postAttackDiag!.boss.hp).toBeLessThan(800);
 
     // Capture combat encounter screenshot
     await page.screenshot({ path: 'artifacts/screenshots/combat-boss-encounter.png', fullPage: true });
@@ -131,9 +131,9 @@ test.describe('Soulslike Boss Fight Combat System', () => {
     await page.waitForTimeout(150);
 
     const resetDiag = await page.evaluate(() => window.__THREE_GAME_DIAGNOSTICS__);
-    expect(resetDiag!.player.hp).toBe(100);
+    expect(resetDiag!.player.hp).toBe(200);
     expect(resetDiag!.player.stamina).toBe(100);
-    expect(resetDiag!.boss.hp).toBe(420);
+    expect(resetDiag!.boss.hp).toBe(800);
     expect(resetDiag!.player.position.z).toBeCloseTo(9, 0);
     expect(resetDiag!.boss.position.z).toBeCloseTo(-8, 0);
 
@@ -162,7 +162,7 @@ test.describe('Soulslike Boss Fight Combat System', () => {
 
     await expect(deathOverlay).toBeHidden();
     const diag = await page.evaluate(() => window.__THREE_GAME_DIAGNOSTICS__);
-    expect(diag?.player.hp).toBe(100);
+    expect(diag?.player.hp).toBe(200);
     expect(diag?.player.state).toBe('idle');
   });
 
@@ -186,7 +186,7 @@ test.describe('Soulslike Boss Fight Combat System', () => {
 
     await expect(victoryOverlay).toBeHidden();
     const diag = await page.evaluate(() => window.__THREE_GAME_DIAGNOSTICS__);
-    expect(diag?.boss.hp).toBe(420);
+    expect(diag?.boss.hp).toBe(800);
     expect(diag?.boss.state).toBe('idle');
   });
 });
