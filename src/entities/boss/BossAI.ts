@@ -19,7 +19,7 @@ export const BOSS_CONFIG = {
   strafeSpeedPhase2: 2.0,
 
   // 3. Rotation & Tracking Speed (degrees per second)
-  turnRateDegreesPerSec: 140, // 140 deg/sec clamped angular tracking
+  turnRateDegreesPerSec: 100, // 100 deg/sec clamped angular tracking
 
   // 4. Attack Animation Speed Multipliers
   attackSpeedPhase1: 1.0,
