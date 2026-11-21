@@ -98,6 +98,43 @@ export class BossMusicController {
     return this.currentPreset;
   }
 
+  public isPlaying(): boolean {
+    if (this.activePhase === 'none') return false;
+
+    if (this.currentPreset.config.mode === 'single') {
+      if (this.singleAudio) {
+        return !this.singleAudio.paused && !this.singleAudio.ended && this.singleAudio.currentTime > 0;
+      }
+      return this.p1Source !== null || this.p2Source !== null;
+    }
+
+    if (this.activePhase === 'phase1') {
+      if (this.p1Audio) {
+        return !this.p1Audio.paused && !this.p1Audio.ended && this.p1Audio.currentTime > 0;
+      }
+      return this.p1Source !== null;
+    }
+
+    if (this.activePhase === 'phase2') {
+      if (this.p2Audio) {
+        return !this.p2Audio.paused && !this.p2Audio.ended && this.p2Audio.currentTime > 0;
+      }
+      return this.p2Source !== null;
+    }
+
+    if (this.activePhase === 'transitioning') {
+      const p1Playing = this.p1Audio
+        ? !this.p1Audio.paused && !this.p1Audio.ended && this.p1Audio.currentTime > 0
+        : this.p1Source !== null;
+      const p2Playing = this.p2Audio
+        ? !this.p2Audio.paused && !this.p2Audio.ended && this.p2Audio.currentTime > 0
+        : this.p2Source !== null;
+      return p1Playing || p2Playing;
+    }
+
+    return false;
+  }
+
   public async loadPreset(preset: BossMusicPreset): Promise<void> {
     this.stop(0.2);
     this.currentPreset = preset;
@@ -182,7 +219,9 @@ export class BossMusicController {
   ): HTMLAudioElement {
     const audio = new Audio(url);
     audio.preload = 'auto';
-    audio.crossOrigin = 'anonymous';
+    if (/^https?:\/\//i.test(url)) {
+      audio.crossOrigin = 'anonymous';
+    }
     this.setupAudioLoop(audio, loopCfg, duration);
     return audio;
   }
@@ -259,7 +298,7 @@ export class BossMusicController {
 
   public startPhase1(fadeDuration = 0.8): void {
     if (!this.context || !this.musicMasterGain) return;
-    if (this.activePhase === 'phase1') return; // already active
+    if (this.activePhase === 'phase1' && this.isPlaying()) return; // already active and actually playing
 
     if (this.context.state === 'suspended') {
       void this.context.resume().catch(() => {});
@@ -279,7 +318,15 @@ export class BossMusicController {
         this.connectMediaElement(this.singleAudio, this.p1Gain);
         this.setupAudioLoop(this.singleAudio, cfg.phase1, cfg.duration);
         this.singleAudio.currentTime = Math.max(0, cfg.phase1.start || 0);
-        void this.singleAudio.play().catch(() => {});
+        const playPromise = this.singleAudio.play();
+        if (playPromise !== undefined) {
+          playPromise.catch(() => {
+            if (this.activePhase === 'phase1' && !this.isPlaying()) {
+              this.activePhase = 'none';
+              this.notifyState();
+            }
+          });
+        }
       } else {
         const buf = this.singleBuffer;
         if (!buf) {
@@ -303,7 +350,15 @@ export class BossMusicController {
         this.connectMediaElement(this.p1Audio, this.p1Gain);
         this.setupAudioLoop(this.p1Audio, cfg.phase1, cfg.phase1Duration);
         this.p1Audio.currentTime = 0;
-        void this.p1Audio.play().catch(() => {});
+        const playPromise = this.p1Audio.play();
+        if (playPromise !== undefined) {
+          playPromise.catch(() => {
+            if (this.activePhase === 'phase1' && !this.isPlaying()) {
+              this.activePhase = 'none';
+              this.notifyState();
+            }
+          });
+        }
       } else {
         const buf = this.phase1Buffer;
         if (!buf) {

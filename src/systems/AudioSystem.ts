@@ -13,13 +13,15 @@ export type SoundKey =
 
 export class AudioSystem {
   public context: AudioContext | null = null;
-  private unlocked = false;
+  public unlocked = false;
   private masterGain: GainNode | null = null;
   private sfxGain: GainNode | null = null;
   private musicGain: GainNode | null = null;
 
   public readonly bossMusic = new BossMusicController();
   private pendingStartBossMusic = false;
+  private pendingPresetId: string | null = null;
+  private userInteractionCleanup: (() => void) | null = null;
 
   private soundBuffers: Partial<Record<SoundKey, AudioBuffer>> = {};
 
@@ -28,15 +30,45 @@ export class AudioSystem {
   }
 
   constructor() {
-    const unlock = () => {
-      void this.unlock();
-      window.removeEventListener('pointerdown', unlock);
-      window.removeEventListener('keydown', unlock);
-      window.removeEventListener('touchstart', unlock);
+    const onUserInteraction = async () => {
+      if (!this.context) {
+        await this.unlock();
+      } else if (this.context.state === 'suspended') {
+        try {
+          await this.context.resume();
+        } catch {}
+      }
+
+      if (this.context && this.context.state === 'running') {
+        this.unlocked = true;
+
+        if (this.pendingPresetId) {
+          const preset = BossMusicStorage.getPresetById(this.pendingPresetId) || DEFAULT_PROCEDURAL_PRESET;
+          await this.bossMusic.loadPreset(preset);
+          this.pendingPresetId = null;
+        }
+
+        if (this.pendingStartBossMusic) {
+          this.pendingStartBossMusic = false;
+          this.bossMusic.startPhase1();
+        }
+
+        removeListeners();
+      }
     };
-    window.addEventListener('pointerdown', unlock, { once: true });
-    window.addEventListener('keydown', unlock, { once: true });
-    window.addEventListener('touchstart', unlock, { once: true, passive: true });
+
+    const removeListeners = () => {
+      window.removeEventListener('pointerdown', onUserInteraction);
+      window.removeEventListener('keydown', onUserInteraction);
+      window.removeEventListener('touchstart', onUserInteraction);
+      this.userInteractionCleanup = null;
+    };
+
+    this.userInteractionCleanup = removeListeners;
+
+    window.addEventListener('pointerdown', onUserInteraction);
+    window.addEventListener('keydown', onUserInteraction);
+    window.addEventListener('touchstart', onUserInteraction, { passive: true });
 
     // Pre-fetch SFX immediately if AudioContext can be initialized
     if (typeof window !== 'undefined') {
@@ -45,51 +77,90 @@ export class AudioSystem {
   }
 
   public async unlock(): Promise<void> {
-    if (this.unlocked) return;
-    const AudioContextClass =
-      window.AudioContext ||
-      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!AudioContextClass) return;
-    this.context = new AudioContextClass();
-    if (this.context.state === 'suspended') {
-      await this.context.resume();
+    if (this.unlocked && this.context && this.context.state === 'running') return;
+
+    if (!this.context) {
+      const AudioContextClass =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!AudioContextClass) return;
+      this.context = new AudioContextClass();
+
+      // Set up master routing
+      this.masterGain = this.context.createGain();
+      this.masterGain.gain.setValueAtTime(1.0, this.context.currentTime);
+      this.masterGain.connect(this.context.destination);
+
+      const initialSettings = SettingsManager.getInstance().data.audio;
+
+      this.sfxGain = this.context.createGain();
+      this.sfxGain.gain.setValueAtTime(initialSettings.sfxVolume, this.context.currentTime);
+      this.sfxGain.connect(this.masterGain);
+
+      this.musicGain = this.context.createGain();
+      this.musicGain.gain.setValueAtTime(initialSettings.bossMusicVolume, this.context.currentTime);
+      this.musicGain.connect(this.masterGain);
+
+      this.bossMusic.init(this.context, this.musicGain);
+
+      // Load active preset from pendingPresetId or settings
+      const targetPresetId = this.pendingPresetId || initialSettings.selectedTrackId;
+      const activePreset = BossMusicStorage.getPresetById(targetPresetId) || DEFAULT_PROCEDURAL_PRESET;
+      await this.bossMusic.loadPreset(activePreset);
+      this.pendingPresetId = null;
+
+      void this.loadAllSounds();
     }
 
-    // Set up master routing
-    this.masterGain = this.context.createGain();
-    this.masterGain.gain.setValueAtTime(1.0, this.context.currentTime);
-    this.masterGain.connect(this.context.destination);
+    if (this.context.state === 'suspended') {
+      try {
+        await this.context.resume();
+      } catch {}
+    }
 
-    const initialSettings = SettingsManager.getInstance().data.audio;
+    if (this.context.state === 'running') {
+      this.unlocked = true;
 
-    this.sfxGain = this.context.createGain();
-    this.sfxGain.gain.setValueAtTime(initialSettings.sfxVolume, this.context.currentTime);
-    this.sfxGain.connect(this.masterGain);
+      if (this.pendingPresetId) {
+        const preset = BossMusicStorage.getPresetById(this.pendingPresetId) || DEFAULT_PROCEDURAL_PRESET;
+        await this.bossMusic.loadPreset(preset);
+        this.pendingPresetId = null;
+      }
 
-    this.musicGain = this.context.createGain();
-    this.musicGain.gain.setValueAtTime(initialSettings.bossMusicVolume, this.context.currentTime);
-    this.musicGain.connect(this.masterGain);
+      await this.loadAllSounds();
 
-    this.bossMusic.init(this.context, this.musicGain);
+      if (this.pendingStartBossMusic) {
+        this.pendingStartBossMusic = false;
+        this.bossMusic.startPhase1();
+      }
 
-    // Load active preset from settings
-    const activePreset = BossMusicStorage.getPresetById(initialSettings.selectedTrackId) || DEFAULT_PROCEDURAL_PRESET;
-    await this.bossMusic.loadPreset(activePreset);
-
-    this.unlocked = true;
-    await this.loadAllSounds();
-
-    if (this.pendingStartBossMusic) {
-      this.pendingStartBossMusic = false;
-      this.bossMusic.startPhase1();
+      if (this.userInteractionCleanup) {
+        this.userInteractionCleanup();
+      }
     }
   }
 
   public async setBossMusicTrack(presetId: string): Promise<void> {
-    const preset = BossMusicStorage.getPresetById(presetId) || DEFAULT_PROCEDURAL_PRESET;
-    if (this.unlocked && this.context) {
-      await this.bossMusic.loadPreset(preset);
+    if (!this.unlocked || !this.context || this.context.state !== 'running') {
+      this.pendingPresetId = presetId;
+      const preset = BossMusicStorage.getPresetById(presetId) || DEFAULT_PROCEDURAL_PRESET;
+      if (this.context) {
+        await this.bossMusic.loadPreset(preset);
+      }
+      return;
     }
+    const preset = BossMusicStorage.getPresetById(presetId) || DEFAULT_PROCEDURAL_PRESET;
+    await this.bossMusic.loadPreset(preset);
+  }
+
+  public getAudioDiagnostics() {
+    return {
+      contextState: (this.context?.state || 'uninitialized') as 'suspended' | 'running' | 'closed' | 'uninitialized',
+      isUnlocked: this.unlocked,
+      activePhase: this.bossMusic.getState().activePhase,
+      isPlaying: this.bossMusic.isPlaying(),
+      activeTrackId: this.bossMusic.getState().activePresetId,
+    };
   }
 
   public setMusicVolume(volume: number): void {
@@ -106,7 +177,7 @@ export class AudioSystem {
   }
 
   public async startBossMusic(): Promise<void> {
-    if (!this.unlocked || !this.context) {
+    if (!this.unlocked || !this.context || this.context.state !== 'running') {
       this.pendingStartBossMusic = true;
       await this.unlock();
       return;
@@ -595,6 +666,9 @@ export class AudioSystem {
   }
 
   public dispose(): void {
+    if (this.userInteractionCleanup) {
+      this.userInteractionCleanup();
+    }
     this.bossMusic.dispose();
     this.masterGain?.disconnect();
     this.sfxGain?.disconnect();

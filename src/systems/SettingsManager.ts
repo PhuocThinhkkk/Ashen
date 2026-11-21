@@ -51,12 +51,12 @@ export type SettingsChangeListener = (settings: GameSettingsData) => void;
 
 export function isMobileDevice(): boolean {
   if (typeof window === 'undefined') return false;
-  return (
-    'ontouchstart' in window ||
-    navigator.maxTouchPoints > 0 ||
-    /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) ||
-    (window.innerWidth <= 920 && window.innerHeight <= 920)
-  );
+  const ua = navigator.userAgent;
+  const isMobileUA = /Android|iPhone|iPad|iPod|Mobile|webOS|BlackBerry|IEMobile|Opera Mini/i.test(ua);
+  const isSmallTouchScreen =
+    (window.innerWidth <= 920 || window.innerHeight <= 920) &&
+    ('ontouchstart' in window || navigator.maxTouchPoints > 0);
+  return isMobileUA || isSmallTouchScreen;
 }
 
 const STORAGE_KEY = 'ashen_souls_settings_v1';

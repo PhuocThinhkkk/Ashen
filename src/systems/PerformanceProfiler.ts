@@ -64,6 +64,7 @@ export class PerformanceProfiler {
   private currentOnePercentLowFps = 60;
   private spikeCount25ms = 0;
   private spikeCount33ms = 0;
+  private readonly sortBuffer: number[] = [];
 
   // Renderer stats
   private lastDrawCalls = 0;
@@ -134,17 +135,21 @@ export class PerformanceProfiler {
 
     // Averages and 1% low calculations (calculated every 4 frames to avoid overhead)
     if (this.frameCount % 4 === 0 && this.frameTimes.length > 0) {
+      const len = this.frameTimes.length;
       let sum = 0;
-      for (let i = 0; i < this.frameTimes.length; i++) {
-        sum += this.frameTimes[i];
+      this.sortBuffer.length = len;
+      for (let i = 0; i < len; i++) {
+        const val = this.frameTimes[i];
+        sum += val;
+        this.sortBuffer[i] = val;
       }
-      this.avgFrameTimeMs = sum / this.frameTimes.length;
+      this.avgFrameTimeMs = sum / len;
       this.avgFps = Math.round(1000 / this.avgFrameTimeMs);
 
-      // 1% Low: 99th percentile frame duration
-      const sorted = [...this.frameTimes].sort((a, b) => a - b);
-      const p99Index = Math.min(sorted.length - 1, Math.floor(sorted.length * 0.99));
-      const p99Duration = sorted[p99Index];
+      // 1% Low: 99th percentile frame duration (in-place sort on reused scratch buffer)
+      this.sortBuffer.sort((a, b) => a - b);
+      const p99Index = Math.min(len - 1, Math.floor(len * 0.99));
+      const p99Duration = this.sortBuffer[p99Index];
       this.currentOnePercentLowFps = Math.max(1, Math.round(1000 / Math.max(0.1, p99Duration)));
     }
 
@@ -213,6 +218,7 @@ export class PerformanceProfiler {
     this.frameTimes.length = 0;
     this.cpuTimes.length = 0;
     this.renderTimes.length = 0;
+    this.sortBuffer.length = 0;
     this.recordedSamples = [];
   }
 

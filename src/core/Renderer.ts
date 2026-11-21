@@ -28,10 +28,12 @@ export function resizeRenderer(
   renderer: THREE.WebGLRenderer,
   camera: THREE.PerspectiveCamera,
   maxDpr = 2,
+  explicitWidth?: number,
+  explicitHeight?: number,
 ): boolean {
   const canvas = renderer.domElement;
-  const width = Math.max(1, Math.floor(canvas.clientWidth));
-  const height = Math.max(1, Math.floor(canvas.clientHeight));
+  const width = Math.max(1, Math.floor(explicitWidth ?? canvas.clientWidth));
+  const height = Math.max(1, Math.floor(explicitHeight ?? canvas.clientHeight));
   const dpr = Math.min(window.devicePixelRatio || 1, maxDpr);
   const bufferWidth = Math.floor(width * dpr);
   const bufferHeight = Math.floor(height * dpr);

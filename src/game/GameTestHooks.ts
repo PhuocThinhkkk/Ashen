@@ -196,5 +196,6 @@ export function installGameTestHooks(game: Game): void {
     stopBossMusic: (fade?: number) => g.audio.stopBossMusic(fade),
     transitionToBossPhase2: () => g.audio.transitionToBossPhase2(),
     getMobileDeviceController: () => g.mobileDeviceController,
+    getAudioDiagnostics: () => g.audio.getAudioDiagnostics(),
   };
 }

@@ -6,6 +6,13 @@ interface ThreeGameDiagnostics {
   fps?: number;
   onePercentLowFps?: number;
   frameTimeMs?: number;
+  audio?: {
+    contextState: 'suspended' | 'running' | 'closed' | 'uninitialized';
+    isUnlocked: boolean;
+    activePhase: string;
+    isPlaying: boolean;
+    activeTrackId: string | null;
+  };
   player: {
     position: { x: number; y: number; z: number };
     speed: number;
@@ -100,6 +107,13 @@ interface ThreeGameTestHooks {
   startBossMusic?(): void;
   stopBossMusic?(fade?: number): void;
   transitionToBossPhase2?(): void;
+  getAudioDiagnostics?(): {
+    contextState: string;
+    isUnlocked: boolean;
+    activePhase: string;
+    isPlaying: boolean;
+    activeTrackId: string | null;
+  };
 }
 
 interface Window {

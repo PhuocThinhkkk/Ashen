@@ -178,18 +178,29 @@ test.describe('Dynamic Boss Music System', () => {
       { timeout: 20000 },
     );
 
-    // Ensure audio context is unlocked by simulating keypress
+    // 1. Natural user interaction triggers AudioContext resume & Phase 1 playback (NO artificial startBossMusic hook call)
+    await page.locator('#game-canvas').click();
     await page.keyboard.press('KeyW');
-    await page.waitForTimeout(100);
 
-    // 1. Start combat music
-    await page.evaluate(async () => {
-      await window.__THREE_GAME_TEST_HOOKS__?.startBossMusic?.();
-    });
     await page.waitForFunction(() => {
-      const state = window.__THREE_GAME_TEST_HOOKS__?.getMusicState?.();
-      return state && state.activePhase === 'phase1';
-    }, { timeout: 5000 });
+      const audioDiag = window.__THREE_GAME_TEST_HOOKS__?.getAudioDiagnostics?.();
+      const musicState = window.__THREE_GAME_TEST_HOOKS__?.getMusicState?.();
+      const isRunning = audioDiag?.contextState === 'running';
+      const isPhase1 = (audioDiag?.activePhase ?? musicState?.activePhase) === 'phase1';
+      return isRunning && isPhase1;
+    }, { timeout: 8000 });
+
+    const audioStatus = await page.evaluate(() => {
+      return (
+        window.__THREE_GAME_TEST_HOOKS__?.getAudioDiagnostics?.() ??
+        window.__THREE_GAME_DIAGNOSTICS__?.audio ??
+        null
+      );
+    });
+    expect(audioStatus).not.toBeNull();
+    expect(audioStatus?.contextState).toBe('running');
+    expect(audioStatus?.activePhase).toBe('phase1');
+    expect(audioStatus?.isPlaying).toBe(true);
 
     let musicState = await page.evaluate(() => window.__THREE_GAME_TEST_HOOKS__?.getMusicState?.());
     expect(musicState.activePhase).toBe('phase1');

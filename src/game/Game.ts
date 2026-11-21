@@ -97,6 +97,7 @@ export class Game {
   private elapsed = 0;
   private hitstopTimer = 0;
   private pausedForScreenshot = false;
+  private pendingResize = true;
   public isReady = false;
 
   // Previous states for audio & profiler triggers
@@ -189,6 +190,10 @@ export class Game {
     this.installTestHooks();
     this.setupNetworkHandlers();
 
+    window.addEventListener('resize', () => {
+      this.pendingResize = true;
+    });
+
     // Cache initial viewport dimensions
     this.cachedHalfWidth = Math.max(1, (this.canvas.clientWidth || 1280) / 2);
     this.cachedHalfHeight = Math.max(1, (this.canvas.clientHeight || 720) / 2);
@@ -246,7 +251,13 @@ export class Game {
         this.player.mixer.update(0.001);
       }
       if (this.boss.mixer) {
-        for (const action of (this.boss as unknown as { actions: Map<string, THREE.AnimationAction> }).actions.values()) {
+        const bossAny = this.boss as any;
+        if (bossAny.rawClips) {
+          for (const clip of bossAny.rawClips) {
+            bossAny.getAction?.(clip.name);
+          }
+        }
+        for (const action of (bossAny.actions as Map<string, THREE.AnimationAction>)?.values() ?? []) {
           action.play();
           action.setEffectiveWeight(0.0001);
         }
@@ -439,9 +450,12 @@ export class Game {
     }
 
     this.elapsed += delta;
-    if (resizeRenderer(this.renderer, this.camera, this.settingsManager.data.graphics.maxDpr)) {
-      this.cachedHalfWidth = Math.max(1, this.canvas.clientWidth / 2);
-      this.cachedHalfHeight = Math.max(1, this.canvas.clientHeight / 2);
+    if (this.pendingResize) {
+      this.pendingResize = false;
+      if (resizeRenderer(this.renderer, this.camera, this.settingsManager.data.graphics.maxDpr)) {
+        this.cachedHalfWidth = Math.max(1, (this.canvas.clientWidth || 1280) / 2);
+        this.cachedHalfHeight = Math.max(1, (this.canvas.clientHeight || 720) / 2);
+      }
     }
 
     // Hitstop time dilation on impacts (visceral weight without halting browser rendering or dropping frames)
@@ -606,7 +620,9 @@ export class Game {
     );
 
     this.profiler.markUpdateEnd();
-    this.publishDiagnostics();
+    if (this.frame % 4 === 0 || this.frame <= 2) {
+      this.publishDiagnostics();
+    }
   }
 
   private resolveCombatCollisions(): void {
@@ -741,6 +757,7 @@ export class Game {
       fps: snap.fps,
       onePercentLowFps: snap.onePercentLowFps,
       frameTimeMs: snap.frameTimeMs,
+      audio: this.audio.getAudioDiagnostics(),
       player: {
         position: {
           x: this.player.group.position.x,
@@ -790,8 +807,8 @@ export class Game {
         textures: info.memory.textures,
       },
       canvas: {
-        clientWidth: this.canvas.clientWidth,
-        clientHeight: this.canvas.clientHeight,
+        clientWidth: Math.round(this.cachedHalfWidth * 2),
+        clientHeight: Math.round(this.cachedHalfHeight * 2),
         width: this.canvas.width,
         height: this.canvas.height,
         dpr: Math.min(window.devicePixelRatio || 1, this.settingsManager.data.graphics.maxDpr),

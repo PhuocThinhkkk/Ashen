@@ -214,5 +214,11 @@ test.describe('Real-Time Combat Performance Profiler & Stress Test', () => {
     console.log(`Draw Calls: ${snap.drawCalls} | Triangles: ${snap.triangles}`);
     console.log(`JS Heap Memory: ${snap.usedHeapMb ?? 'N/A'} MB`);
     console.log('====================================================');
+
+    // 14. Assert 60 FPS performance thresholds
+    expect(snap.avgFps, 'Average engine framerate must be >= 55 FPS').toBeGreaterThanOrEqual(55);
+    expect(snap.onePercentLowFps, '1% low framerate must be >= 30 FPS').toBeGreaterThanOrEqual(30);
+    expect(snap.spikeCount33ms, 'Spikes > 33.3ms must be <= 5').toBeLessThanOrEqual(5);
+    expect(snap.cpuTimeMs, 'CPU frame logic time must be < 14ms').toBeLessThan(14);
   });
 });
