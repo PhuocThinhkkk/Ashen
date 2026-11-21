@@ -522,4 +522,109 @@ test.describe('In-Game Drinking-While-Walking & Jumping Combat Integration', () 
     expect(consoleErrors).toEqual([]);
     expect(pageErrors).toEqual([]);
   });
+
+  test('Boss dual-layer bone splitting isolates hips/legs to lower clip and spine/arms/swords to upper clip', () => {
+    const boneNames = [
+      'mixamorig:Hips',
+      'mixamorig:LeftUpLeg',
+      'mixamorig:LeftLeg',
+      'mixamorig:LeftFoot',
+      'mixamorig:RightUpLeg',
+      'mixamorig:RightLeg',
+      'mixamorig:RightFoot',
+      'mixamorig:Spine',
+      'mixamorig:Spine1',
+      'mixamorig:Neck',
+      'mixamorig:Head',
+      'mixamorig:LeftArm',
+      'mixamorig:LeftHand',
+      'mixamorig:RightArm',
+      'mixamorig:RightHand',
+    ];
+
+    const tracks: THREE.KeyframeTrack[] = [];
+    const times = [0, 0.5, 1.0];
+    const quatValues = [0, 0, 0, 1, 0, 0.1, 0, 0.99, 0, 0, 0, 1];
+    tracks.push(new THREE.VectorKeyframeTrack('mixamorig:Hips.position', times, [0, 0, 0, 0, 0, 0, 0, 0, 0]));
+    for (const b of boneNames) {
+      tracks.push(new THREE.QuaternionKeyframeTrack(`${b}.quaternion`, times, quatValues));
+    }
+
+    const turnClip = new THREE.AnimationClip('turn_left', 1.0, tracks);
+    const { upper, lower } = splitClipByBodyPart(turnClip);
+
+    const lowerTrackNames = lower.tracks.map((t) => t.name);
+    const upperTrackNames = upper.tracks.map((t) => t.name);
+
+    // Lower clip contains hips and leg tracks exclusively
+    expect(lowerTrackNames).toContain('mixamorig:Hips.position');
+    expect(lowerTrackNames).toContain('mixamorig:Hips.quaternion');
+    expect(lowerTrackNames).toContain('mixamorig:LeftUpLeg.quaternion');
+    expect(lowerTrackNames).toContain('mixamorig:RightFoot.quaternion');
+
+    // Upper clip contains spine, arms, and hands exclusively (dual sword hold)
+    expect(upperTrackNames).toContain('mixamorig:Spine.quaternion');
+    expect(upperTrackNames).toContain('mixamorig:Neck.quaternion');
+    expect(upperTrackNames).toContain('mixamorig:LeftHand.quaternion');
+    expect(upperTrackNames).toContain('mixamorig:RightHand.quaternion');
+
+    // Mutually exclusive: 0 track overlap
+    for (const name of lowerTrackNames) {
+      expect(upperTrackNames).not.toContain(name);
+    }
+  });
+
+  test('Boss lower-body turn layer preserves independent upper-body attack execution without resetting swords', () => {
+    // Construct scene and mixer
+    const root = new THREE.Group();
+    const hips = new THREE.Bone();
+    hips.name = 'mixamorig:Hips';
+    const spine = new THREE.Bone();
+    spine.name = 'mixamorig:Spine';
+    const rightHand = new THREE.Bone();
+    rightHand.name = 'mixamorig:RightHand';
+    hips.add(spine);
+    spine.add(rightHand);
+    root.add(hips);
+
+    const mixer = new THREE.AnimationMixer(root);
+
+    // Create upper body attack clip and lower body turn clip
+    const times = [0, 0.5, 1.0];
+    const quatValues = [0, 0, 0, 1, 0, 0.1, 0, 0.99, 0, 0, 0, 1];
+
+    const upperTracks = [
+      new THREE.QuaternionKeyframeTrack('mixamorig:Spine.quaternion', times, quatValues),
+      new THREE.QuaternionKeyframeTrack('mixamorig:RightHand.quaternion', times, quatValues),
+    ];
+    const upperAttackClip = new THREE.AnimationClip('attack_combo__upper', 1.0, upperTracks);
+
+    const lowerTracks = [
+      new THREE.QuaternionKeyframeTrack('mixamorig:Hips.quaternion', times, quatValues),
+    ];
+    const lowerTurnClip = new THREE.AnimationClip('turn_left__lower', 1.0, lowerTracks);
+
+    const attackAction = mixer.clipAction(upperAttackClip);
+    attackAction.setLoop(THREE.LoopOnce, 1);
+    attackAction.clampWhenFinished = true;
+    attackAction.setEffectiveWeight(1.0);
+    attackAction.play();
+
+    const turnAction = mixer.clipAction(lowerTurnClip);
+    turnAction.setLoop(THREE.LoopRepeat, Infinity);
+    turnAction.setEffectiveWeight(1.0);
+    turnAction.play();
+
+    // Advance mixer simulation by 0.2s
+    mixer.update(0.2);
+
+    // Both actions run concurrently on their respective bone hierarchies with full weight
+    expect(attackAction.isRunning()).toBe(true);
+    expect(turnAction.isRunning()).toBe(true);
+    expect(attackAction.getEffectiveWeight()).toBe(1.0);
+    expect(turnAction.getEffectiveWeight()).toBe(1.0);
+
+    // Attack action time progresses independently
+    expect(attackAction.time).toBeCloseTo(0.2, 2);
+  });
 });

@@ -137,6 +137,9 @@ export function installGameTestHooks(game: Game): void {
       locomotionWeights: { ...g.boss.currentWeights },
       locomotionMasterWeight: g.boss.locomotionMasterWeight,
       activeClip: g.boss.currentActionName,
+      upperClip: g.boss.currentUpperActionName,
+      lowerClip: g.boss.currentLowerActionName,
+      turnDirection: g.boss.turnDirection,
       yaw: g.boss.group.rotation.y,
     }),
     queueBossCombo: (openerKey: string, followupKey: string) => {

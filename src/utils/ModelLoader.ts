@@ -44,6 +44,8 @@ export class ModelLoader {
       walk_back: ['walk_back', 'walk_backward', 'backward', 'Great Sword Walk backward'],
       strafe_left: ['strafe_left', 'Great Sword Strafe Left'],
       strafe_right: ['strafe_right', 'Great Sword Strafe right'],
+      turn_left: ['turn_left', 'Turn Left', 'turn left', 'turnleft', 'TurnLeft', 'strafe_left'],
+      turn_right: ['turn_right', 'Turn Right', 'turn right', 'turnright', 'TurnRight', 'strafe_right'],
       run: ['run', 'Great Sword Run', 'HumanArmature|Run', 'Run-loop'],
       dodge: ['dodge', 'Stand To Roll', 'stand_to_roll', 'HumanArmature|Roll_sword', 'HumanArmature|Roll', 'Roll', 'Dive_Roll'],
       attack_light: ['attack_light', 'Great Sword Light Attack', 'HumanArmature|Run_swordAttack', 'Attack1', 'Great_Sword_Slash'],

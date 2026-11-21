@@ -221,14 +221,14 @@ test.describe('FromSoftware-Style Boss AI & Strafe Subgoal Stack', () => {
     expect(ai.getCurrentSubgoal()?.strafeDir).toBe(-1);
   });
 
-  test('Clamped turn rate tracks during windup and freezes during active swing frames', () => {
+  test('In-place turning active during non-jump attacks, while jump attack freezes rotation during airborne leap', () => {
     let faceTargetCalledCount = 0;
     const mockBoss: any = {
       state: 'windup',
       attackTimer: 0,
       group: new THREE.Group(),
       radius: 1.0,
-      currentAttack: BOSS_ATTACKS.downward, // startup 0.65, active 0.3, recovery 0.8
+      currentAttack: BOSS_ATTACKS.downward, // non-jump attack
       distanceTo: () => 3.0,
       faceTarget: (_pos: THREE.Vector3, _rate: number, _dt: number) => {
         faceTargetCalledCount++;
@@ -249,20 +249,22 @@ test.describe('FromSoftware-Style Boss AI & Strafe Subgoal Stack', () => {
       isStaggered: false,
     };
 
-    // 1. Windup frame (attackTimer = 0.3s < startup 0.95s)
-    mockBoss.attackTimer = 0.3;
-    ai.update(0.016, playerSnapshot);
-    expect(mockBoss.state).toBe('windup');
-    expect(ai.isAttackActiveFrames).toBe(false);
-    expect(faceTargetCalledCount).toBe(1);
-
-    // 2. Active frame (attackTimer = 1.0s >= startup 0.95s and < startup+active 1.17s)
+    // 1. Non-jump attack active frame: in-place rotation tracking remains enabled
     mockBoss.attackTimer = 1.0;
     ai.update(0.016, playerSnapshot);
     expect(mockBoss.state).toBe('active');
-    expect(ai.isAttackActiveFrames).toBe(true); // ROTATION FROZEN!
-    // faceTarget should NOT have been called during active frames
+    expect(ai.isAttackActiveFrames).toBe(false); // In-place rotation allowed for non-jump attacks
     expect(faceTargetCalledCount).toBe(1);
+
+    // 2. Jump attack active frame: mid-air rotation is frozen
+    faceTargetCalledCount = 0;
+    mockBoss.currentAttack = BOSS_ATTACKS.jump;
+    mockBoss.state = 'windup';
+    mockBoss.attackTimer = 1.2; // in active airborne phase
+    ai.update(0.016, playerSnapshot);
+    expect(mockBoss.state).toBe('active');
+    expect(ai.isAttackActiveFrames).toBe(true); // Jump leap rotation is frozen
+    expect(faceTargetCalledCount).toBe(0);
   });
 
   // ---------------------------------------------------------------------------
@@ -398,5 +400,151 @@ test.describe('FromSoftware-Style Boss AI & Strafe Subgoal Stack', () => {
     expect(branchedDiag.attackCooldown).toBeGreaterThan(0);
     // Followup attack was aborted
     expect(branchedDiag.goalStack.some((s: any) => s.attack?.name === BOSS_ATTACKS.downward.name)).toBe(false);
+  });
+
+  // ---------------------------------------------------------------------------
+  // 5. ATTACK MOVEMENT LOCK, JUMP ATTACK EXCEPTION & IN-PLACE TURNING TESTS
+  // ---------------------------------------------------------------------------
+  test('Non-jump attacks produce strictly 0 positional movement displacement', () => {
+    const bossGroup = new THREE.Group();
+    bossGroup.position.set(0, 0, 0);
+
+    const mockBoss: any = {
+      state: 'idle',
+      stateTimer: 0,
+      group: bossGroup,
+      rawClips: [],
+      currentAttack: null,
+      attackTimer: 0,
+      hasHitCurrentSwing: false,
+      hasSpawnedSlashArc: false,
+      hasTriggeredGroundSlam: false,
+      telegraphGlow: 0,
+      distanceTo: () => 3.0,
+      faceTarget: () => {},
+      updateLocomotionWeights: () => {},
+      startAttackAction: () => {},
+      endAttackAction: () => {},
+    };
+
+    const ai = new BossAI(mockBoss);
+    // Start non-jump combo attack
+    ai.startAttack(BOSS_ATTACKS.combo);
+    expect(mockBoss.state).toBe('windup');
+
+    const playerPos = new THREE.Vector3(0, 0, 3);
+    const initialPos = bossGroup.position.clone();
+
+    // Step through windup, active swing, and recovery phases
+    const dt = 0.016;
+    for (let t = 0; t < 2.0; t += dt) {
+      ai.update(dt, { position: playerPos, velocity: new THREE.Vector3(), isHealing: false, isAttacking: false, isStaggered: false });
+    }
+
+    // Verify position did not move at all during non-jump attack
+    expect(bossGroup.position.x).toBeCloseTo(initialPos.x, 5);
+    expect(bossGroup.position.y).toBeCloseTo(initialPos.y, 5);
+    expect(bossGroup.position.z).toBeCloseTo(initialPos.z, 5);
+  });
+
+  test('Boss rotates toward target and triggers lower-body turn during non-jump attacks', () => {
+    let turnedDirection: 'left' | 'right' | null = null;
+    let faceTargetCalled = false;
+    const bossGroup = new THREE.Group();
+    bossGroup.rotation.y = 0; // facing -Z
+
+    const mockBoss: any = {
+      state: 'idle',
+      stateTimer: 0,
+      group: bossGroup,
+      rawClips: [],
+      currentAttack: null,
+      attackTimer: 0,
+      hasHitCurrentSwing: false,
+      hasSpawnedSlashArc: false,
+      hasTriggeredGroundSlam: false,
+      telegraphGlow: 0,
+      distanceTo: () => 3.0,
+      setTurnDirection: (dir: 'left' | 'right' | null) => {
+        turnedDirection = dir;
+      },
+      faceTarget: (targetPos: THREE.Vector3, turnRate: number, dt?: number) => {
+        faceTargetCalled = true;
+        const dx = targetPos.x - bossGroup.position.x;
+        const dz = targetPos.z - bossGroup.position.z;
+        const targetAngle = Math.atan2(-dx, -dz);
+        let diff = targetAngle - bossGroup.rotation.y;
+        while (diff > Math.PI) diff -= Math.PI * 2;
+        while (diff < -Math.PI) diff += Math.PI * 2;
+        if (diff > 0.08) turnedDirection = 'left';
+        else if (diff < -0.08) turnedDirection = 'right';
+        else turnedDirection = null;
+        if (dt) bossGroup.rotation.y += Math.sign(diff) * Math.min(Math.abs(diff), turnRate * dt);
+      },
+      updateLocomotionWeights: () => {},
+      startAttackAction: () => {},
+      endAttackAction: () => {},
+    };
+
+    const ai = new BossAI(mockBoss);
+    ai.startAttack(BOSS_ATTACKS.combo);
+
+    // Player moves to the left flank (x = -4, z = 0)
+    const playerFlankPos = new THREE.Vector3(-4, 0, 0);
+
+    // Step into active attack phase
+    const dt = 0.016;
+    for (let t = 0; t < 0.6; t += dt) {
+      ai.update(dt, { position: playerFlankPos, velocity: new THREE.Vector3(), isHealing: false, isAttacking: false, isStaggered: false });
+    }
+
+    expect(faceTargetCalled).toBe(true);
+    expect(turnedDirection).toBe('left');
+    expect(bossGroup.rotation.y).not.toBe(0);
+  });
+
+  test('Boss endAttackAction always restores non-zero idle action weight preventing T-Pose', () => {
+    let idlePlaying = false;
+    let idleWeight = 0;
+
+    const mockIdleAction: any = {
+      enabled: false,
+      isRunning: () => idlePlaying,
+      play: () => { idlePlaying = true; return mockIdleAction; },
+      fadeIn: () => mockIdleAction,
+      setEffectiveWeight: (w: number) => { idleWeight = w; return mockIdleAction; },
+    };
+
+    const mockAttackAction: any = {
+      fadeOut: () => {},
+    };
+
+    const mockBoss: any = {
+      currentAttackAction: mockAttackAction,
+      idleAction: mockIdleAction,
+      isLocomotionActive: false,
+      kinematicController: { reset: () => {} },
+      endAttackAction: function() {
+        if (this.currentAttackAction) {
+          this.currentAttackAction.fadeOut(0.15);
+          this.currentAttackAction = null;
+        }
+        if (this.idleAction) {
+          this.idleAction.enabled = true;
+          this.idleAction.play();
+          this.idleAction.setEffectiveWeight(1.0);
+          this.idleAction.fadeIn(0.15);
+        }
+        this.isLocomotionActive = true;
+        this.kinematicController?.reset();
+      },
+    };
+
+    mockBoss.endAttackAction();
+
+    expect(mockIdleAction.enabled).toBe(true);
+    expect(idlePlaying).toBe(true);
+    expect(idleWeight).toBe(1.0);
+    expect(mockBoss.isLocomotionActive).toBe(true);
   });
 });

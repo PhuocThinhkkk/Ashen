@@ -22,6 +22,9 @@ interface ThreeGameDiagnostics {
     isInvulnerable: boolean;
     loaded?: boolean;
     activeClip?: string;
+    upperClip?: string;
+    lowerClip?: string;
+    turnDirection?: string | null;
     modelId?: string;
     upperClip?: string;
     lowerClip?: string;
@@ -40,6 +43,9 @@ interface ThreeGameDiagnostics {
     isPhase2: boolean;
     loaded?: boolean;
     activeClip?: string;
+    upperClip?: string;
+    lowerClip?: string;
+    turnDirection?: string | null;
     modelId?: string;
     subgoal?: string;
     attackCooldown?: number;

@@ -33,13 +33,13 @@ export const BOSS_CONFIG = {
   jumpRunEndSpeed: 5.0,   // Run-up acceleration peak (m/s)
   jumpLeapSpeed: 9.32,    // Airborne forward leap speed (m/s)
 
-  // 7. Forward Lunge Impulses per Attack (meters)
+  // 7. Forward Lunge Impulses per Attack (meters) - locked to 0 for stationary non-jump attacks
   impulses: {
-    combo: 2.4,
+    combo: 0.0,
     jump: 7.0,
-    downward: 0.05,
+    downward: 0.0,
     spin360: 0.0,
-    kick: 0.1,
+    kick: 0.0,
   },
 
   // 8. Heal Punish Behavior (Set true to automatically interrupt drink with jump attack)
@@ -436,14 +436,13 @@ export class BossAI {
       this.isAttackActiveFrames = false;
       const progress = b.attackTimer / startup;
 
-      // Capped turn rate wind-up tracking (only during startup frames)
+      // Capped turn rate wind-up tracking
       b.faceTarget(playerPos, this.maxTurnRate, dt);
       b.telegraphGlow = progress;
     } else if (b.attackTimer < startup + active) {
       // Hitbox / active swing frame
       if (b.state !== 'active') {
         b.state = 'active';
-        this.isAttackActiveFrames = true; // FREEZE ROTATION
         if (!b.hasSpawnedSlashArc) {
           b.hasSpawnedSlashArc = true;
           b.vfxSystem?.spawnAttackSlashArc(
@@ -455,25 +454,30 @@ export class BossAI {
           );
         }
         if (b.currentAttack.animationClip === 'attack_jump') {
-          b.triggerJumpGroundSlam();
+          b.triggerJumpGroundSlam?.();
         }
       }
-      this.isAttackActiveFrames = true; // Frozen rotation
       b.telegraphGlow = 1.0;
 
-      const yaw = b.group.rotation.y;
-      const fwd = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw)).normalize();
-
-      if (b.currentAttack.animationClip !== 'attack_jump') {
-        const clipKey = (b.currentAttack.animationClip || '').replace('attack_', '');
-        const impulseDist = (BOSS_CONFIG.impulses as Record<string, number>)[clipKey] ?? b.currentAttack.forwardImpulse;
-        const impulse = (impulseDist / active) * dt;
-        b.group.position.addScaledVector(fwd, impulse);
+      if (b.currentAttack.animationClip === 'attack_jump') {
+        // Jump Attack exception: freeze mid-air rotation during leap, driven exclusively by KinematicCombatController
+        this.isAttackActiveFrames = true;
+      } else {
+        // Non-jump attacks: lock positional movement (0 translation), allow in-place turning towards player
+        this.isAttackActiveFrames = false;
+        b.faceTarget(playerPos, this.maxTurnRate, dt);
       }
     } else if (b.attackTimer < startup + active + recovery) {
       b.state = 'recovery';
-      this.isAttackActiveFrames = false; // Remains unfaced to player so player can flank/dodge behind
       b.telegraphGlow = Math.max(0, 1.0 - (b.attackTimer - startup - active) / (recovery * 0.5));
+      if (b.currentAttack.animationClip === 'attack_jump') {
+        this.isAttackActiveFrames = false;
+        b.setTurnDirection?.(null);
+      } else {
+        // Non-jump attacks: allow in-place turning towards target during recovery
+        this.isAttackActiveFrames = false;
+        b.faceTarget(playerPos, this.maxTurnRate, dt);
+      }
     } else {
       // Attack complete!
       b.state = 'idle';
@@ -481,6 +485,7 @@ export class BossAI {
       b.currentAttack = null;
       b.telegraphGlow = 0;
       this.isAttackActiveFrames = false;
+      b.setTurnDirection?.(null);
 
       // Cross-fade back into locomotion blend layer
       b.endAttackAction();
