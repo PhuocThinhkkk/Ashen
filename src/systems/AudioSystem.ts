@@ -2,6 +2,7 @@ import { BossMusicController } from '../audio/BossMusicController';
 import { BossMusicStorage } from '../audio/BossMusicStorage';
 import { DEFAULT_PROCEDURAL_PRESET } from '../audio/types';
 import { SettingsManager } from './SettingsManager';
+import { SfxGenerators } from '../audio/synth/sfxGenerators';
 
 export type SoundKey =
   | 'swingLight'
@@ -262,85 +263,18 @@ export class AudioSystem {
       : this.playBuffer(this.soundBuffers.swingLight, 0.65);
 
     if (played) return;
-
     if (!this.context || this.context.state !== 'running') return;
-    const now = this.context.currentTime;
-
-    // Filtered noise swoosh fallback
-    const bufferSize = this.context.sampleRate * (heavy ? 0.28 : 0.18);
-    const buffer = this.context.createBuffer(1, bufferSize, this.context.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-      data[i] = Math.random() * 2 - 1;
-    }
-
-    const noise = this.context.createBufferSource();
-    noise.buffer = buffer;
-
-    const filter = this.context.createBiquadFilter();
-    filter.type = 'bandpass';
-    filter.frequency.setValueAtTime(heavy ? 600 : 900, now);
-    filter.frequency.exponentialRampToValueAtTime(heavy ? 180 : 320, now + (heavy ? 0.25 : 0.16));
-    filter.Q.setValueAtTime(3.5, now);
-
-    const gain = this.context.createGain();
-    gain.gain.setValueAtTime(0.001, now);
-    gain.gain.linearRampToValueAtTime(heavy ? 0.35 : 0.22, now + 0.04);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + (heavy ? 0.28 : 0.18));
-
-    noise.connect(filter).connect(gain).connect(this.sfxDestination);
-    noise.start(now);
+    SfxGenerators.playSwordSwoosh(this.context, this.sfxDestination, heavy);
   }
 
   public dodgeWhoosh(): void {
     if (!this.context || this.context.state !== 'running') return;
-    const now = this.context.currentTime;
-
-    const osc = this.context.createOscillator();
-    const gain = this.context.createGain();
-
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(260, now);
-    osc.frequency.exponentialRampToValueAtTime(90, now + 0.25);
-
-    gain.gain.setValueAtTime(0.001, now);
-    gain.gain.linearRampToValueAtTime(0.18, now + 0.05);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.28);
-
-    osc.connect(gain).connect(this.sfxDestination);
-    osc.start(now);
-    osc.stop(now + 0.3);
+    SfxGenerators.playDodgeWhoosh(this.context, this.sfxDestination);
   }
 
   public hitImpact(isHeavy = false): void {
     if (!this.context || this.context.state !== 'running') return;
-    const now = this.context.currentTime;
-
-    // Punchy low thud
-    const osc = this.context.createOscillator();
-    const oscGain = this.context.createGain();
-    osc.type = 'triangle';
-    osc.frequency.setValueAtTime(isHeavy ? 140 : 200, now);
-    osc.frequency.exponentialRampToValueAtTime(35, now + (isHeavy ? 0.22 : 0.12));
-
-    oscGain.gain.setValueAtTime(isHeavy ? 0.45 : 0.28, now);
-    oscGain.gain.exponentialRampToValueAtTime(0.0001, now + (isHeavy ? 0.24 : 0.14));
-
-    osc.connect(oscGain).connect(this.sfxDestination);
-    osc.start(now);
-    osc.stop(now + 0.25);
-
-    // Metallic ring
-    const ring = this.context.createOscillator();
-    const ringGain = this.context.createGain();
-    ring.type = 'sine';
-    ring.frequency.setValueAtTime(isHeavy ? 1240 : 1680, now);
-    ringGain.gain.setValueAtTime(isHeavy ? 0.25 : 0.15, now);
-    ringGain.gain.exponentialRampToValueAtTime(0.0001, now + (isHeavy ? 0.35 : 0.18));
-
-    ring.connect(ringGain).connect(this.sfxDestination);
-    ring.start(now);
-    ring.stop(now + 0.36);
+    SfxGenerators.playHitImpact(this.context, this.sfxDestination, isHeavy);
   }
 
   public hitConfirm(isHeavy = false): void {

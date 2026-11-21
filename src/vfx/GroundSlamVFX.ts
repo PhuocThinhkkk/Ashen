@@ -23,25 +23,14 @@ import {
 } from 'three.quarks';
 import { SettingsManager } from '../systems/SettingsManager';
 import { VFXTextureFactory } from './VFXTextureFactory';
-
-interface PooledDecal {
-  mesh: THREE.Mesh;
-  material: THREE.MeshBasicMaterial;
-  active: boolean;
-  timer: number;
-  duration: number;
-}
+import { GroundDecalPool } from './groundSlam/GroundDecalPool';
 
 export class GroundSlamVFX {
   private scene: THREE.Scene;
   private batchRenderer: BatchedRenderer;
 
   // 1. Planar Ground Crack Decals Pool
-  private crackTexture: THREE.Texture;
-  private decalPool: PooledDecal[] = [];
-  private decalIndex = 0;
-  private readonly maxDecals = 6;
-  private decalGeometry: THREE.BufferGeometry;
+  private decalPool: GroundDecalPool;
 
   // 2. Rolling Dust Pool (three.quarks DonutEmitter)
   private dustPool: ParticleSystem[] = [];
@@ -67,36 +56,8 @@ export class GroundSlamVFX {
     this.batchRenderer = batchRenderer;
     const texFactory = VFXTextureFactory.getInstance();
 
-    this.crackTexture = this.createCrackTexture();
-
-    // 1. Initialize Planar Decal Pool (Zero runtime allocations)
-    this.decalGeometry = new THREE.PlaneGeometry(5.8, 5.8);
-    this.decalGeometry.rotateX(-Math.PI / 2);
-
-    for (let i = 0; i < this.maxDecals; i++) {
-      const decalMat = new THREE.MeshBasicMaterial({
-        map: this.crackTexture,
-        transparent: true,
-        opacity: 0,
-        depthTest: true,
-        depthWrite: false,
-        polygonOffset: true,
-        polygonOffsetFactor: -4,
-      });
-
-      const decalMesh = new THREE.Mesh(this.decalGeometry, decalMat);
-      decalMesh.visible = false;
-      decalMesh.frustumCulled = false;
-      this.scene.add(decalMesh);
-
-      this.decalPool.push({
-        mesh: decalMesh,
-        material: decalMat,
-        active: false,
-        timer: 0,
-        duration: 4.5,
-      });
-    }
+    // 1. Initialize Planar Decal Pool via modular GroundDecalPool
+    this.decalPool = new GroundDecalPool(this.scene, 6);
 
     // 2. Initialize Rolling Dust Ring with three.quarks
     this.dustMaterial = new THREE.MeshBasicMaterial({
@@ -286,7 +247,7 @@ export class GroundSlamVFX {
   }
 
   public getActiveDecalCount(): number {
-    return this.decalPool.filter((d) => d.active).length;
+    return this.decalPool.getActiveCount();
   }
 
   public getActiveShockwaveCount(): number {
@@ -297,12 +258,6 @@ export class GroundSlamVFX {
    * Immediately recycles all active ground crack decals and resets particle emitters.
    */
   public reset(): void {
-    for (const decal of this.decalPool) {
-      decal.active = false;
-      decal.mesh.visible = false;
-      decal.timer = 0;
-      decal.material.opacity = 0;
-    }
     for (const ps of this.dustPool) {
       ps.restart();
     }
@@ -312,7 +267,6 @@ export class GroundSlamVFX {
     for (const ps of this.shockwavePool) {
       ps.restart();
     }
-    this.decalIndex = 0;
     this.dustIndex = 0;
     this.debrisIndex = 0;
     this.shockwaveIndex = 0;
@@ -324,12 +278,9 @@ export class GroundSlamVFX {
   public prewarm(renderer: THREE.WebGLRenderer, camera: THREE.Camera): void {
     if (typeof window === 'undefined' || !renderer) return;
     try {
-      if (this.decalPool[0]) this.decalPool[0].mesh.visible = true;
       renderer.compile(this.scene, camera);
     } catch {
       // Best-effort warm up
-    } finally {
-      if (this.decalPool[0]) this.decalPool[0].mesh.visible = false;
     }
   }
 
@@ -349,16 +300,7 @@ export class GroundSlamVFX {
 
     // 1. Ground Decal from Pre-allocated Pool (Zero runtime allocations)
     if (vfxSettings.groundDecals) {
-      const decal = this.decalPool[this.decalIndex];
-      this.decalIndex = (this.decalIndex + 1) % this.maxDecals;
-
-      decal.active = true;
-      decal.timer = 0;
-      decal.duration = 4.5;
-      decal.mesh.position.set(ip.x, 0.02, ip.z);
-      decal.mesh.rotation.y = Math.random() * Math.PI * 2;
-      decal.material.opacity = 0.95;
-      decal.mesh.visible = true;
+      this.decalPool.spawn(ip);
     }
 
     // 2. Grounded Expanding Shockwave Ring (three.quarks HorizontalBillBoard)
@@ -395,111 +337,11 @@ export class GroundSlamVFX {
   }
 
   public update(delta: number): void {
-    // Update Active Decals (fade out and recycle)
-    for (const decal of this.decalPool) {
-      if (decal.active) {
-        decal.timer += delta;
-        if (decal.timer >= decal.duration) {
-          decal.active = false;
-          decal.mesh.visible = false;
-        } else if (decal.timer > decal.duration * 0.65) {
-          const fade = 1.0 - (decal.timer - decal.duration * 0.65) / (decal.duration * 0.35);
-          decal.material.opacity = Math.max(0, fade * 0.95);
-        }
-      }
-    }
-  }
-
-  /**
-   * Procedural Elden Ring-style ground crater & fissure crack decal texture.
-   */
-  private createCrackTexture(): THREE.Texture {
-    if (typeof document === 'undefined') {
-      const data = new Uint8Array([20, 15, 10, 255]);
-      return new THREE.DataTexture(data, 1, 1);
-    }
-
-    const size = 256;
-    const canvas = document.createElement('canvas');
-    canvas.width = size;
-    canvas.height = size;
-    const ctx = canvas.getContext('2d')!;
-
-    const cx = size / 2;
-    const cy = size / 2;
-
-    ctx.clearRect(0, 0, size, size);
-
-    // Scorched radial ground burn
-    const burnGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, size * 0.44);
-    burnGrad.addColorStop(0, 'rgba(18, 12, 10, 0.92)');
-    burnGrad.addColorStop(0.35, 'rgba(32, 22, 16, 0.7)');
-    burnGrad.addColorStop(0.7, 'rgba(40, 28, 18, 0.3)');
-    burnGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
-    ctx.fillStyle = burnGrad;
-    ctx.beginPath();
-    ctx.arc(cx, cy, size * 0.44, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Central jagged crater
-    ctx.fillStyle = 'rgba(10, 8, 8, 0.98)';
-    ctx.beginPath();
-    const craterPoints = 14;
-    for (let i = 0; i < craterPoints; i++) {
-      const angle = (i / craterPoints) * Math.PI * 2;
-      const r = (size * 0.1) * (0.7 + Math.random() * 0.6);
-      const px = cx + Math.cos(angle) * r;
-      const py = cy + Math.sin(angle) * r;
-      if (i === 0) ctx.moveTo(px, py);
-      else ctx.lineTo(px, py);
-    }
-    ctx.closePath();
-    ctx.fill();
-
-    // Radial jagged crack fissures
-    const numFissures = 10;
-    for (let f = 0; f < numFissures; f++) {
-      let angle = (f / numFissures) * Math.PI * 2 + (Math.random() - 0.5) * 0.35;
-      let curX = cx;
-      let curY = cy;
-      const length = (size * 0.42) * (0.6 + Math.random() * 0.5);
-      const steps = 8;
-      const stepLen = length / steps;
-
-      ctx.beginPath();
-      ctx.moveTo(curX, curY);
-
-      for (let s = 0; s < steps; s++) {
-        angle += (Math.random() - 0.5) * 0.48;
-        curX += Math.cos(angle) * stepLen;
-        curY += Math.sin(angle) * stepLen;
-        ctx.lineTo(curX, curY);
-      }
-
-      ctx.lineWidth = 2.4 * (1.0 - (f % 3) * 0.2);
-      ctx.strokeStyle = 'rgba(8, 6, 6, 0.95)';
-      ctx.stroke();
-
-      // Ember glow along fissure root
-      ctx.lineWidth = 1.0;
-      ctx.strokeStyle = 'rgba(255, 120, 30, 0.45)';
-      ctx.stroke();
-    }
-
-    const tex = new THREE.CanvasTexture(canvas);
-    tex.generateMipmaps = false;
-    tex.minFilter = THREE.LinearFilter;
-    tex.magFilter = THREE.LinearFilter;
-    return tex;
+    this.decalPool.update(delta);
   }
 
   public dispose(): void {
-    for (const d of this.decalPool) {
-      this.scene.remove(d.mesh);
-      d.material.dispose();
-    }
-    this.decalPool = [];
-    this.decalGeometry.dispose();
+    this.decalPool.dispose();
 
     for (const ps of this.dustPool) {
       this.batchRenderer.deleteSystem(ps);
@@ -521,7 +363,6 @@ export class GroundSlamVFX {
     }
     this.shockwavePool = [];
 
-    this.crackTexture.dispose();
     this.dustMaterial.dispose();
     this.shockwaveMaterial.dispose();
   }
