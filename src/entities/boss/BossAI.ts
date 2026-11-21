@@ -129,7 +129,7 @@ export class BossAI {
   }
 
   public startAttack(attack: AttackDefinition): void {
-    const b = this.boss as any;
+    const b = this.boss;
     b.currentAttack = attack;
     b.attackTimer = 0;
     b.state = 'windup';
@@ -157,7 +157,7 @@ export class BossAI {
     arena?: any,
     arenaRadius = 21.0,
   ): void {
-    const b = this.boss as any;
+    const b = this.boss;
 
     if (b.state === 'dead') {
       return;
@@ -173,10 +173,34 @@ export class BossAI {
       return;
     }
 
-    // --- Interrupt Observer (Frame-1 Punish) ---
-    // While the boss is in STRAFE_INSPECT or APPROACH, monitor player.isHealing every frame.
-    // The exact frame the player begins healing/drinking, clear goalStack, reset attackCooldown = 0,
-    // and immediately push a fast gap-closing punish lunge (ATTACK).
+    if (this.checkAndExecuteHealPunish(player)) {
+      return;
+    }
+
+    // --- Attack State Execution ---
+    if (b.state === 'windup' || b.state === 'active' || b.state === 'recovery') {
+      this.updateAttackFrames(dt, player.position);
+      return;
+    }
+
+    // --- Attack Cooldown & Stack Population ---
+    this.updateCooldownAndEnsureSubgoal(dt);
+
+    // If stack is completely empty, pick next goal based on player distance
+    if (this.goalStack.length === 0) {
+      this.evaluateNextGoalByDistance(dt, player.position);
+      return;
+    }
+
+    // --- Execute Active Subgoal (Top of LIFO stack) ---
+    const activeSubgoal = this.goalStack[this.goalStack.length - 1];
+    if (!activeSubgoal) return;
+
+    this.executeActiveSubgoal(dt, activeSubgoal, player, arena, arenaRadius);
+  }
+
+  private checkAndExecuteHealPunish(player: PlayerCombatSnapshot): boolean {
+    const b = this.boss;
     const isStrafeOrApproach =
       b.state === 'idle' ||
       b.state === 'approach' ||
@@ -191,16 +215,12 @@ export class BossAI {
         attack: punishAttack,
       });
       this.startAttack(punishAttack);
-      return;
+      return true;
     }
+    return false;
+  }
 
-    // --- Attack State Execution ---
-    if (b.state === 'windup' || b.state === 'active' || b.state === 'recovery') {
-      this.updateAttackFrames(dt, player.position);
-      return;
-    }
-
-    // --- Attack Cooldown & Stack Population ---
+  private updateCooldownAndEnsureSubgoal(dt: number): void {
     if (this.attackCooldown > 0) {
       this.attackCooldown = Math.max(0, this.attackCooldown - dt);
       if (this.goalStack.length === 0) {
@@ -214,58 +234,63 @@ export class BossAI {
         });
       }
     }
+  }
 
-    // If stack is completely empty, pick next goal based on player distance
-    if (this.goalStack.length === 0) {
-      const dist = b.distanceTo(player.position);
-      if (dist <= 3.6) {
-        // Close range: combo
+  private evaluateNextGoalByDistance(dt: number, playerPos: THREE.Vector3): void {
+    const b = this.boss;
+    const dist = b.distanceTo(playerPos);
+    if (dist <= 3.6) {
+      // Close range: combo
+      b.stateTimer = 0;
+      const opener = Math.random() < 0.4 ? BOSS_ATTACKS.kick : BOSS_ATTACKS.combo;
+      const followup = b.isPhase2 && Math.random() < 0.5 ? BOSS_ATTACKS.spin360 : BOSS_ATTACKS.downward;
+      this.queueCombo(opener, followup);
+    } else if (dist <= 6.0) {
+      // Mid range: approach or combo
+      b.stateTimer = 0;
+      if (b.isPhase2 && Math.random() < 0.35) {
+        this.startAttack(BOSS_ATTACKS.spin360);
+      } else if (Math.random() < 0.5) {
+        this.pushSubgoal({
+          type: 'APPROACH',
+          duration: 2.2,
+          timer: 0,
+          preferredDistance: 3.2,
+        });
+      } else {
+        this.queueCombo(BOSS_ATTACKS.combo, BOSS_ATTACKS.downward);
+      }
+    } else {
+      // Long range (> 6m): brief initial observation before approaching
+      b.stateTimer += dt;
+      b.state = 'idle';
+      b.faceTarget(playerPos, this.maxTurnRate, dt);
+      b.updateLocomotionWeights(dt, 0, 0);
+      const idleLimit = b.isPhase2 ? 0.35 : 0.65;
+      if (b.stateTimer >= idleLimit) {
         b.stateTimer = 0;
-        const opener = Math.random() < 0.4 ? BOSS_ATTACKS.kick : BOSS_ATTACKS.combo;
-        const followup = b.isPhase2 && Math.random() < 0.5 ? BOSS_ATTACKS.spin360 : BOSS_ATTACKS.downward;
-        this.queueCombo(opener, followup);
-      } else if (dist <= 6.0) {
-        // Mid range: approach or combo
-        b.stateTimer = 0;
-        if (b.isPhase2 && Math.random() < 0.35) {
-          this.startAttack(BOSS_ATTACKS.spin360);
-        } else if (Math.random() < 0.5) {
+        if (Math.random() < 0.35) {
+          this.startAttack(BOSS_ATTACKS.jump);
+        } else {
           this.pushSubgoal({
             type: 'APPROACH',
-            duration: 2.2,
+            duration: 2.5,
             timer: 0,
-            preferredDistance: 3.2,
+            preferredDistance: 3.5,
           });
-        } else {
-          this.queueCombo(BOSS_ATTACKS.combo, BOSS_ATTACKS.downward);
-        }
-      } else {
-        // Long range (> 6m): brief initial observation before approaching
-        b.stateTimer += dt;
-        b.state = 'idle';
-        b.faceTarget(player.position, this.maxTurnRate, dt);
-        b.updateLocomotionWeights(dt, 0, 0);
-        const idleLimit = b.isPhase2 ? 0.35 : 0.65;
-        if (b.stateTimer >= idleLimit) {
-          b.stateTimer = 0;
-          if (Math.random() < 0.35) {
-            this.startAttack(BOSS_ATTACKS.jump);
-          } else {
-            this.pushSubgoal({
-              type: 'APPROACH',
-              duration: 2.5,
-              timer: 0,
-              preferredDistance: 3.5,
-            });
-          }
         }
       }
-      return;
     }
+  }
 
-    // --- Execute Active Subgoal (Top of LIFO stack) ---
-    const activeSubgoal = this.goalStack[this.goalStack.length - 1];
-    if (!activeSubgoal) return;
+  private executeActiveSubgoal(
+    dt: number,
+    activeSubgoal: BossSubgoal,
+    player: PlayerCombatSnapshot,
+    arena?: any,
+    arenaRadius = 21.0,
+  ): void {
+    const b = this.boss;
 
     switch (activeSubgoal.type) {
       case 'COMBO_CHECK': {
@@ -419,7 +444,7 @@ export class BossAI {
   }
 
   public updateAttackFrames(dt: number, playerPos: THREE.Vector3): void {
-    const b = this.boss as any;
+    const b = this.boss;
     if (!b.currentAttack) {
       b.state = 'idle';
       this.isAttackActiveFrames = false;
@@ -512,7 +537,7 @@ export class BossAI {
   }
 
   public updateStagger(dt: number): void {
-    const b = this.boss as any;
+    const b = this.boss;
     b.stateTimer += dt;
     this.isAttackActiveFrames = false;
     if (b.stateTimer >= 2.2) {
@@ -523,7 +548,7 @@ export class BossAI {
   }
 
   public updatePhaseTransition(dt: number, playerPos?: THREE.Vector3): void {
-    const b = this.boss as any;
+    const b = this.boss;
     b.stateTimer += dt;
     this.isAttackActiveFrames = false;
     if (playerPos) {

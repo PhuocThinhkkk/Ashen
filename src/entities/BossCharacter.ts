@@ -14,6 +14,7 @@ import {
 import type { WeaponBladeSegment, BodyCapsule } from '../combat/WeaponCollisionSystem';
 import { BossAI, type PlayerCombatSnapshot } from './boss/BossAI';
 import { BossWeapon } from './boss/BossWeapon';
+import { BossCombatResolver } from './boss/combat/BossCombatResolver';
 
 export type BossState =
   | 'idle'
@@ -938,17 +939,25 @@ export class BossCharacter {
   }
 
   public getBladeHitboxWorldPosition(target: THREE.Vector3 = new THREE.Vector3()): THREE.Vector3 {
-    if (this.kinematicController && this.kinematicController.activeHitboxBone && this.currentAttack?.animationClip === 'kick') {
-      return this.kinematicController.getHitboxWorldPosition(target);
-    }
-    return this.weapon.getBladeHitboxWorldPosition(target);
+    return BossCombatResolver.resolveBladeHitboxPosition(
+      this.weapon,
+      this.kinematicController,
+      this.currentAttack,
+      target,
+    );
   }
 
   public getWeaponBladeSegment(
     outBase = new THREE.Vector3(),
     outTip = new THREE.Vector3(),
   ): WeaponBladeSegment {
-    return this.weapon.getWeaponBladeSegment(this.group.position, this.group.rotation.y, outBase, outTip);
+    return BossCombatResolver.resolveWeaponBladeSegment(
+      this.weapon,
+      this.group.position,
+      this.group.rotation.y,
+      outBase,
+      outTip,
+    );
   }
 
   public getFootLocation(outFoot = new THREE.Vector3()): THREE.Vector3 {
@@ -961,30 +970,33 @@ export class BossCharacter {
   }
 
   public getBodyCapsule(): BodyCapsule {
-    return {
-      position: this.group.position,
-      radius: this.radius,
-      height: 2.45,
-    };
+    return BossCombatResolver.resolveBodyCapsule(this.group.position, this.radius, 2.45);
   }
 
   public takeDamage(damage: number, poiseDamage: number): boolean {
     if (this.state === 'dead') return false;
 
-    this.hp = Math.max(0, this.hp - damage);
+    const { newHp, isDead } = BossCombatResolver.calculateDamage(this.hp, damage);
+    this.hp = newHp;
 
-    if (this.hp <= 0) {
+    if (isDead) {
       this.state = 'dead';
       this.playAction('die', 0.15, THREE.LoopOnce, true, 1.0);
       return true;
     }
 
-    this.poise -= poiseDamage;
-    if (this.poise <= 0 && this.state !== 'stagger' && this.state !== 'phaseTransition') {
+    const { newPoise, triggerStagger } = BossCombatResolver.calculatePoise(
+      this.poise,
+      this.maxPoise,
+      poiseDamage,
+      this.state,
+    );
+    this.poise = newPoise;
+
+    if (triggerStagger) {
       this.state = 'stagger';
       this.stateTimer = 0;
       this.currentAttack = null;
-      this.poise = this.maxPoise;
       this.playAction('hit', 0.1, THREE.LoopOnce, true, 0.8);
     }
 

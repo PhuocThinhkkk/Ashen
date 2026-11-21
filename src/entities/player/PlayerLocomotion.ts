@@ -79,30 +79,55 @@ export class PlayerLocomotion {
     }
   }
 
+  /**
+   * Updates drinking animation and triggers healing at exactly 55% progress.
+   * AGENTS.md Rule: healCharges strictly decrements at ~55% progress alongside heal.
+   */
   public static updateDrinkingState(player: PlayerCharacter, delta: number): void {
-    if (player.isDrinking) {
-      player.drinkTimer += delta;
-      const drinkAction = player.upperActions.get('drinking');
-      const actionProgress = drinkAction && drinkAction.getClip().duration > 0
+    if (!player.isDrinking) return;
+
+    player.drinkTimer += delta;
+    const progress = this.calculateDrinkProgress(player);
+
+    if (this.shouldTriggerFlaskHeal(player, progress)) {
+      this.applyFlaskHeal(player);
+    }
+
+    if (this.isDrinkComplete(player, progress)) {
+      this.finishDrinking(player);
+    }
+  }
+
+  private static calculateDrinkProgress(player: PlayerCharacter): number {
+    const drinkAction = player.upperActions.get('drinking');
+    const actionProgress =
+      drinkAction && drinkAction.getClip().duration > 0
         ? drinkAction.time / drinkAction.getClip().duration
         : 0;
-      const timerProgress = player.drinkTimer / player.drinkDuration;
-      const progress = Math.max(actionProgress, timerProgress);
+    const timerProgress = player.drinkTimer / player.drinkDuration;
+    return Math.max(actionProgress, timerProgress);
+  }
 
-      // Heal tick at ~55% progress: consume bottle charge and restore HP
-      if (!player.hasHealedDuringDrink && progress >= 0.55) {
-        player.hasHealedDuringDrink = true;
-        player.healCharges = Math.max(0, player.healCharges - 1);
-        player.heal(70);
-      }
+  private static shouldTriggerFlaskHeal(player: PlayerCharacter, progress: number): boolean {
+    return !player.hasHealedDuringDrink && progress >= 0.55;
+  }
 
-      // Finish drinking
-      if (progress >= 0.98 || player.drinkTimer >= player.drinkDuration) {
-        player.isDrinking = false;
-        if (player.flaskMesh) player.flaskMesh.visible = false;
-        player.clearUpperBodyOverride(0.18);
-      }
+  private static applyFlaskHeal(player: PlayerCharacter): void {
+    player.hasHealedDuringDrink = true;
+    player.healCharges = Math.max(0, player.healCharges - 1);
+    player.heal(70);
+  }
+
+  private static isDrinkComplete(player: PlayerCharacter, progress: number): boolean {
+    return progress >= 0.98 || player.drinkTimer >= player.drinkDuration;
+  }
+
+  private static finishDrinking(player: PlayerCharacter): void {
+    player.isDrinking = false;
+    if (player.flaskMesh) {
+      player.flaskMesh.visible = false;
     }
+    player.clearUpperBodyOverride(0.18);
   }
 
   public static updateJumping(
