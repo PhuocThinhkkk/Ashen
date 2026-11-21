@@ -22,6 +22,9 @@ import { installGameTestHooks } from './GameTestHooks';
 import { GameMultiplayerHandler } from './GameMultiplayerHandler';
 import { BossMusicStorage } from '../audio/BossMusicStorage';
 import { BUILTIN_PROCEDURAL_ID } from '../audio/types';
+import { MatchPrewarmer } from './lifecycle/MatchPrewarmer';
+import { GameDiagnostics } from './lifecycle/GameDiagnostics';
+import { LockOnSystem } from './systems/LockOnSystem';
 
 export const AVAILABLE_PLAYER_MODELS = [
   { id: 'knight', name: 'Knight' },
@@ -238,31 +241,7 @@ export class Game {
       }
 
       setProgress(60, 'Pre-warming WebGL Shaders, Shadows & VFX Pools...');
-      // Pre-warm all AnimationMixer action tracks upfront so first-time action plays have zero binding hitch
-      if (this.player.mixer) {
-        for (const action of this.player.upperActions.values()) {
-          action.play();
-          action.setEffectiveWeight(0.0001);
-        }
-        for (const action of this.player.lowerActions.values()) {
-          action.play();
-          action.setEffectiveWeight(0.0001);
-        }
-        this.player.mixer.update(0.001);
-      }
-      if (this.boss.mixer) {
-        const bossAny = this.boss as any;
-        if (bossAny.rawClips) {
-          for (const clip of bossAny.rawClips) {
-            bossAny.getAction?.(clip.name);
-          }
-        }
-        for (const action of (bossAny.actions as Map<string, THREE.AnimationAction>)?.values() ?? []) {
-          action.play();
-          action.setEffectiveWeight(0.0001);
-        }
-        this.boss.mixer.update(0.001);
-      }
+      MatchPrewarmer.prewarmAnimationMixers(this.player, this.boss);
 
       if (this.player.state !== 'dead' && this.boss.state !== 'dead') {
         this.resetRun();
@@ -270,8 +249,7 @@ export class Game {
       if (this.player.flaskMesh) {
         this.player.flaskMesh.visible = true;
       }
-      this.vfx.prewarm(this.renderer, this.camera);
-      this.renderer.compile(this.scene, this.camera);
+      MatchPrewarmer.prewarmRendererAndShaders(this.renderer, this.scene, this.camera, this.vfx);
       this.render();
       if (this.player.flaskMesh) {
         this.player.flaskMesh.visible = false;
@@ -491,25 +469,14 @@ export class Game {
       ? this.remotePlayer.hp <= 0
       : this.boss.state === 'dead';
 
-    if (this.combatInputs.toggleLockOn && !isTargetDead) {
-      const locked = this.cameraRig.toggleLockOn(targetPos);
-      if (!locked) {
-        this.cameraRig.setLockedTarget(null);
-      }
-    }
-
-    // Break lock-on if target dead or too far
-    if (this.cameraRig.isLockedOn) {
-      const dist = this.player.group.position.distanceTo(targetPos);
-      if (isTargetDead || dist > 26.0) {
-        this.cameraRig.setLockedTarget(null);
-      } else {
-        this.cameraRig.setLockedTarget(targetPos);
-      }
-    }
-
-    // 3. Update Entities
-    const lockedTargetPos = this.cameraRig.isLockedOn ? targetPos : null;
+    const lockedTargetPos = LockOnSystem.updateLockOn(
+      this.cameraRig,
+      this.combatInputs.toggleLockOn,
+      this.player.group.position,
+      targetPos,
+      isTargetDead,
+      26.0,
+    );
 
     this.player.update(
       simDelta,
@@ -748,74 +715,19 @@ export class Game {
   }
 
   private publishDiagnostics(): void {
-    const info = this.renderer.info;
-    const snap = this.profiler.getSnapshot();
-
-    window.__THREE_GAME_DIAGNOSTICS__ = {
+    GameDiagnostics.publish({
       frame: this.frame,
       elapsed: this.elapsed,
-      fps: snap.fps,
-      onePercentLowFps: snap.onePercentLowFps,
-      frameTimeMs: snap.frameTimeMs,
-      audio: this.audio.getAudioDiagnostics(),
-      player: {
-        position: {
-          x: this.player.group.position.x,
-          y: this.player.group.position.y,
-          z: this.player.group.position.z,
-        },
-        speed: this.player.velocity.length(),
-        hp: this.player.hp,
-        stamina: this.player.stamina,
-        state: this.player.state,
-        isInvulnerable: this.player.isInvulnerable,
-        loaded: this.player.isLoaded,
-        activeClip: this.player.currentActionName,
-        upperClip: this.player.currentUpperActionName,
-        lowerClip: this.player.currentLowerActionName,
-        isGrounded: this.player.isGrounded,
-        isDrinking: this.player.isDrinking,
-        isAirborneAttack: this.player.isAirborneAttack,
-        tiltAngle: this.player.currentTiltAngle,
-        healCharges: this.player.healCharges,
-        maxHealCharges: this.player.maxHealCharges,
-        modelId: this.player.modelId,
-      },
-      boss: {
-        position: {
-          x: this.boss.group.position.x,
-          y: this.boss.group.position.y,
-          z: this.boss.group.position.z,
-        },
-        hp: this.boss.hp,
-        maxHp: this.boss.maxHp,
-        state: this.boss.state,
-        isPhase2: this.boss.isPhase2,
-        loaded: this.boss.isLoaded,
-        activeClip: this.boss.currentActionName,
-        upperClip: this.boss.currentUpperActionName,
-        lowerClip: this.boss.currentLowerActionName,
-        turnDirection: this.boss.turnDirection,
-        modelId: this.boss.modelId,
-        subgoal: this.boss.ai.getCurrentSubgoal()?.type,
-        attackCooldown: this.boss.ai.attackCooldown,
-        strafeDir: this.boss.ai.strafeDir,
-        locomotionWeights: { ...this.boss.currentWeights },
-      },
-      assetsLoaded: this.player.isLoaded && this.boss.isLoaded && this.isReady,
-      renderer: {
-        calls: info.render.calls,
-        triangles: info.render.triangles,
-        geometries: info.memory.geometries,
-        textures: info.memory.textures,
-      },
-      canvas: {
-        clientWidth: Math.round(this.cachedHalfWidth * 2),
-        clientHeight: Math.round(this.cachedHalfHeight * 2),
-        width: this.canvas.width,
-        height: this.canvas.height,
-        dpr: Math.min(window.devicePixelRatio || 1, this.settingsManager.data.graphics.maxDpr),
-      },
-    };
+      player: this.player,
+      boss: this.boss,
+      audio: this.audio,
+      profiler: this.profiler,
+      renderer: this.renderer,
+      isReady: this.isReady,
+      halfWidth: this.cachedHalfWidth,
+      halfHeight: this.cachedHalfHeight,
+      canvas: this.canvas,
+      maxDpr: this.settingsManager.data.graphics.maxDpr,
+    });
   }
 }
