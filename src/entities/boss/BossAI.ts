@@ -46,6 +46,8 @@ export const BOSS_CONFIG = {
   punishHealWithJump: false,
 };
 
+export const FULL_BODY_EXEMPT_CLIPS = new Set(['attack_jump', 'attack_360']);
+
 export type BossSubgoalType = 'STRAFE_INSPECT' | 'APPROACH' | 'ATTACK' | 'COMBO_CHECK';
 
 export interface BossSubgoal {
@@ -459,8 +461,8 @@ export class BossAI {
       }
       b.telegraphGlow = 1.0;
 
-      if (b.currentAttack.animationClip === 'attack_jump') {
-        // Jump Attack exception: freeze mid-air rotation during leap, driven exclusively by KinematicCombatController
+      if (b.currentAttack.animationClip && FULL_BODY_EXEMPT_CLIPS.has(b.currentAttack.animationClip)) {
+        // Jump / 360 Attack exception: freeze mid-air/spin rotation during active leap/swing
         this.isAttackActiveFrames = true;
       } else {
         // Non-jump attacks: lock positional movement (0 translation), allow in-place turning towards player
@@ -470,7 +472,7 @@ export class BossAI {
     } else if (b.attackTimer < startup + active + recovery) {
       b.state = 'recovery';
       b.telegraphGlow = Math.max(0, 1.0 - (b.attackTimer - startup - active) / (recovery * 0.5));
-      if (b.currentAttack.animationClip === 'attack_jump') {
+      if (b.currentAttack.animationClip && FULL_BODY_EXEMPT_CLIPS.has(b.currentAttack.animationClip)) {
         this.isAttackActiveFrames = false;
         b.setTurnDirection?.(null);
       } else {

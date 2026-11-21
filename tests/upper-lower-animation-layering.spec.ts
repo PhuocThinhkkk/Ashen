@@ -627,4 +627,51 @@ test.describe('In-Game Drinking-While-Walking & Jumping Combat Integration', () 
     // Attack action time progresses independently
     expect(attackAction.time).toBeCloseTo(0.2, 2);
   });
+
+  test('Boss turnable attack plays upper attack and lower idle sub-clips concurrently preserving 2H greatsword stance', () => {
+    const root = new THREE.Group();
+    const hips = new THREE.Bone();
+    hips.name = 'mixamorig:Hips';
+    const spine = new THREE.Bone();
+    spine.name = 'mixamorig:Spine';
+    const rightHand = new THREE.Bone();
+    rightHand.name = 'mixamorig:RightHand';
+    hips.add(spine);
+    spine.add(rightHand);
+    root.add(hips);
+
+    const mixer = new THREE.AnimationMixer(root);
+
+    const times = [0, 0.5, 1.0];
+    const quatValues = [0, 0, 0, 1, 0, 0.1, 0, 0.99, 0, 0, 0, 1];
+
+    const upperTracks = [
+      new THREE.QuaternionKeyframeTrack('mixamorig:Spine.quaternion', times, quatValues),
+      new THREE.QuaternionKeyframeTrack('mixamorig:RightHand.quaternion', times, quatValues),
+    ];
+    const upperAttackClip = new THREE.AnimationClip('attack_heavy__upper', 1.0, upperTracks);
+
+    const lowerTracks = [
+      new THREE.QuaternionKeyframeTrack('mixamorig:Hips.quaternion', times, quatValues),
+    ];
+    const lowerIdleClip = new THREE.AnimationClip('idle__lower', 1.0, lowerTracks);
+
+    const attackAction = mixer.clipAction(upperAttackClip);
+    attackAction.setLoop(THREE.LoopOnce, 1);
+    attackAction.clampWhenFinished = true;
+    attackAction.setEffectiveWeight(1.0);
+    attackAction.play();
+
+    const idleLowerAction = mixer.clipAction(lowerIdleClip);
+    idleLowerAction.setLoop(THREE.LoopRepeat, Infinity);
+    idleLowerAction.setEffectiveWeight(1.0);
+    idleLowerAction.play();
+
+    mixer.update(0.2);
+
+    expect(attackAction.isRunning()).toBe(true);
+    expect(idleLowerAction.isRunning()).toBe(true);
+    expect(attackAction.getEffectiveWeight()).toBe(1.0);
+    expect(idleLowerAction.getEffectiveWeight()).toBe(1.0);
+  });
 });

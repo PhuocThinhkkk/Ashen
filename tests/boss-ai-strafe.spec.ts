@@ -265,6 +265,16 @@ test.describe('FromSoftware-Style Boss AI & Strafe Subgoal Stack', () => {
     expect(mockBoss.state).toBe('active');
     expect(ai.isAttackActiveFrames).toBe(true); // Jump leap rotation is frozen
     expect(faceTargetCalledCount).toBe(0);
+
+    // 3. 360 spin attack active frame: rotation is frozen
+    faceTargetCalledCount = 0;
+    mockBoss.currentAttack = BOSS_ATTACKS.spin360;
+    mockBoss.state = 'windup';
+    mockBoss.attackTimer = 1.0; // in active spin phase
+    ai.update(0.016, playerSnapshot);
+    expect(mockBoss.state).toBe('active');
+    expect(ai.isAttackActiveFrames).toBe(true); // 360 spin rotation is frozen
+    expect(faceTargetCalledCount).toBe(0);
   });
 
   // ---------------------------------------------------------------------------

@@ -70,6 +70,8 @@ export class BossCharacter {
   public readonly splitClips = new Map<string, { upper: THREE.AnimationClip; lower: THREE.AnimationClip }>();
   public currentUpperAttackAction: THREE.AnimationAction | null = null;
   public currentLowerAttackAction: THREE.AnimationAction | null = null;
+  public currentLowerIdleAction: THREE.AnimationAction | null = null;
+  public isFullBodyExemptAttack = false;
   public currentUpperActionName = 'idle';
   public currentLowerActionName = 'idle';
 
@@ -519,6 +521,17 @@ export class BossCharacter {
   }
 
   public updateTurnWeights(delta: number): void {
+    // If an attack is active, force turn weights to 0 so turn clips never override or break attacks
+    if (this.currentUpperAttackAction && this.currentUpperAttackAction.isRunning()) {
+      this.targetTurnLeftWeight = 0;
+      this.targetTurnRightWeight = 0;
+      this.currentTurnLeftWeight = 0;
+      this.currentTurnRightWeight = 0;
+      if (this.turnLeftAction) this.turnLeftAction.setEffectiveWeight(0);
+      if (this.turnRightAction) this.turnRightAction.setEffectiveWeight(0);
+      return;
+    }
+
     const blendRate = 12.0;
     this.currentTurnLeftWeight = THREE.MathUtils.damp(
       this.currentTurnLeftWeight,
@@ -555,8 +568,32 @@ export class BossCharacter {
   }
 
   public startAttackAction(clipName: string, timeScale: number): THREE.AnimationAction | null {
-    // Cross-fade out of locomotion blend layer (~0.15s)
+    // 1. Immediately zero out all locomotion blend layer actions & master weight
     this.isLocomotionActive = false;
+    this.locomotionMasterWeight = 0.0;
+    const locoActions = [
+      this.idleAction,
+      this.walkForwardAction,
+      this.walkBackAction,
+      this.strafeLeftAction,
+      this.strafeRightAction,
+    ];
+    for (const act of locoActions) {
+      if (act) {
+        act.setEffectiveWeight(0.0);
+        act.fadeOut(0.12);
+      }
+    }
+
+    // 2. Identify if this attack is full-body exempt (attack_jump, attack_360)
+    const isFullBodyExempt = clipName === 'attack_jump' || clipName === 'attack_360';
+    this.isFullBodyExemptAttack = isFullBodyExempt;
+
+    // Reset previous lower idle action if any
+    if (this.currentLowerIdleAction) {
+      this.currentLowerIdleAction.stop();
+      this.currentLowerIdleAction = null;
+    }
 
     // Resolve split upper and lower actions
     let upperAction = this.upperActions.get(clipName) || null;
@@ -585,17 +622,38 @@ export class BossCharacter {
       this.currentUpperAttackAction = upperAction;
     }
 
-    // Play lower body attack action (can be overridden by lower turn action if turning)
-    if (lowerAction) {
-      lowerAction.reset();
-      lowerAction.enabled = true;
-      lowerAction.setLoop(THREE.LoopOnce, 1);
-      lowerAction.clampWhenFinished = true;
-      lowerAction.setEffectiveTimeScale(timeScale);
-      const turnW = Math.min(1.0, this.currentTurnLeftWeight + this.currentTurnRightWeight);
-      lowerAction.setEffectiveWeight(Math.max(0, 1.0 - turnW));
-      lowerAction.play();
-      this.currentLowerAttackAction = lowerAction;
+    // Lower body handling:
+    // - Full-body exempt (jump, 360): lower body performs the attack sub-clip (full hips/pelvis twist)
+    // - Turnable attacks (downward, combo, kick): lower body uses lower idle sub-clip to maintain 2H greatsword grip
+    if (isFullBodyExempt) {
+      if (lowerAction) {
+        lowerAction.reset();
+        lowerAction.enabled = true;
+        lowerAction.setLoop(THREE.LoopOnce, 1);
+        lowerAction.clampWhenFinished = true;
+        lowerAction.setEffectiveTimeScale(timeScale);
+        lowerAction.setEffectiveWeight(1.0);
+        lowerAction.play();
+        this.currentLowerAttackAction = lowerAction;
+      }
+    } else {
+      let lowerIdle = this.lowerActions.get('idle');
+      if (!lowerIdle) {
+        const idleClip = ModelLoader.findClip(this.rawClips, 'idle');
+        if (idleClip) {
+          lowerIdle = this.lowerActions.get(idleClip.name);
+        }
+      }
+      if (lowerIdle) {
+        lowerIdle.reset();
+        lowerIdle.enabled = true;
+        lowerIdle.setLoop(THREE.LoopRepeat, Infinity);
+        lowerIdle.clampWhenFinished = false;
+        lowerIdle.setEffectiveWeight(1.0);
+        lowerIdle.play();
+        this.currentLowerIdleAction = lowerIdle;
+      }
+      this.currentLowerAttackAction = null;
     }
 
     // Route tracking through kinematicController for frames, VFX, and audio
@@ -625,10 +683,16 @@ export class BossCharacter {
       this.currentLowerAttackAction.fadeOut(0.15);
       this.currentLowerAttackAction = null;
     }
+    if (this.currentLowerIdleAction) {
+      this.currentLowerIdleAction.fadeOut(0.15);
+      this.currentLowerIdleAction = null;
+    }
     if (this.currentAttackAction) {
       this.currentAttackAction.fadeOut(0.15);
       this.currentAttackAction = null;
     }
+
+    this.isFullBodyExemptAttack = false;
 
     // Guaranteed active base pose: immediately re-enable, play, and fadeIn idleAction to prevent T-Pose
     if (this.idleAction) {
@@ -640,6 +704,7 @@ export class BossCharacter {
 
     // Cross-fade back into locomotion blend layer (~0.15s)
     this.isLocomotionActive = true;
+    this.locomotionMasterWeight = 1.0;
     this.currentUpperActionName = 'idle';
     if (this.turnDirection === null) {
       this.currentLowerActionName = 'idle';
@@ -785,6 +850,9 @@ export class BossCharacter {
         if (action.isRunning() && action.enabled) {
           activeWeightSum += action.getEffectiveWeight();
         }
+      }
+      if (this.currentLowerIdleAction?.isRunning() && this.currentLowerIdleAction.enabled) {
+        activeWeightSum += this.currentLowerIdleAction.getEffectiveWeight();
       }
       if (this.turnLeftAction?.isRunning() && this.turnLeftAction.enabled) {
         activeWeightSum += this.turnLeftAction.getEffectiveWeight();
@@ -938,8 +1006,12 @@ export class BossCharacter {
   }
 
   public faceTarget(targetPos: THREE.Vector3, turnRateOrMaxTurnRate: number, delta?: number): void {
-    // Rotation tracking is frozen during jump attack airborne leap frames
-    if (this.currentAttack?.animationClip === 'attack_jump' && this.isAttackActiveFrames) {
+    // Rotation tracking is frozen during full-body exempt attacks (jump leap, 360 spin)
+    const isExempt =
+      (this.currentAttack?.animationClip === 'attack_jump' ||
+        this.currentAttack?.animationClip === 'attack_360') &&
+      this.isAttackActiveFrames;
+    if (isExempt) {
       this.setTurnDirection(null);
       return;
     }
@@ -952,13 +1024,22 @@ export class BossCharacter {
     while (diff > Math.PI) diff -= Math.PI * 2;
     while (diff < -Math.PI) diff += Math.PI * 2;
 
-    const turnThreshold = 0.08; // ~4.6 degrees deadzone
-    if (diff > turnThreshold) {
-      this.setTurnDirection('left');
-    } else if (diff < -turnThreshold) {
-      this.setTurnDirection('right');
-    } else {
+    const isAttacking =
+      this.currentAttack !== null ||
+      (this.currentUpperAttackAction !== null && this.currentUpperAttackAction.isRunning());
+
+    if (isAttacking) {
+      // During any attack, lower body does not activate turn clips (stays in 2H idle or full-body attack)
       this.setTurnDirection(null);
+    } else {
+      const turnThreshold = 0.08; // ~4.6 degrees deadzone
+      if (diff > turnThreshold) {
+        this.setTurnDirection('left');
+      } else if (diff < -turnThreshold) {
+        this.setTurnDirection('right');
+      } else {
+        this.setTurnDirection(null);
+      }
     }
 
     if (delta !== undefined) {
