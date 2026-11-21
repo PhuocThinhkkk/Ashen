@@ -204,26 +204,42 @@ test.describe('Dynamic Boss Music System', () => {
 
     let musicState = await page.evaluate(() => window.__THREE_GAME_TEST_HOOKS__?.getMusicState?.());
     expect(musicState.activePhase).toBe('phase1');
+    const initialProgress = musicState.phase1Progress ?? 0;
+
+    // Verify Phase 1 sustains uninterrupted playback across > 2.0 seconds (no trailing pause timer kill)
+    await page.waitForTimeout(2000);
+    const sustainedStatus = await page.evaluate(() => ({
+      diag: window.__THREE_GAME_TEST_HOOKS__?.getAudioDiagnostics?.() ?? null,
+      music: window.__THREE_GAME_TEST_HOOKS__?.getMusicState?.() ?? null,
+    }));
+    expect(sustainedStatus.diag?.isPlaying).toBe(true);
+    expect(sustainedStatus.music?.activePhase).toBe('phase1');
+    expect(sustainedStatus.music?.phase1Progress).toBeGreaterThan(initialProgress);
 
     // 2. Trigger Phase 2 via test hooks
     await page.evaluate(() => window.__THREE_GAME_TEST_HOOKS__?.setState?.('boss_phase2'));
-    await page.waitForTimeout(200);
+    await page.waitForTimeout(300);
 
     musicState = await page.evaluate(() => window.__THREE_GAME_TEST_HOOKS__?.getMusicState?.());
     expect(['transitioning', 'phase2']).toContain(musicState.activePhase);
 
     // 3. Trigger Boss Defeat
     await page.evaluate(() => window.__THREE_GAME_TEST_HOOKS__?.setState?.('boss_dead'));
-    await page.waitForTimeout(200);
+    await page.waitForTimeout(300);
 
     musicState = await page.evaluate(() => window.__THREE_GAME_TEST_HOOKS__?.getMusicState?.());
     expect(musicState.activePhase).toBe('none');
 
-    // 4. Trigger Restart
+    // 4. Trigger Restart and verify Phase 1 restarts and sustains playback
     await page.keyboard.press('KeyR');
-    await page.waitForTimeout(300);
+    await page.waitForTimeout(500);
 
-    musicState = await page.evaluate(() => window.__THREE_GAME_TEST_HOOKS__?.getMusicState?.());
-    expect(musicState.activePhase).toBe('phase1');
+    const restartStatus = await page.evaluate(() => window.__THREE_GAME_TEST_HOOKS__?.getAudioDiagnostics?.());
+    expect(restartStatus?.activePhase).toBe('phase1');
+
+    await page.waitForTimeout(1500);
+    const sustainedRestart = await page.evaluate(() => window.__THREE_GAME_TEST_HOOKS__?.getAudioDiagnostics?.());
+    expect(sustainedRestart?.isPlaying).toBe(true);
+    expect(sustainedRestart?.activePhase).toBe('phase1');
   });
 });

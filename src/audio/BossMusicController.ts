@@ -45,8 +45,16 @@ export class BossMusicController {
   private masterVolume = 0.75;
   private p1StartTime = 0;
   private p2StartTime = 0;
+  private stopTimeoutId: number | null = null;
 
   public onStateChange?: (state: BossMusicPlaybackState) => void;
+
+  private clearStopTimeout(): void {
+    if (this.stopTimeoutId !== null) {
+      clearTimeout(this.stopTimeoutId);
+      this.stopTimeoutId = null;
+    }
+  }
 
   constructor(context?: AudioContext, parentDestination?: AudioNode) {
     if (context) {
@@ -300,11 +308,42 @@ export class BossMusicController {
     if (!this.context || !this.musicMasterGain) return;
     if (this.activePhase === 'phase1' && this.isPlaying()) return; // already active and actually playing
 
+    this.clearStopTimeout();
+
     if (this.context.state === 'suspended') {
       void this.context.resume().catch(() => {});
     }
 
-    this.stopActiveSources(fadeDuration);
+    // Cleanly silence/stop any previous Phase 2 or buffer sources without scheduling a delayed pause on Phase 1
+    if (this.p2Gain) {
+      try {
+        const now = this.context.currentTime;
+        this.p2Gain.gain.setValueAtTime(this.p2Gain.gain.value, now);
+        this.p2Gain.gain.linearRampToValueAtTime(0.0001, now + fadeDuration);
+      } catch {}
+      this.p2Gain = null;
+    }
+    if (this.p2Source) {
+      try {
+        this.p2Source.stop();
+        this.p2Source.disconnect();
+      } catch {}
+      this.p2Source = null;
+    }
+    if (this.p2Audio) {
+      try { this.p2Audio.pause(); } catch {}
+    }
+    if (this.p1Source) {
+      try {
+        this.p1Source.stop();
+        this.p1Source.disconnect();
+      } catch {}
+      this.p1Source = null;
+    }
+    if (this.p1Gain) {
+      try { this.p1Gain.disconnect(); } catch {}
+      this.p1Gain = null;
+    }
 
     const now = this.context.currentTime;
     this.p1Gain = this.context.createGain();
@@ -386,6 +425,8 @@ export class BossMusicController {
   public transitionToPhase2(crossfadeDuration = 2.0): void {
     if (!this.context || !this.musicMasterGain) return;
     if (this.activePhase === 'phase2' || this.activePhase === 'transitioning') return;
+
+    this.clearStopTimeout();
 
     const now = this.context.currentTime;
     const oldP1Gain = this.p1Gain;
@@ -536,22 +577,28 @@ export class BossMusicController {
   }
 
   public stop(fadeDuration = 1.0): void {
-    this.stopActiveSources(fadeDuration);
+    this.clearStopTimeout();
     this.activePhase = 'none';
+    this.stopActiveSources(fadeDuration);
     this.notifyState();
   }
 
   private stopActiveSources(fadeDuration: number): void {
+    this.clearStopTimeout();
     if (!this.context) return;
     const now = this.context.currentTime;
 
     if (this.p1Gain) {
-      this.p1Gain.gain.setValueAtTime(this.p1Gain.gain.value, now);
-      this.p1Gain.gain.linearRampToValueAtTime(0.0001, now + fadeDuration);
+      try {
+        this.p1Gain.gain.setValueAtTime(this.p1Gain.gain.value, now);
+        this.p1Gain.gain.linearRampToValueAtTime(0.0001, now + fadeDuration);
+      } catch {}
     }
     if (this.p2Gain) {
-      this.p2Gain.gain.setValueAtTime(this.p2Gain.gain.value, now);
-      this.p2Gain.gain.linearRampToValueAtTime(0.0001, now + fadeDuration);
+      try {
+        this.p2Gain.gain.setValueAtTime(this.p2Gain.gain.value, now);
+        this.p2Gain.gain.linearRampToValueAtTime(0.0001, now + fadeDuration);
+      } catch {}
     }
 
     const s1 = this.p1Source;
@@ -560,7 +607,8 @@ export class BossMusicController {
     const a2 = this.p2Audio;
     const as = this.singleAudio;
 
-    setTimeout(() => {
+    this.stopTimeoutId = window.setTimeout(() => {
+      this.stopTimeoutId = null;
       try {
         s1?.stop();
         s1?.disconnect();
@@ -569,15 +617,17 @@ export class BossMusicController {
         s2?.stop();
         s2?.disconnect();
       } catch {}
-      try {
-        a1?.pause();
-      } catch {}
-      try {
-        a2?.pause();
-      } catch {}
-      try {
-        as?.pause();
-      } catch {}
+      if (this.activePhase === 'none') {
+        try {
+          a1?.pause();
+        } catch {}
+        try {
+          a2?.pause();
+        } catch {}
+        try {
+          as?.pause();
+        } catch {}
+      }
     }, fadeDuration * 1000 + 50);
 
     this.p1Source = null;
@@ -619,6 +669,7 @@ export class BossMusicController {
   }
 
   public dispose(): void {
+    this.clearStopTimeout();
     this.stop(0.1);
     this.musicMasterGain?.disconnect();
     this.musicMasterGain = null;
