@@ -11,6 +11,7 @@ import { WeaponHitboxVisualizer } from '../../combat/WeaponHitboxVisualizer';
 import type { InputController } from '../../core/InputController';
 import type { CombatInputs } from '../../core/types';
 import type { SoulslikeCamera } from '../../systems/SoulslikeCamera';
+import { GlideResetController } from '../common/GlideResetController';
 
 export interface DuelTelemetryUpdate {
   distance: number;
@@ -41,17 +42,8 @@ export class CombatDuelStage {
   public autoResetEnabled = true;
   public bossAiMode: 'dummy' | 'duel' = 'dummy';
 
-  private isPlayerActionActive = false;
-  private isBossActionActive = false;
-  private readonly playerActionStartPos = new THREE.Vector3();
-  private readonly bossActionStartPos = new THREE.Vector3();
-  private playerLandingTimer = -1;
-  private bossLandingTimer = -1;
-  private playerResetGlide = -1;
-  private bossResetGlide = -1;
-
-  private lastPlayerDispText = 'Δ0.00m';
-  private lastBossDispText = 'Δ0.00m';
+  public readonly playerGlide = new GlideResetController(CONFIG.track2.playerHome);
+  public readonly bossGlide = new GlideResetController(CONFIG.track2.bossHome);
 
   constructor(scene: THREE.Scene) {
     this.trajectory = new TrajectoryVisualizer(scene);
@@ -88,13 +80,9 @@ export class CombatDuelStage {
       this.logicPlayer.state = 'idle';
     }
 
-    this.playerLandingTimer = -1;
-    this.playerResetGlide = -1;
+    this.playerGlide.onActionStart(this.logicPlayer.group.position);
+    this.trajectory.startPlayerAction(this.playerGlide.actionStartPos);
 
-    this.playerActionStartPos.copy(this.logicPlayer.group.position);
-    this.trajectory.startPlayerAction(this.playerActionStartPos);
-
-    this.isPlayerActionActive = true;
     this.logicPlayer.hasHitCurrentSwing = false;
 
     // Orient towards Boss
@@ -147,13 +135,9 @@ export class CombatDuelStage {
       this.logicBoss.state = 'idle';
     }
 
-    this.bossLandingTimer = -1;
-    this.bossResetGlide = -1;
+    this.bossGlide.onActionStart(this.logicBoss.group.position);
+    this.trajectory.startBossAction(this.bossGlide.actionStartPos);
 
-    this.bossActionStartPos.copy(this.logicBoss.group.position);
-    this.trajectory.startBossAction(this.bossActionStartPos);
-
-    this.isBossActionActive = true;
     this.logicBoss.hasHitCurrentSwing = false;
 
     // Orient towards Player
@@ -187,12 +171,12 @@ export class CombatDuelStage {
       this.logicBoss.stateTimer = 0;
       this.logicBoss.playAction('idle', 0.15, THREE.LoopRepeat, false, 1.0);
     }
-    this.isPlayerActionActive = false;
-    this.isBossActionActive = false;
-    this.playerLandingTimer = -1;
-    this.bossLandingTimer = -1;
-    this.playerResetGlide = -1;
-    this.bossResetGlide = -1;
+    if (this.logicPlayer) {
+      this.playerGlide.reset(this.logicPlayer.group);
+    }
+    if (this.logicBoss) {
+      this.bossGlide.reset(this.logicBoss.group);
+    }
     this.trajectory.clear();
     onCombatLog('↺ Both duel models reset to home marks.');
   }
@@ -308,7 +292,7 @@ export class CombatDuelStage {
 
     // 2. Boss Update
     if (this.bossAiMode === 'dummy') {
-      if (!this.isBossActionActive) {
+      if (!this.bossGlide.isActionActive) {
         this.logicBoss.state = 'idle';
         this.logicBoss.stateTimer = 0;
         this.logicBoss.ai.clearGoalStack();
@@ -404,8 +388,8 @@ export class CombatDuelStage {
       bossHp: this.logicBoss.hp,
       isBossHitboxActive: this.logicBoss.isHitboxActive(),
       bossReach: reach,
-      playerDispText: this.lastPlayerDispText,
-      bossDispText: this.lastBossDispText,
+      playerDispText: this.playerGlide.lastDispText,
+      bossDispText: this.bossGlide.lastDispText,
       activeActionName,
       currentFrame,
       totalFrames,
@@ -418,72 +402,21 @@ export class CombatDuelStage {
   private updateTrajectoryAndReset(delta: number): void {
     if (!this.logicPlayer || !this.logicBoss) return;
 
-    if (this.isPlayerActionActive) {
+    if (this.playerGlide.isActionActive) {
       this.trajectory.recordPlayerPoint(this.logicPlayer.group.position);
       if (this.logicPlayer.state === 'idle') {
-        this.isPlayerActionActive = false;
-        const dist = this.logicPlayer.group.position.distanceTo(this.playerActionStartPos);
-        const deltaZ = this.logicPlayer.group.position.z - this.playerActionStartPos.z;
-        this.lastPlayerDispText = `Δ${dist.toFixed(2)}m (Z:${deltaZ >= 0 ? '+' : ''}${deltaZ.toFixed(2)}m)`;
-        if (this.autoResetEnabled) {
-          this.playerLandingTimer = 1.0;
-        }
+        this.playerGlide.onActionEnd(this.logicPlayer.group.position, this.autoResetEnabled, false);
       }
     }
 
-    if (this.isBossActionActive) {
+    if (this.bossGlide.isActionActive) {
       this.trajectory.recordBossPoint(this.logicBoss.group.position);
       if (this.logicBoss.state === 'idle') {
-        this.isBossActionActive = false;
-        const dist = this.logicBoss.group.position.distanceTo(this.bossActionStartPos);
-        const deltaZ = this.bossActionStartPos.z - this.logicBoss.group.position.z;
-        this.lastBossDispText = `Δ${dist.toFixed(2)}m (Z:${deltaZ >= 0 ? '+' : ''}${deltaZ.toFixed(2)}m)`;
-        if (this.autoResetEnabled) {
-          this.bossLandingTimer = 1.0;
-        }
+        this.bossGlide.onActionEnd(this.logicBoss.group.position, this.autoResetEnabled, true);
       }
     }
 
-    // Auto-Reset Timers & Glide: Player
-    if (this.playerLandingTimer > 0) {
-      this.playerLandingTimer -= delta;
-      if (this.playerLandingTimer <= 0) {
-        this.playerResetGlide = 0;
-      }
-    }
-    if (this.playerResetGlide >= 0) {
-      this.playerResetGlide += delta * 2.5;
-      this.logicPlayer.group.position.lerp(
-        CONFIG.track2.playerHome,
-        Math.min(1.0, this.playerResetGlide),
-      );
-      if (this.playerResetGlide >= 1.0) {
-        this.logicPlayer.group.position.copy(CONFIG.track2.playerHome);
-        this.logicPlayer.group.rotation.y = 0;
-        this.playerResetGlide = -1;
-        this.playerLandingTimer = -1;
-      }
-    }
-
-    // Auto-Reset Timers & Glide: Boss
-    if (this.bossLandingTimer > 0) {
-      this.bossLandingTimer -= delta;
-      if (this.bossLandingTimer <= 0) {
-        this.bossResetGlide = 0;
-      }
-    }
-    if (this.bossResetGlide >= 0) {
-      this.bossResetGlide += delta * 2.5;
-      this.logicBoss.group.position.lerp(
-        CONFIG.track2.bossHome,
-        Math.min(1.0, this.bossResetGlide),
-      );
-      if (this.bossResetGlide >= 1.0) {
-        this.logicBoss.group.position.copy(CONFIG.track2.bossHome);
-        this.logicBoss.group.rotation.y = 0;
-        this.bossResetGlide = -1;
-        this.bossLandingTimer = -1;
-      }
-    }
+    this.playerGlide.updateGlide(delta, this.logicPlayer.group);
+    this.bossGlide.updateGlide(delta, this.logicBoss.group);
   }
 }

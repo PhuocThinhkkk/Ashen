@@ -8,6 +8,7 @@ import {
 } from '../../audio/types';
 import { BossMusicController } from '../../audio/BossMusicController';
 import { BossMusicStorage } from '../../audio/BossMusicStorage';
+import { MusicTrackLoader } from './music/MusicTrackLoader';
 import type { DomBindings } from './DomBindings';
 
 export class BossMusicGUI {
@@ -260,132 +261,29 @@ export class BossMusicGUI {
   }
 
   private setupUrlLoaders(): void {
-    // Single track URL loader
-    const loadSingleUrl = async () => {
-      const url = this.dom.inpSingleUrl?.value.trim();
-      if (!url) return;
+    MusicTrackLoader.bindLoader(
+      { input: this.dom.inpSingleUrl, button: this.dom.btnSingleLoadUrl, fileInfo: this.dom.singleFileInfo },
+      this.musicController,
+      this.currentPreset,
+      'single',
+      () => this.syncInputsFromPreset(),
+    );
 
-      if (this.dom.singleFileInfo) {
-        this.dom.singleFileInfo.textContent = `Loading "${url}"...`;
-        this.dom.singleFileInfo.style.color = '#ffd777';
-      }
+    MusicTrackLoader.bindLoader(
+      { input: this.dom.inpDualP1Url, button: this.dom.btnDualP1LoadUrl, fileInfo: this.dom.dualP1FileInfo },
+      this.musicController,
+      this.currentPreset,
+      'p1',
+      () => this.syncInputsFromPreset(),
+    );
 
-      try {
-        const decoded = await this.musicController.loadUrlBuffer(url);
-        if (this.currentPreset.config.mode === 'single') {
-          const cfg = this.currentPreset.config as SingleTrackConfig;
-          cfg.url = url;
-          cfg.fileName = url.split('/').pop() || 'theme.mp3';
-          cfg.duration = decoded.duration;
-          cfg.phase1.loopEnd = Math.min(cfg.phase1.loopEnd, decoded.duration);
-          cfg.phase2.loopEnd = Math.min(cfg.phase2.loopEnd, decoded.duration);
-        }
-
-        await this.musicController.setDirectBuffer(decoded, 'single');
-        this.syncInputsFromPreset();
-        if (this.dom.singleFileInfo) {
-          this.dom.singleFileInfo.textContent = `Loaded: ${url} (${decoded.duration.toFixed(1)}s)`;
-          this.dom.singleFileInfo.style.color = '#38d665';
-        }
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err);
-        if (this.dom.singleFileInfo) {
-          this.dom.singleFileInfo.textContent = `Error: ${msg}`;
-          this.dom.singleFileInfo.style.color = '#ff5555';
-        }
-      }
-    };
-
-    this.dom.btnSingleLoadUrl?.addEventListener('click', () => {
-      void loadSingleUrl();
-    });
-    this.dom.inpSingleUrl?.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') void loadSingleUrl();
-    });
-
-    // Dual P1 URL loader
-    const loadDualP1Url = async () => {
-      const url = this.dom.inpDualP1Url?.value.trim();
-      if (!url) return;
-
-      if (this.dom.dualP1FileInfo) {
-        this.dom.dualP1FileInfo.textContent = `Loading P1 "${url}"...`;
-        this.dom.dualP1FileInfo.style.color = '#ffd777';
-      }
-
-      try {
-        const decoded = await this.musicController.loadUrlBuffer(url);
-        if (this.currentPreset.config.mode === 'dual') {
-          const cfg = this.currentPreset.config as DualTrackConfig;
-          cfg.phase1Url = url;
-          cfg.phase1FileName = url.split('/').pop() || 'p1.mp3';
-          cfg.phase1Duration = decoded.duration;
-          cfg.phase1.loopEnd = decoded.duration;
-        }
-
-        await this.musicController.setDirectBuffer(decoded, 'p1');
-        this.syncInputsFromPreset();
-        if (this.dom.dualP1FileInfo) {
-          this.dom.dualP1FileInfo.textContent = `Loaded P1: ${url} (${decoded.duration.toFixed(1)}s)`;
-          this.dom.dualP1FileInfo.style.color = '#38d665';
-        }
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err);
-        if (this.dom.dualP1FileInfo) {
-          this.dom.dualP1FileInfo.textContent = `Error: ${msg}`;
-          this.dom.dualP1FileInfo.style.color = '#ff5555';
-        }
-      }
-    };
-
-    this.dom.btnDualP1LoadUrl?.addEventListener('click', () => {
-      void loadDualP1Url();
-    });
-    this.dom.inpDualP1Url?.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') void loadDualP1Url();
-    });
-
-    // Dual P2 URL loader
-    const loadDualP2Url = async () => {
-      const url = this.dom.inpDualP2Url?.value.trim();
-      if (!url) return;
-
-      if (this.dom.dualP2FileInfo) {
-        this.dom.dualP2FileInfo.textContent = `Loading P2 "${url}"...`;
-        this.dom.dualP2FileInfo.style.color = '#ff9999';
-      }
-
-      try {
-        const decoded = await this.musicController.loadUrlBuffer(url);
-        if (this.currentPreset.config.mode === 'dual') {
-          const cfg = this.currentPreset.config as DualTrackConfig;
-          cfg.phase2Url = url;
-          cfg.phase2FileName = url.split('/').pop() || 'p2.mp3';
-          cfg.phase2Duration = decoded.duration;
-          cfg.phase2.loopEnd = decoded.duration;
-        }
-
-        await this.musicController.setDirectBuffer(decoded, 'p2');
-        this.syncInputsFromPreset();
-        if (this.dom.dualP2FileInfo) {
-          this.dom.dualP2FileInfo.textContent = `Loaded P2: ${url} (${decoded.duration.toFixed(1)}s)`;
-          this.dom.dualP2FileInfo.style.color = '#38d665';
-        }
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err);
-        if (this.dom.dualP2FileInfo) {
-          this.dom.dualP2FileInfo.textContent = `Error: ${msg}`;
-          this.dom.dualP2FileInfo.style.color = '#ff5555';
-        }
-      }
-    };
-
-    this.dom.btnDualP2LoadUrl?.addEventListener('click', () => {
-      void loadDualP2Url();
-    });
-    this.dom.inpDualP2Url?.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') void loadDualP2Url();
-    });
+    MusicTrackLoader.bindLoader(
+      { input: this.dom.inpDualP2Url, button: this.dom.btnDualP2LoadUrl, fileInfo: this.dom.dualP2FileInfo },
+      this.musicController,
+      this.currentPreset,
+      'p2',
+      () => this.syncInputsFromPreset(),
+    );
   }
 
   private setupTransportControls(): void {
