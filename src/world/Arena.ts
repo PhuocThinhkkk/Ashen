@@ -131,6 +131,12 @@ export class Arena {
     }
   }
 
+  /**
+   * [Purpose]: Restricts a 3D position vector within the circular arena boundary factoring entity collision radius.
+   * @condition Called per-frame by player and boss kinematic movement updates to enforce world boundaries.
+   * @param position Entity 3D position vector in-place clamped on XZ plane; entityRadius is collision margin.
+   * @returns True if position breached arena perimeter and was clamped, false if within bounds.
+   */
   public clampToArena(position: THREE.Vector3, entityRadius = 0.6): boolean {
     const maxR = this.radius - entityRadius - 0.5;
     const distSq = position.x * position.x + position.z * position.z;

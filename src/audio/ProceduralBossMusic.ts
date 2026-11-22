@@ -29,6 +29,12 @@ export async function generateProceduralBossTheme(
   return cachedBuffers;
 }
 
+/**
+ * [Purpose]: Synthesizes the atmospheric Phase 1 boss theme loop using drones, drums, and strings via OfflineAudioContext.
+ * @condition Invoked during initial audio system pre-warm or boss fight initialization.
+ * @param duration Loop length in seconds; sampleRate Audio sampling rate in Hz.
+ * @returns Fully rendered stereo AudioBuffer containing the seamless Phase 1 theme.
+ */
 async function renderPhase1Track(duration: number, sampleRate: number): Promise<AudioBuffer> {
   const offlineCtx = new OfflineAudioContext(2, sampleRate * duration, sampleRate);
 
@@ -122,6 +128,12 @@ async function renderPhase1Track(duration: number, sampleRate: number): Promise<
   return offlineCtx.startRendering();
 }
 
+/**
+ * [Purpose]: Synthesizes the intense Phase 2 boss theme loop featuring distorted bass, rapid war drums, and choir chants.
+ * @condition Invoked during initial audio system pre-warm or boss fight initialization.
+ * @param duration Loop length in seconds; sampleRate Audio sampling rate in Hz.
+ * @returns Fully rendered stereo AudioBuffer containing the seamless Phase 2 theme.
+ */
 async function renderPhase2Track(duration: number, sampleRate: number): Promise<AudioBuffer> {
   const offlineCtx = new OfflineAudioContext(2, sampleRate * duration, sampleRate);
 

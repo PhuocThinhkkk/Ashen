@@ -6,6 +6,12 @@ import WHIP_FRAGMENT_SHADER from './shaders/bloodWhip.frag.glsl?raw';
 import FLIPBOOK_VERTEX_SHADER from './shaders/bloodFlipbook.vert.glsl?raw';
 import FLIPBOOK_FRAGMENT_SHADER from './shaders/bloodFlipbook.frag.glsl?raw';
 
+/**
+ * [Purpose]: Constructs cross-planar segmented geometry for directional liquid blood whip deformation.
+ * @condition Invoked during BloodBurstVFX initialization to create the shared whip mesh buffer.
+ * @param length, width, segmentsX - Dimensions along X/width (m) and axial subdivision count.
+ * @returns Dual-plane cross-quad THREE.BufferGeometry ready for GPU vertex displacement.
+ */
 function createWhipGeometry(length = 1.55, width = 0.22, segmentsX = 24): THREE.BufferGeometry {
   const positions: number[] = [];
   const uvs: number[] = [];
@@ -129,7 +135,10 @@ export class BloodBurstVFX {
   }
 
   /**
-   * Triggers the zero-buffer-upload directional whip and billboard burst.
+   * [Purpose]: Spawns pooled directional blood whip and 4x4 animated flipbook billboard at impact location.
+   * @condition Triggered when an attack successfully hits an unblocked flesh target.
+   * @param contactPoint, hitDirection, isHeavy - Impact coordinate, weapon slash vector, and heavy hit flag.
+   * @returns Void; activates next pooled whip mesh and camera-facing quad without heap allocations.
    */
   public emit(
     contactPoint: THREE.Vector3 | { x: number; y: number; z: number },

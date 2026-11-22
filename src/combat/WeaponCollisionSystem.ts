@@ -22,8 +22,10 @@ export class WeaponCollisionSystem {
   private static readonly EPSILON = 1e-6;
 
   /**
-   * Computes the shortest distance and closest points between two 3D line segments.
-   * S1: p1 -> q1, S2: p2 -> q2
+   * [Purpose]: Computes the exact minimum Euclidean distance and closest contact points between two 3D line segments.
+   * @condition Called during weapon-to-body hit tests and capsule collision queries.
+   * @param p1,q1,p2,q2,outClosest1,outClosest2 Endpoints of segments S1 and S2, and output vectors to receive closest points.
+   * @returns Minimum distance (in world units) separating the two line segments.
    */
   public static distSegmentToSegment(
     p1: THREE.Vector3,
@@ -86,7 +88,10 @@ export class WeaponCollisionSystem {
   }
 
   /**
-   * Tests continuous swept collision between a moving weapon blade segment and a target body capsule.
+   * [Purpose]: Performs continuous swept collision volume testing between weapon blade segments (current/previous frames) and target body capsule.
+   * @condition Invoked during active attack hitbox frames to prevent fast weapon swings from tunneling through character capsules.
+   * @param currBlade,prevBlade,target Current and previous weapon blade segments (base, tip, radius), and target body capsule geometry.
+   * @returns WeaponCollisionResult indicating hit status, shortest distance, contact point, and impact surface normal.
    */
   public static testSweptBladeToBody(
     currBlade: WeaponBladeSegment,

@@ -28,6 +28,12 @@ export class GlideResetController {
     }
   }
 
+  /**
+   * [Purpose]: Updates landing delay countdown and smoothly glides entity transform back to default rest position.
+   * @condition Called on each frame update for entities configured with kinematic glide reset enabled.
+   * @param delta Frame delta time in seconds, and group THREE.Group transform to be interpolated.
+   * @returns Linearly interpolates group position towards defaultPosition until reset completion.
+   */
   public updateGlide(delta: number, group: THREE.Group): void {
     if (this.landingTimer > 0) {
       this.landingTimer -= delta;

@@ -98,6 +98,12 @@ export class RawAnimationStage {
     await this.loadBoss(onStatusUpdate);
   }
 
+  /**
+   * [Purpose]: Loads and initializes the player character model rig, animation mixer, and socket attachments.
+   * @condition Invoked during Track 1 stage setup or when switching player models ('knight' | 'samurai').
+   * @param modelId Model identifier string and optional onStatusUpdate progress callback.
+   * @returns Promise resolving when the player GLTF is loaded, configured, and bound to the scene.
+   */
   public async loadPlayer(
     modelId: 'knight' | 'samurai',
     onStatusUpdate?: (status: string, isError?: boolean) => void,
@@ -245,6 +251,12 @@ export class RawAnimationStage {
     this.diagnostics.player.modelId = modelId;
   }
 
+  /**
+   * [Purpose]: Loads the Titan boss model, configures materials and shadows, and initializes animation mixer actions.
+   * @condition Invoked during initial Track 1 initialization or when reloading the boss entity.
+   * @param onStatusUpdate Optional callback for reporting loading progress and error status messages.
+   * @returns Promise resolving when boss rig is instantiated, animated, and added to the scene.
+   */
   public async loadBoss(
     onStatusUpdate?: (status: string, isError?: boolean) => void,
   ): Promise<void> {
@@ -465,6 +477,12 @@ export class RawAnimationStage {
     this.bossFootHitboxDebugger.setVisible(visible);
   }
 
+  /**
+   * [Purpose]: Computes current animation frame indices, kinematic phases, and active hitbox states for HUD telemetry.
+   * @condition Called per-frame in the render loop or upon scrub/step events in Track 1 inspector.
+   * @param none Operates on active player and boss animation actions and mixer states.
+   * @returns Telemetry state object with active flags and formatted debug text string.
+   */
   public updateFrameTelemetry(): {
     playerActive: boolean;
     bossActive: boolean;

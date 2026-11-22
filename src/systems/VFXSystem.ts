@@ -179,8 +179,10 @@ export class VFXSystem {
   }
 
   /**
-   * Pre-warms VFX shaders with WebGLRenderer to eliminate first-attack/hit shader compilation stalls.
-   * Warms slash arcs, sparks, ground slam decals/shockwaves, and three.quarks particle systems.
+   * [Purpose]: Compiles all VFX shader programs and warms particle buffers to prevent runtime jank on first hit.
+   * @condition Called once during scene initialization or loading screen before gameplay commences.
+   * @param renderer Active WebGLRenderer instance; camera Main active scene camera.
+   * @returns Void; triggers renderer.compile and off-screen dummy particle emissions.
    */
   public prewarm(renderer: THREE.WebGLRenderer, camera: THREE.Camera): void {
     if (typeof window === 'undefined' || !renderer) return;

@@ -166,7 +166,10 @@ export class SparkBurstVFX {
   }
 
   /**
-   * Emits metallic needle sparks and embers along the strike reflection tangent.
+   * [Purpose]: Emits pooled high-velocity needle sparks and lingering smoldering embers along collision normal.
+   * @condition Triggered on weapon parry, shield block, or armor/weapon clash events.
+   * @param origin, direction, isHeavy - Emission origin point, reflection tangent vector, and heavy hit multiplier.
+   * @returns Void; transforms and restarts pooled three.quarks particle systems.
    */
   public emit(
     origin: THREE.Vector3 | { x: number; y: number; z: number },

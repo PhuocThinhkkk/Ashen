@@ -422,6 +422,12 @@ export class BossMusicController {
     this.notifyState();
   }
 
+  /**
+   * [Purpose]: Orchestrates seamless crossfade from Phase 1 boss theme to Phase 2 boss music track.
+   * @condition Triggered upon boss reaching Phase 2 HP threshold (typically <= 50% max HP).
+   * @param crossfadeDuration Duration of the linear crossfade transition in seconds (defaults to 2.0s).
+   * @returns Void; ramps down Phase 1 gain, ramps up Phase 2 stream/buffer, and updates activePhase state.
+   */
   public transitionToPhase2(crossfadeDuration = 2.0): void {
     if (!this.context || !this.musicMasterGain) return;
     if (this.activePhase === 'phase2' || this.activePhase === 'transitioning') return;

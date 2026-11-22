@@ -206,12 +206,10 @@ export class Game {
   }
 
   /**
-   * Pre-match loading & warm-up sequence:
-   * 1. Await models & weapons
-   * 2. Pre-tick animations to bind interpolants upfront
-   * 3. Pre-compile WebGL shaders and shadow depth maps
-   * 4. Pre-warm three.quarks particle systems and decal pools
-   * 5. Smoothly transition to match start
+   * [Purpose]: Orchestrates asset loading, animation mixer pre-ticking, shader compilation, and particle prewarming before match start.
+   * @condition Invoked once on game initialization before starting the simulation loop.
+   * @param None Operates on instance members and DOM loading screen elements.
+   * @returns Resolves when pre-warm pipeline completes and UI transitions to ready state.
    */
   public async prepareMatch(): Promise<void> {
     const screen = document.querySelector<HTMLElement>('#prewarm-loading-screen');
@@ -417,6 +415,12 @@ export class Game {
     this.scene.add(this.boss.group);
   }
 
+  /**
+   * [Purpose]: Orchestrates the per-frame game simulation tick across player, boss, camera, vfx, audio, and HUD.
+   * @condition Called by the fixed 60Hz simulation loop with hitstop time-dilation applied.
+   * @param delta Simulation step time in seconds; elapsed is total running time in seconds.
+   * @returns Mutates entity positions, combat states, and advances profiler diagnostics.
+   */
   private update(delta: number, elapsed: number): void {
     this.profiler.beginFrame();
     this.frame += 1;
@@ -648,6 +652,12 @@ export class Game {
     this.prevBossIsPhase2 = this.boss.isPhase2;
   }
 
+  /**
+   * [Purpose]: Transforms a 3D world coordinate into 2D viewport pixel space with optional vertical offset.
+   * @condition Invoked per frame by HUD rendering, lock-on reticle placement, and damage floating text.
+   * @param worldPos Target 3D coordinate; heightOffset is vertical offset in world units.
+   * @returns Reusable 2D vector containing pixel coordinates relative to top-left of canvas.
+   */
   private projectToScreen(worldPos: THREE.Vector3, heightOffset = 0): THREE.Vector2 {
     this.scratchWorldPos.copy(worldPos);
     this.scratchWorldPos.y += heightOffset;

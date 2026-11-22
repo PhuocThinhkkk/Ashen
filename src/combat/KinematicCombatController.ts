@@ -200,8 +200,10 @@ export class KinematicCombatController {
   }
 
   /**
-   * Ticks kinematic frame data, updates hitbox state, extracts root motion,
-   * and fires VFX/Audio triggers.
+   * [Purpose]: Advances kinematic frame counts, extracts root motion displacements, activates hitboxes, and fires timed VFX/SFX events.
+   * @condition Called every frame at 60Hz while an attack or combat action is actively playing.
+   * @param delta,characterFacingRotationY Simulation delta time in seconds, and character yaw angle (radians) for orienting root motion.
+   * @returns Updates currentFrame, currentPhase, activeHitboxBone, and accumulates pendingRootMotionDelta.
    */
   public update(delta: number, characterFacingRotationY = 0): void {
     if (!this.currentAction || !this.currentAction.isRunning()) {

@@ -91,6 +91,12 @@ export class MobileDeviceController {
     );
   }
 
+  /**
+   * [Purpose]: Requests or exits browser fullscreen mode across vendor prefixes with fallback exception handling.
+   * @condition User clicks fullscreen toggle button or triggers orientation prompt tap-to-enter.
+   * @param forceEnter Boolean flag forcing fullscreen entry regardless of current fullscreen state.
+   * @returns Promise resolving when fullscreen transition completes or catches security/permission errors.
+   */
   public async toggleFullscreen(forceEnter = false): Promise<void> {
     const currentlyFs = this.isFullscreen();
 
@@ -177,6 +183,12 @@ export class MobileDeviceController {
     }
   }
 
+  /**
+   * [Purpose]: Evaluates viewport orientation and touch/viewport width constraints to toggle portrait warning overlay.
+   * @condition Fired on window resize, orientationchange events, and after user dismisses portrait banner.
+   * @param none Inspects window dimensions, pointer media query, and isPortraitDismissed flag.
+   * @returns Toggles 'hidden' class on orientationOverlay DOM element based on orientation checks.
+   */
   public updateOrientationState(): void {
     if (!this.orientationOverlay) return;
 

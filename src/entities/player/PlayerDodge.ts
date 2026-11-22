@@ -98,6 +98,12 @@ export class PlayerDodgeHandler {
     });
   }
 
+  /**
+   * [Purpose]: Advances dodge roll timeline through startup, i-frame invulnerability, and recovery phases using a half-sine kinematic velocity curve.
+   * @condition Invoked per-frame from player update loop while player is in the 'dodge' state.
+   * @param player,delta,modelScene Player character context, simulation delta in seconds, and root model scene group for visual mesh updates.
+   * @returns Updates player translation, invulnerability flag, i-frame visual shaders, and transitions back to 'idle' on completion.
+   */
   public static updateDodge(player: PlayerCharacter, delta: number, modelScene: THREE.Group | null): void {
     player.dodgeTimer += delta;
 

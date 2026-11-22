@@ -24,6 +24,12 @@ export function createRenderer(canvas: HTMLCanvasElement): THREE.WebGLRenderer {
   return renderer;
 }
 
+/**
+ * [Purpose]: Recalculates canvas backbuffer dimensions, device pixel ratio, and camera projection on viewport change.
+ * @condition Called on window resize events and at match initialization before rendering.
+ * @param renderer Target WebGLRenderer; camera is PerspectiveCamera; maxDpr clamps high-DPI scaling.
+ * @returns True if canvas buffer size or aspect ratio was modified, false if dimensions were unchanged.
+ */
 export function resizeRenderer(
   renderer: THREE.WebGLRenderer,
   camera: THREE.PerspectiveCamera,

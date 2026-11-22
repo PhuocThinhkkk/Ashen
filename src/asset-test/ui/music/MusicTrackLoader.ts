@@ -8,6 +8,12 @@ export interface LoaderDomElements {
 }
 
 export class MusicTrackLoader {
+  /**
+   * [Purpose]: Binds URL submission input and triggers audio file loading and decoding into BossMusicController.
+   * @condition Invoked during music inspector GUI initialization for single track and phase 1/2 slots.
+   * @param elements Loader DOM inputs/buttons, musicController, currentPreset, target slot, and onSuccess callback.
+   * @returns Registers click and enter-key event listeners that asynchronously load and decode audio buffers.
+   */
   public static bindLoader(
     elements: LoaderDomElements,
     musicController: BossMusicController,

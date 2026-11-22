@@ -173,6 +173,12 @@ export class PlayerCharacter {
     this.loadPromise = this.loadModel(initialModelId);
   }
 
+  /**
+   * [Purpose]: Asynchronously loads the player character GLB model, configures materials, binds skeletal bones, and initializes dual-layer animation actions.
+   * @condition Invoked during player construction or upon character model variant hot-swap.
+   * @param modelId Unique string identifier for the player model asset.
+   * @returns Resolves when skeletal meshes, weapon sockets, and animation split layers are ready.
+   */
   public async loadModel(modelId: string): Promise<void> {
     this.isLoaded = false;
 
@@ -509,8 +515,10 @@ export class PlayerCharacter {
   }
 
   /**
-   * Late-update procedural target-lock pitch tilt.
-   * Runs AFTER mixer.update() so AnimationMixer does not overwrite spine flexion.
+   * [Purpose]: Computes and applies procedural late-update spine flexion and pitch tilt to keep player orientation aimed toward target lock.
+   * @condition Called in late-update phase after mixer.update() to prevent animation clips from overwriting procedural bone rotation.
+   * @param delta,lockedTargetPos Simulation delta time in seconds, and target position vector in world coordinates (or null if unlocked).
+   * @returns Updates spine bone local rotations and sets currentTiltAngle state.
    */
   private updateSpinePitchTilt(delta: number, lockedTargetPos: THREE.Vector3 | null): void {
     const isAirborne = !this.isGrounded || this.group.position.y > 0.05;
@@ -526,6 +534,12 @@ export class PlayerCharacter {
     );
   }
 
+  /**
+   * [Purpose]: Coordinates the primary per-frame update loop for player animations, locomotion, kinematic physics, combat states, and hitboxes.
+   * @condition Invoked every frame from the fixed 60Hz main simulation loop.
+   * @param delta,elapsed,inputs,cameraYaw,lockedTargetPos,arenaRadius Frame delta time, elapsed time, user input state, camera yaw, lock-on target, and arena boundary.
+   * @returns Drives player state transitions, transforms, stamina, and combat actions for the current tick.
+   */
   public update(
     delta: number,
     elapsed: number,

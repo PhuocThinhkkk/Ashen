@@ -41,6 +41,12 @@ export class PlayerCombat {
     player.playUpperBodyAction(clipName, 0.08, THREE.LoopOnce, true, attack.isHeavy ? 1.0 : 1.2);
   }
 
+  /**
+   * [Purpose]: Advances attack frame timers through startup, active hitbox, and recovery phases while managing combo inputs and cancel windows.
+   * @condition Executed every frame during player attack state ('attack' or airborne attack).
+   * @param player,delta,inputs,lockedTargetPos PlayerCharacter context, frame delta in seconds, current player inputs, and optional lock target.
+   * @returns Updates attackPhase, triggers weapon swing audio/VFX, checks combo chaining, and clears upper body overrides upon recovery.
+   */
   public static updateAttack(
     player: PlayerCharacter,
     delta: number,
@@ -119,6 +125,12 @@ export class PlayerCombat {
     }
   }
 
+  /**
+   * [Purpose]: Applies incoming damage to player health pool, checks death condition, and triggers stagger flinch animations and interrupts.
+   * @condition Invoked when an enemy attack blade or projectile intersects the player's hurtbox outside of invulnerability frames.
+   * @param player,damage,isHeavy Player character instance, numeric damage amount, and heavy impact flag that forces stagger.
+   * @returns Returns true if damage was successfully applied; false if player was invulnerable or dead.
+   */
   public static takeDamage(player: PlayerCharacter, damage: number, isHeavy: boolean): boolean {
     if (player.isInvulnerable || player.state === 'dead') return false;
 

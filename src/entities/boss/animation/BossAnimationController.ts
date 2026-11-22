@@ -28,6 +28,12 @@ export class BossAnimationController {
     return this.mixer;
   }
 
+  /**
+   * [Purpose]: Registers animation clips with the AnimationMixer and partitions them into upper- and lower-body sub-clips for skeletal layering.
+   * @condition Invoked during model loading after the AnimationMixer has been bound to the model root.
+   * @param clips Array of AnimationClip assets imported from the boss 3D model.
+   * @returns Populates full-body actions map and upper/lower layer sub-clip action registries.
+   */
   public registerClips(clips: THREE.AnimationClip[]): void {
     if (!this.mixer) return;
 

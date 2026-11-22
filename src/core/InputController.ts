@@ -119,6 +119,12 @@ export class InputController {
     return this.consumeInputs(target);
   }
 
+  /**
+   * [Purpose]: Polls desktop and touch input drivers, coalescing movement axes and single-frame action triggers.
+   * @condition Called at the beginning of each simulation tick in the 60Hz loop.
+   * @param target Reusable CombatInputs object populated with normalized move vector and action booleans.
+   * @returns The mutated target CombatInputs structure with consumed transient trigger flags cleared.
+   */
   public consumeInputs(target: CombatInputs): CombatInputs {
     this.desktop.consumeTriggers(this.desktopTriggers);
     this.touch.consumeTriggers(this.touchTriggers);

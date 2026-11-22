@@ -83,7 +83,10 @@ export class BossLocomotionBlend {
   }
 
   /**
-   * Smoothly interpolates weights toward targets and sets them on actions.
+   * [Purpose]: Interpolates locomotion blend weights toward target directional inputs and applies effective weights to animation actions.
+   * @condition Invoked every frame during boss locomotion update to produce seamless multi-directional footwork.
+   * @param delta,strafeDir,radialFactor,actions Frame delta time (s), lateral strafe sign, forward/backward factor, and container of active locomotion actions.
+   * @returns Dominant animation action name based on current highest blend weight.
    */
   public updateWeights(
     delta: number,

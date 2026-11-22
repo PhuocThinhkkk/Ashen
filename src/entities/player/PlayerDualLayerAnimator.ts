@@ -81,6 +81,12 @@ export class PlayerDualLayerAnimator {
     return { upperAction, lowerAction, resolvedName };
   }
 
+  /**
+   * [Purpose]: Simultaneously initiates crossfades on both upper- and lower-body animation layers to play a unified full-body clip.
+   * @condition Invoked when initiating full-body state changes (e.g. idle, rolling, jumping, falling, stagger, death).
+   * @param name,fadeDuration,loop,clampWhenFinished,timeScale Animation clip name, crossfade blend time in seconds, looping mode, clamp flag, and speed scale.
+   * @returns Object containing the activated upper and lower AnimationAction references.
+   */
   public playFullBodyAction(
     name: string,
     fadeDuration = 0.15,
@@ -215,6 +221,12 @@ export class PlayerDualLayerAnimator {
     return lowerAction;
   }
 
+  /**
+   * [Purpose]: Blends upper-body animation layer back into synchronization with the active lower-body base locomotion action.
+   * @condition Called upon completion, cancellation, or interruption of upper-body overrides (attacks, item drinking).
+   * @param fadeDuration Crossfade transition duration in seconds for restoring base upper-body pose.
+   * @returns Resets isUpperBodyOverride flag and matches upper-body playback phase and time to lower-body action.
+   */
   public clearUpperBodyOverride(fadeDuration = 0.18): void {
     if (!this.isUpperBodyOverride) return;
 

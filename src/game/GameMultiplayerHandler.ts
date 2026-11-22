@@ -36,6 +36,12 @@ export class GameMultiplayerHandler {
     };
   }
 
+  /**
+   * [Purpose]: Initializes multiplayer duel mode, instantiating the remote player proxy and positioning combatants.
+   * @condition Triggered upon receiving the network match-start event from the matchmaking server.
+   * @param data Session IDs for player 1 (host) and player 2 (client) to determine role and spawn positions.
+   * @returns Resolves once remote player model is loaded and duel state is fully bound.
+   */
   public async startMultiplayerDuel(data: { p1SessionId: string; p2SessionId: string | null }): Promise<void> {
     const g = this.game as any;
     g.isMultiplayerDuel = true;
@@ -68,6 +74,12 @@ export class GameMultiplayerHandler {
     g.hud.reset();
   }
 
+  /**
+   * [Purpose]: Processes networked combat damage and impact VFX from authoritative or remote player hits.
+   * @condition Triggered upon receiving a combat-hit network packet from the opponent.
+   * @param hitData Payload containing hit point, hit normal direction, damage amount, and heavy hit flag.
+   * @returns Mutates local player HP if target, spawns blood/spark VFX, and creates HUD damage numbers.
+   */
   public handleRemoteCombatHit(hitData: RemoteHitData): void {
     const g = this.game as any;
     const contact = new THREE.Vector3(hitData.hitPoint.x, hitData.hitPoint.y, hitData.hitPoint.z);

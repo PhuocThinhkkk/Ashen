@@ -561,6 +561,12 @@ export function toTime(frame: number, fps = 60): number {
   return (frame - 1) / fps;
 }
 
+/**
+ * [Purpose]: Retrieves the kinematic frame data configuration for a given animation clip identifier using exact or fuzzy name matching.
+ * @condition Called when starting an attack or action to configure frame windows, root motion, and event triggers.
+ * @param clipName Animation clip or action name to query against kinematic action registry.
+ * @returns KinematicActionConfig containing frame phases and trigger curves if found, or undefined.
+ */
 export function getKinematicAction(clipName: string): KinematicActionConfig | undefined {
   if (KINEMATIC_ACTIONS[clipName]) return KINEMATIC_ACTIONS[clipName];
   const lower = clipName.toLowerCase();
