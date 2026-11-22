@@ -89,6 +89,12 @@ export class GroundDecalPool {
     this.decalPool = [];
   }
 
+  /**
+   * [Purpose]: Generates a procedural 256x256 scorched ground crack alpha texture via Canvas2D.
+   * @condition Called once during GroundDecalPool construction to share among pooled decal meshes.
+   * @param none - Self-contained canvas rendering without arguments.
+   * @returns THREE.Texture or fallback DataTexture configured with radial scorch gradient and fracture lines.
+   */
   private createCrackTexture(): THREE.Texture {
     if (typeof document === 'undefined') {
       const data = new Uint8Array([20, 15, 10, 255]);

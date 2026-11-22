@@ -77,6 +77,12 @@ export class AudioSystem {
     }
   }
 
+  /**
+   * [Purpose]: Initializes the Web Audio API context and unlocks master routing upon user gesture.
+   * @condition Triggered on the first user input event (click, keydown, pointerdown) or explicit playback request.
+   * @param none - No arguments required.
+   * @returns Promise resolving once AudioContext state reaches 'running' and preset loads.
+   */
   public async unlock(): Promise<void> {
     if (this.unlocked && this.context && this.context.state === 'running') return;
 
@@ -363,6 +369,12 @@ export class AudioSystem {
     osc.stop(now + 0.8);
   }
 
+  /**
+   * [Purpose]: Synthesizes an aggressive multi-layered boss roar with pitch ramp and resonant low-pass filter.
+   * @condition Triggered during boss Phase 2 transition sequence or rage telegraph.
+   * @param none - Self-contained procedural synthesis.
+   * @returns Void; schedules and plays low-frequency sawtooth oscillators directly to sfx destination.
+   */
   public phase2Roar(): void {
     if (!this.context || this.context.state !== 'running') return;
     const now = this.context.currentTime;
@@ -571,7 +583,10 @@ export class AudioSystem {
   }
 
   /**
-   * Colossal ground crash sound effect for heavy ground slams.
+   * [Purpose]: Plays the colossal impact audio cue for ground slam shockwaves using sampled buffer or fallback synth.
+   * @condition Triggered during boss slam impacts or heavy landing thuds via animation events.
+   * @param none - Self-contained audio playback without parameters.
+   * @returns Void; triggers AudioBuffer playback or procedural multi-oscillator rumble.
    */
   public playGroundSlam(): void {
     const played = this.playBuffer(this.soundBuffers.groundSlam, 1.0, 0.04);

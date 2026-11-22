@@ -12,6 +12,12 @@ export interface HitResult {
 const vToTarget = new THREE.Vector3();
 const vAttackerForward = new THREE.Vector3();
 
+/**
+ * [Purpose]: Evaluates geometric distance, attack reach, horizontal angular arc, and target invulnerability to determine attack impact.
+ * @condition Called during active attack frames when performing radial/arc hitbox collision queries against an entity.
+ * @param attackerPosition,attackerRotationY,attack,targetPosition,targetRadius,targetInvulnerable Attacker coordinates, orientation, attack stats, target coordinates/radius, and i-frame status.
+ * @returns HitResult object detailing whether a hit occurred, damage/poise values, heavy flag, and computed 3D contact point.
+ */
 export function checkAttackHit(
   attackerPosition: THREE.Vector3,
   attackerRotationY: number,

@@ -2,6 +2,12 @@
  * Pure canvas waveform renderer for audio visualizer inspectors.
  */
 export class WaveformCanvasRenderer {
+  /**
+   * [Purpose]: Renders audio waveform peaks, background grid, and active playback head line onto a 2D canvas.
+   * @condition Invoked by music visualizer update loop when an audio buffer is loaded or playback time changes.
+   * @param ctx 2D canvas context, canvas dimensions, audio buffer, playhead normalized progress, and accent color.
+   * @returns Draws waveform geometry and playhead indicator directly to the canvas context.
+   */
   public static renderWaveform(
     ctx: CanvasRenderingContext2D,
     width: number,

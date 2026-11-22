@@ -109,6 +109,12 @@ const ARC_FRAGMENT_SHADER = /* glsl */ `
   }
 `;
 
+/**
+ * [Purpose]: Builds a curved cylindrical ribbon mesh buffer with UVs for weapon slash trail rendering.
+ * @condition Called during SlashArcRibbon initialization or when configuring custom weapon sweep geometries.
+ * @param innerRadius, outerRadius, arcAngle, angularSegments, radialSegments - Geometry dimensions (m, rad) and tessellation density.
+ * @returns Fully populated THREE.BufferGeometry with position, UV, and index buffers.
+ */
 export function createSlashArcGeometry(
   innerRadius = 0.6,
   outerRadius = 2.4,

@@ -303,6 +303,12 @@ function captureCanvas(): string {
   return dom.canvas.toDataURL('image/png');
 }
 
+/**
+ * [Purpose]: Freezes animation playback at the exact midpoint frame for visual inspection and snapshot comparison.
+ * @condition Invoked during automated mid-frame validation suites or manual animation inspection workflows.
+ * @param category Target rig identifier ('player' | 'boss') and clipName string matching an animation clip.
+ * @returns Promise resolving to clip duration and computed midpoint timestamp in seconds.
+ */
 async function pauseAtMidFrame(
   category: 'player' | 'boss',
   clipName: string,
@@ -462,6 +468,12 @@ const origElemQuerySelectorAll = Element.prototype.querySelectorAll;
 const origGetComputedStyle = window.getComputedStyle;
 const origGetBoundingClientRect = Element.prototype.getBoundingClientRect;
 
+/**
+ * [Purpose]: Automatically switches the active test harness tab mode based on queried DOM element hierarchy.
+ * @condition Triggered on DOM query interceptions (querySelector, getComputedStyle) during test suite runs.
+ * @param el Inspected DOM element or null to test for containment within tab containers.
+ * @returns Updates activeMode state and toggles visibility classes across tab containers.
+ */
 const checkAutoSwitch = (el: Element | null) => {
   if (el && rawStage?.diagnostics?.loaded) {
     if (dom.winCombatDuel?.contains(el) && activeMode !== 'combat') {

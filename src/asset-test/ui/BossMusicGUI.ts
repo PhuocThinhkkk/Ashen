@@ -319,6 +319,12 @@ export class BossMusicGUI {
     });
   }
 
+  /**
+   * [Purpose]: Initiates recurring interval timer that polls music controller state and updates GUI badges/waveforms.
+   * @condition Called during BossMusicGUI initialization when telemetry polling is not already active.
+   * @param none Operates on internal DOM badge elements, playback canvas, and musicController instance.
+   * @returns Creates window interval timer (100ms) mutating badge text, colors, and waveform playheads.
+   */
   private startTelemetryLoop(): void {
     if (this.telemetryTimer !== null) return;
     this.telemetryTimer = window.setInterval(() => {

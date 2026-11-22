@@ -25,7 +25,10 @@ export class BossSubgoalEvaluator {
   }
 
   /**
-   * Selects next offensive subgoal or combo when the goal stack is empty.
+   * [Purpose]: Evaluates boss-to-player distance and combat phase to choose an offensive action plan (combo sequence, solo attack, or approach).
+   * @condition Called by BossAI whenever the subgoal queue becomes empty and a new offensive behavior must be selected.
+   * @param distanceToPlayer,isPhase2 Euclidean distance to player in meters, and whether Phase 2 aggression rules apply.
+   * @returns Action descriptor object containing action type ('COMBO' | 'ATTACK' | 'APPROACH') and associated attack definitions.
    */
   public static selectOffensiveActionByDistance(
     distanceToPlayer: number,

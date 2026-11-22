@@ -48,6 +48,12 @@ export class PlayerLocomotion {
     player.playFullBodyAction('jumping', 0.10, THREE.LoopOnce, true, 1.2);
   }
 
+  /**
+   * [Purpose]: Computes gravity integration, vertical trajectory, airborne landing collision detection, and mid-air attack cleanup.
+   * @condition Invoked per-frame from player update whenever character is airborne or vertical displacement exceeds zero.
+   * @param player,delta,inputs PlayerCharacter instance, frame delta time in seconds, and current user input state.
+   * @returns Mutates vertical velocity and position, triggers landing audio/VFX on floor contact, and resets grounded state.
+   */
   public static updateAirbornePhysics(player: PlayerCharacter, delta: number, inputs: CombatInputs): void {
     if (!player.isGrounded || player.group.position.y > 0) {
       player.verticalVelocity += player.gravity * delta;
@@ -231,6 +237,12 @@ export class PlayerLocomotion {
     }
   }
 
+  /**
+   * [Purpose]: Processes player locomotion inputs, evaluates dodge/jump/heal transitions, updates movement velocities, and drives directional animation blending.
+   * @condition Called on each 60Hz frame when player character is in locomotion states ('idle', 'moving', or 'jumping').
+   * @param player,delta,_elapsed,inputs,cameraYaw,lockedTargetPos Player character context, delta time, elapsed time, input vectors, camera rotation, and lock target.
+   * @returns Updates player translation, facing direction, animation layer weights, and initiates state transitions.
+   */
   public static updateLocomotion(
     player: PlayerCharacter,
     delta: number,

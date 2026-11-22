@@ -73,6 +73,12 @@ export class CombatDuelStage {
     this.logicPlayer.group.rotation.y = 0;
   }
 
+  /**
+   * [Purpose]: Initiates a player combat action (attack, dodge, drink, jump) and auto-aligns facing toward the boss.
+   * @condition Triggered via UI combat action buttons, keyboard shortcuts, or Playwright test actions.
+   * @param actionKey Combat action identifier string and onCombatLog callback for event messaging.
+   * @returns Mutates player state, triggers kinematic movement, and records trajectory starting coordinates.
+   */
   public triggerPlayerAction(actionKey: string, onCombatLog: (text: string) => void): void {
     if (!this.logicPlayer) return;
     if (this.logicPlayer.state === 'dead') {
@@ -225,6 +231,12 @@ export class CombatDuelStage {
     }
   }
 
+  /**
+   * [Purpose]: Advances 60Hz duel simulation step including locomotion, AI decision tree, combat kinematics, and hitboxes.
+   * @condition Called every frame within the main asset-test render loop when Track 2 duel is active.
+   * @param delta Frame delta time in seconds, elapsed timestamp, roam mode flag, controllers, and callbacks.
+   * @returns Updates player and boss state machines, applies root-motion kinematics, and emits telemetry.
+   */
   public update(
     delta: number,
     elapsed: number,

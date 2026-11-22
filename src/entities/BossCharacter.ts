@@ -164,6 +164,12 @@ export class BossCharacter {
     this.loadPromise = this.loadModel(initialModelId);
   }
 
+  /**
+   * [Purpose]: Asynchronously loads the boss GLB asset, sets up skeletal meshes, materials, weapon sockets, and animation clips.
+   * @condition Invoked during boss initialization or when dynamically switching boss model variants.
+   * @param modelId Unique identifier key for the boss model asset to load from registry.
+   * @returns Resolves when the model hierarchy and animation subsystems are fully initialized and bound.
+   */
   public async loadModel(modelId: string): Promise<void> {
     this.isLoaded = false;
 
@@ -385,6 +391,12 @@ export class BossCharacter {
     this.currentActionName = 'idle';
   }
 
+  /**
+   * [Purpose]: Computes blended locomotion animation weights and synchronizes locomotion phase timers for directional walking and strafing.
+   * @condition Called per-tick during locomotion update when the boss is actively moving or repositioning.
+   * @param delta,strafeDir,radialFactor Frame delta in seconds, lateral strafe sign (-1/0/1), and radial distance weighting factor.
+   * @returns Updates blended weights across idle, walkForward, walkBack, and strafe animation actions.
+   */
   public updateLocomotionWeights(delta: number, strafeDir: number, radialFactor: number): void {
     // 1. Keep walk_forward, walk_back, strafe_left, and strafe_right synchronized in locomotion layer
     if (this.walkForwardAction) {
@@ -829,6 +841,12 @@ export class BossCharacter {
     return action;
   }
 
+  /**
+   * [Purpose]: Orchestrates per-frame boss lifecycle updates including animation mixer, kinematic motion, hitbox tracking, and AI subgoals.
+   * @condition Invoked every tick from the primary 60Hz game loop when boss entity is active.
+   * @param delta,elapsed,player,arenaRadius,arena Time step (seconds), total time, player spatial snapshot, arena bounding radius, and arena reference.
+   * @returns Advances boss animation, physics transform, combat state, and telegraph/hitbox evaluations.
+   */
   public update(
     delta: number,
     _elapsed: number,

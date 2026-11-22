@@ -285,11 +285,10 @@ export class GroundSlamVFX {
   }
 
   /**
-   * Triggers the 4-part colossal ground slam:
-   * 1. Ground Crack Decal (Pre-allocated planar decal from pool)
-   * 2. Grounded Expanding Shockwave (three.quarks HorizontalBillBoard)
-   * 3. Rolling Ground Dust (three.quarks DonutEmitter)
-   * 4. Ballistic Pebble & Rock Debris (three.quarks RenderMode.Mesh)
+   * [Purpose]: Orchestrates the 4-part ground slam VFX suite comprising decal, shockwave ring, dust, and rock debris.
+   * @condition Triggered on boss heavy downward smash impact or seismic shockwave animation events.
+   * @param impactPoint World-space coordinates of the ground strike point; _customGroundMesh Optional projection mesh.
+   * @returns Void; positions and fires pooled decal, shockwave emitter, dust particle system, and flying debris meshes.
    */
   public triggerGroundSlam(
     impactPoint: THREE.Vector3 | { x: number; y: number; z: number },

@@ -13,6 +13,12 @@ export class BossCombatResolver {
     return { newHp, isDead: newHp <= 0 };
   }
 
+  /**
+   * [Purpose]: Computes post-hit poise health and evaluates whether boss posture breaks into a stagger state.
+   * @condition Invoked when the boss takes damage from a player attack with non-zero poise damage.
+   * @param currentPoise,maxPoise,incomingPoiseDamage,currentState Current and maximum poise values, poise damage magnitude, and current boss state.
+   * @returns Calculation result containing updated poise pool and boolean flag indicating whether stagger should trigger.
+   */
   public static calculatePoise(
     currentPoise: number,
     maxPoise: number,

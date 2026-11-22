@@ -102,6 +102,12 @@ export class PerformanceProfiler {
     this.updateEndTime = performance.now();
   }
 
+  /**
+   * [Purpose]: Concludes frame telemetry sampling, recording CPU/render times, 1% low FPS, and WebGL draw calls.
+   * @condition Called at the very end of each animation loop frame after renderer.render completes.
+   * @param renderer Optional WebGLRenderer for draw call inspection; activeCounts Optional VFX particle metrics.
+   * @returns Void; records rolling buffer metrics, updates spike counters, and pushes data to telemetry overlay.
+   */
   public endFrame(renderer?: THREE.WebGLRenderer, activeCounts?: ActiveVFXCounts): void {
     const now = performance.now();
 

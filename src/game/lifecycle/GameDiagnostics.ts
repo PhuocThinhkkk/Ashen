@@ -20,6 +20,12 @@ export interface DiagnosticsContext {
 }
 
 export class GameDiagnostics {
+  /**
+   * [Purpose]: Collects engine, rendering, memory, and combat telemetry into a global window diagnostics object.
+   * @condition Executed every frame or after screenshot capture during performance profiling.
+   * @param ctx Diagnostics context providing frame count, elapsed time, renderer info, profiler, and entities.
+   * @returns Updates window.__THREE_GAME_DIAGNOSTICS__ with real-time FPS, draw calls, and combat metrics.
+   */
   public static publish(ctx: DiagnosticsContext): void {
     const info = ctx.renderer.info;
     const snap = ctx.profiler.getSnapshot();

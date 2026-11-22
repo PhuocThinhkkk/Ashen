@@ -283,6 +283,12 @@ export class BossAI {
     }
   }
 
+  /**
+   * [Purpose]: Dispatches and executes boss behavioral logic for the active subgoal (strafing, approaching, combo checks, attacking).
+   * @condition Invoked each frame from AI update tick when a goal plan is actively running.
+   * @param dt,activeSubgoal,player,arena,arenaRadius Time delta, active subgoal definition, player state snapshot, arena context, and boundary radius.
+   * @returns Mutates boss state, orientation, locomotion impulses, or initiates queued attack sequences.
+   */
   private executeActiveSubgoal(
     dt: number,
     activeSubgoal: BossSubgoal,
@@ -443,6 +449,12 @@ export class BossAI {
     }
   }
 
+  /**
+   * [Purpose]: Advances attack phase timers through startup, active hitbox frames, and recovery windows with phase-based speed modifiers.
+   * @condition Executed every frame during active attack states ('windup', 'active', 'recovery').
+   * @param dt,playerPos Simulation delta time in seconds, and current player position vector for tracking/turning.
+   * @returns Updates boss combat state, enables/disables active hitboxes, and triggers attack completion or combo transitions.
+   */
   public updateAttackFrames(dt: number, playerPos: THREE.Vector3): void {
     const b = this.boss;
     if (!b.currentAttack) {

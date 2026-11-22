@@ -84,6 +84,12 @@ export class SoulslikeCamera {
     this.shakeIntensity = Math.max(this.shakeIntensity, intensity);
   }
 
+  /**
+   * [Purpose]: Immediately snaps camera position and orientation behind target player without smoothing lag.
+   * @condition Called during encounter reset, player respawn, or initial level scene bootstrap.
+   * @param playerPos Target player world position vector; arenaRadius Arena boundary constraint (m).
+   * @returns Void; directly writes camera.position and focus vectors clamped within arena boundaries.
+   */
   public snapTo(playerPos: THREE.Vector3, arenaRadius = 20.5): void {
     this.focus.set(playerPos.x, playerPos.y + 1.25, playerPos.z);
     this.distance = this.config.defaultDistance;
@@ -113,6 +119,12 @@ export class SoulslikeCamera {
     this.camera.lookAt(this.focus);
   }
 
+  /**
+   * [Purpose]: Advances third-person camera tracking, damping, lock-on framing, screen shake, and arena collision.
+   * @condition Invoked every frame from main simulation loop (60Hz / variable delta).
+   * @param delta Frame delta time in seconds; playerPos Current player position; arenaRadius Boundary limit (m).
+   * @returns Void; mutates camera position, orientation, and field of view in-place.
+   */
   public update(delta: number, playerPos: THREE.Vector3, arenaRadius = 20.5): void {
     // 1. Calculate Target Focus Point
     if (this.isLockedOn && this.lockedTarget) {

@@ -1,6 +1,12 @@
 import * as THREE from 'three';
 
 export class ModelRigLoader {
+  /**
+   * [Purpose]: Traverses model hierarchy to hide Blender helper geometry and enforce shadow casting on render meshes.
+   * @condition Invoked immediately after loading GLTF rigs to sanitize exported debug and collider meshes.
+   * @param root Root THREE.Object3D hierarchy to traverse and configure visibility/shadow properties.
+   * @returns Mutates visibility flags and shadow properties across all descendant meshes in-place.
+   */
   public static hideHelperMeshes(root: THREE.Object3D): void {
     root.traverse((obj) => {
       const lower = obj.name.toLowerCase();

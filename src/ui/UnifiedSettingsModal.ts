@@ -211,6 +211,12 @@ export class UnifiedSettingsModal {
     }
   }
 
+  /**
+   * [Purpose]: Starts high-frequency polling interval to refresh profiler telemetry values when performance tab is active.
+   * @condition Invoked when opening settings modal or switching to the 'performance' telemetry tab.
+   * @param none Operates on modal DOM elements, activeTab state, and profiler telemetry data.
+   * @returns Initializes interval timer (120ms) updating FPS, frametimes, and drawcall statistics.
+   */
   private startTelemetryLoop(): void {
     if (this.telemetryInterval !== null) return;
     this.telemetryInterval = window.setInterval(() => {

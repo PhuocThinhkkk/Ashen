@@ -29,6 +29,12 @@ export class Loop {
     cancelAnimationFrame(this.frameId);
   }
 
+  /**
+   * [Purpose]: Drives the fixed 60Hz timestep accumulator, stepping game updates before scheduling render frame.
+   * @condition Executed continuously via requestAnimationFrame while loop state is active.
+   * @param time High-resolution timestamp passed by requestAnimationFrame in milliseconds.
+   * @returns Steps physics/game state in fixed 1/60s increments and triggers per-frame render callback.
+   */
   private readonly tick = (time: number) => {
     if (!this.running) return;
     const deltaSeconds = Math.min((time - this.lastTime) / 1000, 0.1);

@@ -28,6 +28,12 @@ export interface CollisionResolverContext {
   setHitstop: (time: number) => void;
 }
 
+/**
+ * [Purpose]: Evaluates hitbox-to-hurtbox intersections between player and enemies, dispatching damage, VFX, and audio.
+ * @condition Called during the 60Hz simulation loop after entity kinematic and state updates.
+ * @param ctx Context object containing combat entities, systems (VFX/audio), and screen projection helpers.
+ * @returns Mutates entity HP, combat hit states, hitstop timers, and triggers particle effects.
+ */
 export function resolveCombatCollisions(ctx: CollisionResolverContext): void {
   const {
     player,
