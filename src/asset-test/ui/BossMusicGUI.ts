@@ -9,6 +9,7 @@ import {
 import { BossMusicController } from '../../audio/BossMusicController';
 import { BossMusicStorage } from '../../audio/BossMusicStorage';
 import { MusicTrackLoader } from './music/MusicTrackLoader';
+import { getAssetUrl } from '../../utils/assetPath';
 import type { DomBindings } from './DomBindings';
 
 export class BossMusicGUI {
@@ -62,17 +63,17 @@ export class BossMusicGUI {
         this.activeMode === 'single'
           ? {
               mode: 'single',
-              url: '/audio/boss_theme.mp3',
+              url: getAssetUrl('audio/boss_theme.mp3'),
               fileName: 'boss_theme.mp3',
               phase1: { start: 0, loopStart: 0, loopEnd: 16.0 },
               phase2: { start: 16.0, loopStart: 16.0, loopEnd: 32.0 },
             }
           : {
               mode: 'dual',
-              phase1Url: '/audio/boss_phase1.mp3',
+              phase1Url: getAssetUrl('audio/boss_phase1.mp3'),
               phase1FileName: 'boss_phase1.mp3',
               phase1: { loopStart: 0, loopEnd: 16.0 },
-              phase2Url: '/audio/boss_phase2.mp3',
+              phase2Url: getAssetUrl('audio/boss_phase2.mp3'),
               phase2FileName: 'boss_phase2.mp3',
               phase2: { loopStart: 0, loopEnd: 16.0 },
             };
@@ -151,16 +152,16 @@ export class BossMusicGUI {
     if (mode === 'single' && this.currentPreset.config.mode !== 'single') {
       this.currentPreset.config = {
         mode: 'single',
-        url: '/audio/boss_theme.mp3',
+        url: getAssetUrl('audio/boss_theme.mp3'),
         phase1: { start: 0, loopStart: 0, loopEnd: 16.0 },
         phase2: { start: 16.0, loopStart: 16.0, loopEnd: 32.0 },
       };
     } else if (mode === 'dual' && this.currentPreset.config.mode !== 'dual') {
       this.currentPreset.config = {
         mode: 'dual',
-        phase1Url: '/audio/boss_phase1.mp3',
+        phase1Url: getAssetUrl('audio/boss_phase1.mp3'),
         phase1: { loopStart: 0, loopEnd: 16.0 },
-        phase2Url: '/audio/boss_phase2.mp3',
+        phase2Url: getAssetUrl('audio/boss_phase2.mp3'),
         phase2: { loopStart: 0, loopEnd: 16.0 },
       };
     }

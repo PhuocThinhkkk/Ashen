@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { ProceduralTextureGenerator } from './procedural/proceduralTextures';
+import { getAssetUrl } from '../utils/assetPath';
 
 /**
  * Singleton factory for loading or procedurally generating VFX textures.
@@ -19,37 +20,37 @@ export class VFXTextureFactory {
   }
 
   public getSmokeTexture(): THREE.Texture {
-    return this.getOrCreate('smoke_soft', '/textures/vfx/smoke_soft.png', () =>
+    return this.getOrCreate('smoke_soft', getAssetUrl('textures/vfx/smoke_soft.png'), () =>
       this.createSmokeCanvasTexture(),
     );
   }
 
   public getDropletStreakTexture(): THREE.Texture {
-    return this.getOrCreate('droplet_streak', '/textures/vfx/droplet_streak.png', () =>
+    return this.getOrCreate('droplet_streak', getAssetUrl('textures/vfx/droplet_streak.png'), () =>
       this.createDropletCanvasTexture(),
     );
   }
 
   public getBloodSplatTexture(): THREE.Texture {
-    return this.getOrCreate('blood_splat_1', '/textures/vfx/blood_splat_1.png', () =>
+    return this.getOrCreate('blood_splat_1', getAssetUrl('textures/vfx/blood_splat_1.png'), () =>
       this.createBloodSplatCanvasTexture(),
     );
   }
 
   public getBloodParticleTexture(): THREE.Texture {
-    return this.getOrCreate('blood_particle', '/textures/vfx/blood_particle.png', () =>
+    return this.getOrCreate('blood_particle', getAssetUrl('textures/vfx/blood_particle.png'), () =>
       this.createBloodParticleCanvasTexture(),
     );
   }
 
   public getSparkStreakTexture(): THREE.Texture {
-    return this.getOrCreate('spark_streak', '/textures/vfx/spark_streak.png', () =>
+    return this.getOrCreate('spark_streak', getAssetUrl('textures/vfx/spark_streak.png'), () =>
       this.createSparkCanvasTexture(),
     );
   }
 
   public getShockwaveRingTexture(): THREE.Texture {
-    return this.getOrCreate('shockwave_ring', '/textures/vfx/shockwave_ring.png', () =>
+    return this.getOrCreate('shockwave_ring', getAssetUrl('textures/vfx/shockwave_ring.png'), () =>
       this.createShockwaveCanvasTexture(),
     );
   }

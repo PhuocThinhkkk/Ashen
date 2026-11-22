@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { getAssetUrl } from '../../utils/assetPath';
 import type { WeaponBladeSegment } from '../../combat/WeaponCollisionSystem';
 
 export class BossWeapon {
@@ -37,7 +38,7 @@ export class BossWeapon {
   public async ensureLoaded(): Promise<void> {
     if (this.swordObject) return;
 
-    const gltf = await this.loader.loadAsync('/assets/weapons/lower_orc_great_sword.glb');
+    const gltf = await this.loader.loadAsync(getAssetUrl('assets/weapons/lower_orc_great_sword.glb'));
     this.swordObject = gltf.scene;
     // Align grip to weapon origin (Y=0.7 shifts local grip at ~-0.65 to around hand level)
     this.swordObject.position.set(0, 0.7, 0);

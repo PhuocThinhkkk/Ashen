@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { getAssetUrl } from '../../utils/assetPath';
 import {
   DEFAULT_PLAYER_POTION_SOCKET,
   loadSocketConfig,
@@ -13,7 +14,7 @@ import {
  */
 export async function loadHealingFlaskMesh(loader: GLTFLoader): Promise<THREE.Group> {
   try {
-    const gltf = await loader.loadAsync('/assets/items/health_potions.glb');
+    const gltf = await loader.loadAsync(getAssetUrl('assets/items/health_potions.glb'));
     const flaskGroup = new THREE.Group();
     flaskGroup.name = 'HealthPotion';
 

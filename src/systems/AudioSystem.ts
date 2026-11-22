@@ -3,6 +3,7 @@ import { BossMusicStorage } from '../audio/BossMusicStorage';
 import { DEFAULT_PROCEDURAL_PRESET } from '../audio/types';
 import { SettingsManager } from './SettingsManager';
 import { SfxGenerators } from '../audio/synth/sfxGenerators';
+import { getAssetUrl } from '../utils/assetPath';
 
 export type SoundKey =
   | 'swingLight'
@@ -208,12 +209,12 @@ export class AudioSystem {
 
   private async loadAllSounds(): Promise<void> {
     const sfxList: Array<{ key: SoundKey; path: string }> = [
-      { key: 'swingLight', path: '/assets/sfx/sword_swing_light.mp3' },
-      { key: 'swingHeavy', path: '/assets/sfx/sword_swing_heavy.mp3' },
-      { key: 'swordClash', path: '/assets/sfx/sword_clash_heavy.mp3' },
-      { key: 'groundSlam', path: '/assets/sfx/ground_slam.mp3' },
-      { key: 'damageGrunt', path: '/assets/sfx/damage_grunt.mp3' },
-      { key: 'footstepHeavy', path: '/assets/sfx/footstep_heavy.mp3' },
+      { key: 'swingLight', path: getAssetUrl('assets/sfx/sword_swing_light.mp3') },
+      { key: 'swingHeavy', path: getAssetUrl('assets/sfx/sword_swing_heavy.mp3') },
+      { key: 'swordClash', path: getAssetUrl('assets/sfx/sword_clash_heavy.mp3') },
+      { key: 'groundSlam', path: getAssetUrl('assets/sfx/ground_slam.mp3') },
+      { key: 'damageGrunt', path: getAssetUrl('assets/sfx/damage_grunt.mp3') },
+      { key: 'footstepHeavy', path: getAssetUrl('assets/sfx/footstep_heavy.mp3') },
     ];
 
     for (const item of sfxList) {

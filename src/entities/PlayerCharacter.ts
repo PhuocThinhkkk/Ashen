@@ -11,6 +11,7 @@ import type { CombatInputs } from '../core/types';
 import type { AudioSystem } from '../systems/AudioSystem';
 import type { VFXSystem } from '../systems/VFXSystem';
 import { ModelLoader } from '../utils/ModelLoader';
+import { getAssetUrl } from '../utils/assetPath';
 import {
   DEFAULT_PLAYER_WEAPON_SOCKET,
   loadSocketConfig,
@@ -216,7 +217,7 @@ export class PlayerCharacter {
     }
 
     if (!this.swordObject) {
-      const swordGltf = await this.loader.loadAsync('/assets/weapons/chevalier_sword.glb');
+      const swordGltf = await this.loader.loadAsync(getAssetUrl('assets/weapons/chevalier_sword.glb'));
       this.swordObject = swordGltf.scene;
       this.swordObject.traverse((obj) => {
         if (obj instanceof THREE.Mesh) {

@@ -3,6 +3,7 @@ import {
   DEFAULT_PROCEDURAL_PRESET,
   BUILTIN_PROCEDURAL_ID,
 } from './types';
+import { getAssetUrl } from '../utils/assetPath';
 
 const DB_NAME = 'SoulsBrowserAudioDB';
 const DB_VERSION = 1;
@@ -17,7 +18,7 @@ class BossMusicStorageManager {
   public async loadExternalPresets(): Promise<BossMusicPreset[]> {
     if (this.externalPresetsLoaded) return this.externalPresets;
     try {
-      const res = await fetch('/audio/presets.json');
+      const res = await fetch(getAssetUrl('audio/presets.json'));
       if (res.ok) {
         const data = await res.json();
         const list: BossMusicPreset[] = Array.isArray(data)

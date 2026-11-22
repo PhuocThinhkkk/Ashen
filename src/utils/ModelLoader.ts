@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GLTF, GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { getAssetUrl } from './assetPath';
 export { splitClipByBodyPart, isLowerBodyBone } from './AnimationSplitter';
 
 export type EntityType = 'player' | 'boss';
@@ -15,7 +16,7 @@ export class ModelLoader {
    */
   public static getModelUrl(type: EntityType, id: string): string {
     const category = type === 'boss' ? 'bosses' : `${type}s`;
-    return `/assets/models/${category}/${id}.glb`;
+    return getAssetUrl(`assets/models/${category}/${id}.glb`);
   }
 
   /**

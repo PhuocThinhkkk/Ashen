@@ -3,6 +3,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { HitboxVisualDebugger } from '../../combat/HitboxVisualDebugger';
 import { getKinematicAction } from '../../combat/KinematicData';
 import { ModelLoader } from '../../utils/ModelLoader';
+import { getAssetUrl } from '../../utils/assetPath';
 import {
   DEFAULT_PLAYER_WEAPON_SOCKET,
   DEFAULT_BOSS_WEAPON_SOCKET,
@@ -135,7 +136,7 @@ export class RawAnimationStage {
       this.currentPlayerScene = null;
     }
 
-    const playerGltf = await this.loader.loadAsync(`/assets/models/players/${modelId}.glb`);
+    const playerGltf = await this.loader.loadAsync(getAssetUrl(`assets/models/players/${modelId}.glb`));
     this.currentPlayerScene = playerGltf.scene;
     this.currentPlayerScene.position.copy(CONFIG.track1.playerPos);
 
@@ -214,7 +215,7 @@ export class RawAnimationStage {
 
     if (!this.axeObject) {
       onStatusUpdate?.('Loading Sword.glb...');
-      const swordGltf = await this.loader.loadAsync('/assets/weapons/chevalier_sword.glb');
+      const swordGltf = await this.loader.loadAsync(getAssetUrl('assets/weapons/chevalier_sword.glb'));
       this.axeObject = swordGltf.scene;
       this.axeObject.castShadow = true;
       this.axeObject.traverse((obj) => {
@@ -271,7 +272,7 @@ export class RawAnimationStage {
       this.scene.remove(this.currentBossScene);
     }
 
-    const bossGltf = await this.loader.loadAsync('/assets/models/bosses/titan.glb');
+    const bossGltf = await this.loader.loadAsync(getAssetUrl('assets/models/bosses/titan.glb'));
     this.currentBossScene = bossGltf.scene;
     this.currentBossScene.position.copy(CONFIG.track1.bossPos);
 
@@ -339,7 +340,7 @@ export class RawAnimationStage {
 
     if (!this.bossSwordGroup) {
       onStatusUpdate?.('Loading lower_orc_great_sword.glb...');
-      const swordGltf = await this.loader.loadAsync('/assets/weapons/lower_orc_great_sword.glb');
+      const swordGltf = await this.loader.loadAsync(getAssetUrl('assets/weapons/lower_orc_great_sword.glb'));
       this.bossSwordObject = swordGltf.scene;
       this.bossSwordObject.position.set(0, 0.7, 0);
       this.bossSwordObject.castShadow = true;

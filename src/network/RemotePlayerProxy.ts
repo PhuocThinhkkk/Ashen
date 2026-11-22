@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { ModelLoader } from '../utils/ModelLoader';
+import { getAssetUrl } from '../utils/assetPath';
 import { HitboxVisualDebugger } from '../combat/HitboxVisualDebugger';
 import {
   DEFAULT_PLAYER_WEAPON_SOCKET,
@@ -74,7 +75,7 @@ export class RemotePlayerProxy {
     // 1. Weapon GLB
     if (!this.swordObject) {
       const loader = new GLTFLoader();
-      const swordGltf = await loader.loadAsync('/assets/weapons/chevailer_sword.glb');
+      const swordGltf = await loader.loadAsync(getAssetUrl('assets/weapons/chevalier_sword.glb'));
       this.swordObject = swordGltf.scene;
       this.swordObject.traverse((obj) => {
         if (obj instanceof THREE.Mesh) obj.castShadow = true;
