@@ -17,9 +17,19 @@ export class PlayerCombat {
     player.stamina = Math.max(0, player.stamina - attack.staminaCost);
     player.staminaRegenDelay = 1.1;
 
-    const clipName = attack.isHeavy ? 'attack_heavy' : 'attack_light';
-    const timeScale = attack.isHeavy ? 0.95 : 1.15;
-    player.playFullBodyAction(clipName, 0.08, THREE.LoopOnce, true, timeScale);
+    const clipName = attack.animationClip || (attack.isHeavy ? 'attack_heavy' : 'attack_light');
+    const totalDuration = attack.startup + attack.active + attack.recovery;
+    const rawDuration = attack.isHeavy ? 137 / 60 : 77 / 60;
+    const timeScale = totalDuration > 0 ? rawDuration / totalDuration : 1.65;
+    const action = player.playFullBodyAction(clipName, 0.08, THREE.LoopOnce, true, timeScale);
+    if (player.kinematicController && action.upper) {
+      player.kinematicController.playAction(clipName, action.upper, {
+        loop: THREE.LoopOnce,
+        clampWhenFinished: true,
+        timeScale,
+        skipMixerFade: true,
+      });
+    }
   }
 
   public static startMidAirAttack(player: PlayerCharacter, attack: AttackDefinition): void {
@@ -37,8 +47,19 @@ export class PlayerCombat {
     player.stamina = Math.max(0, player.stamina - attack.staminaCost);
     player.staminaRegenDelay = 1.1;
 
-    const clipName = attack.isHeavy ? 'attack_heavy' : 'attack_light';
-    player.playUpperBodyAction(clipName, 0.08, THREE.LoopOnce, true, attack.isHeavy ? 1.0 : 1.2);
+    const clipName = attack.animationClip || (attack.isHeavy ? 'attack_heavy' : 'attack_light');
+    const totalDuration = attack.startup + attack.active + attack.recovery;
+    const rawDuration = attack.isHeavy ? 137 / 60 : 77 / 60;
+    const timeScale = totalDuration > 0 ? rawDuration / totalDuration : 1.65;
+    const upperAction = player.playUpperBodyAction(clipName, 0.08, THREE.LoopOnce, true, timeScale);
+    if (player.kinematicController && upperAction) {
+      player.kinematicController.playAction(clipName, upperAction, {
+        loop: THREE.LoopOnce,
+        clampWhenFinished: true,
+        timeScale,
+        skipMixerFade: true,
+      });
+    }
   }
 
   /**
@@ -93,16 +114,6 @@ export class PlayerCombat {
     } else if (player.attackTimer < startup + active) {
       if (player.attackPhase !== 'active') {
         player.attackPhase = 'active';
-        if (!player.hasSpawnedSlashArc) {
-          player.hasSpawnedSlashArc = true;
-          player.vfxSystem?.spawnAttackSlashArc(
-            player.group.position,
-            player.group.rotation.y,
-            player.currentAttack.name,
-            player.currentAttack.isHeavy,
-            false,
-          );
-        }
       }
       const step = (delta / active) * forwardImpulse * 0.8;
       const fwd = new THREE.Vector3(-Math.sin(player.group.rotation.y), 0, -Math.cos(player.group.rotation.y));
@@ -120,6 +131,8 @@ export class PlayerCombat {
         player.attackPhase = 'none';
         player.comboStep = 0;
         player.comboQueued = false;
+        player.kinematicController?.reset();
+        player.vfxSystem?.endBladeTrail('player');
         player.playFullBodyAction('idle', 0.15);
       }
     }
@@ -157,6 +170,8 @@ export class PlayerCombat {
       if (player.lowerBodyAction) player.lowerBodyAction.paused = false;
       player.staggerTimer = isHeavy ? 0.45 : 0.25;
       player.currentAttack = null;
+      player.kinematicController?.reset();
+      player.vfxSystem?.endBladeTrail('player');
       // High-impact stagger reaction animation
       player.playFullBodyAction('hit', 0.05, THREE.LoopOnce, true, isHeavy ? 1.0 : 1.3);
     }

@@ -11,6 +11,7 @@ export interface KinematicHitboxConfig {
   boneName: 'mixamorig:RightHand' | 'mixamorig:LeftFoot';
   activeStartFrame: number;
   activeEndFrame: number;
+  activeWindows?: Array<{ startFrame: number; endFrame: number }>;
   peakVelocityFrame: number;
   peakVelocityMs: number;
   peakVelocityBone: string;
@@ -29,6 +30,11 @@ export interface KinematicVFXConfig {
     endFrame: number;
     bone: string;
   };
+  weaponTrailWindows?: Array<{
+    startFrame: number;
+    endFrame: number;
+    bone: string;
+  }>;
 }
 
 export interface KinematicAudioConfig {
@@ -93,7 +99,7 @@ export const DODGE_CONFIG = {
 };
 
 export const KINEMATIC_ACTIONS: Record<string, KinematicActionConfig> = {
-  // 1. Great Sword Kick
+  // 1. Great Sword Kick (measured LeftFoot peak 9.5 m/s @ f43, thrust f36..47)
   kick: {
     id: 'kick',
     fileName: 'Great Sword Kick.fbx',
@@ -103,34 +109,34 @@ export const KINEMATIC_ACTIONS: Record<string, KinematicActionConfig> = {
     duration: 105 / 60,
     rootMotion: { type: 'In-Place', deltaY: 0, deltaX: 0 },
     phases: [
-      { type: 'Windup', startFrame: 1, endFrame: 31 },
-      { type: 'Impact', startFrame: 32, endFrame: 48 },
-      { type: 'Recovery', startFrame: 49, endFrame: 105 },
+      { type: 'Windup', startFrame: 1, endFrame: 35 },
+      { type: 'Impact', startFrame: 36, endFrame: 47 },
+      { type: 'Recovery', startFrame: 48, endFrame: 105 },
     ],
     hitbox: {
       boneName: 'mixamorig:LeftFoot',
-      activeStartFrame: 32,
-      activeEndFrame: 48,
-      peakVelocityFrame: 42,
-      peakVelocityMs: 10.6,
+      activeStartFrame: 36,
+      activeEndFrame: 47,
+      peakVelocityFrame: 43,
+      peakVelocityMs: 9.5,
       peakVelocityBone: 'LeftFoot',
     },
     crossfadeDurationOut: 0.20,
     vfx: {
-      peakSparksFrame: 42,
+      peakSparksFrame: 43,
       peakSparksBone: 'mixamorig:LeftFoot',
       peakSparksCount: 16,
     },
     audio: {
-      peakSwooshFrame: 38,
+      peakSwooshFrame: 36,
       peakSwooshFreq: 220,
-      peakSwooshDuration: 0.12,
-      peakImpactFrame: 42,
+      peakSwooshDuration: 0.14,
+      peakImpactFrame: 43,
       peakImpactHeavy: false,
     },
   },
 
-  // 2. Standing Melee Attack 360 Low heavy attack
+  // 2. Standing Melee Attack 360 Low heavy attack (measured blade tip peak 87.0 m/s @ f60, sweep f56..64)
   attack_360: {
     id: 'attack_360',
     fileName: 'Standing Melee Attack 360 Low heavy attack.fbx',
@@ -140,35 +146,35 @@ export const KINEMATIC_ACTIONS: Record<string, KinematicActionConfig> = {
     duration: 150 / 60,
     rootMotion: { type: 'In-Place', deltaY: 0, deltaX: 0 },
     phases: [
-      { type: 'Windup', startFrame: 1, endFrame: 43 },
-      { type: 'Impact', startFrame: 44, endFrame: 66 },
-      { type: 'Recovery', startFrame: 67, endFrame: 150 },
+      { type: 'Windup', startFrame: 1, endFrame: 55 },
+      { type: 'Impact', startFrame: 56, endFrame: 64 },
+      { type: 'Recovery', startFrame: 65, endFrame: 150 },
     ],
     hitbox: {
       boneName: 'mixamorig:RightHand',
-      activeStartFrame: 44,
-      activeEndFrame: 66,
-      peakVelocityFrame: 56,
-      peakVelocityMs: 8.2,
+      activeStartFrame: 56,
+      activeEndFrame: 64,
+      peakVelocityFrame: 60,
+      peakVelocityMs: 87.0,
       peakVelocityBone: 'RightHand',
     },
     crossfadeDurationOut: 0.30,
     vfx: {
-      peakSparksFrame: 56,
+      peakSparksFrame: 60,
       peakSparksBone: 'mixamorig:RightHand',
       peakSparksCount: 26,
-      weaponTrailFrames: { startFrame: 44, endFrame: 66, bone: 'mixamorig:RightHand' },
+      weaponTrailFrames: { startFrame: 52, endFrame: 65, bone: 'mixamorig:RightHand' },
     },
     audio: {
-      peakSwooshFrame: 42,
+      peakSwooshFrame: 53,
       peakSwooshFreq: 320,
-      peakSwooshDuration: 0.22,
-      peakImpactFrame: 56,
+      peakSwooshDuration: 0.24,
+      peakImpactFrame: 60,
       peakImpactHeavy: true,
     },
   },
 
-  // 3. Standing Melee Attack Downward
+  // 3. Standing Melee Attack Downward (measured blade tip peak 104.3 m/s @ f52, cleave f50..56)
   attack_heavy: {
     id: 'attack_heavy',
     fileName: 'Standing Melee Attack Downward.fbx',
@@ -178,36 +184,36 @@ export const KINEMATIC_ACTIONS: Record<string, KinematicActionConfig> = {
     duration: 137 / 60,
     rootMotion: { type: 'In-Place', deltaY: 0, deltaX: 0 },
     phases: [
-      { type: 'Windup', startFrame: 1, endFrame: 38 },
-      { type: 'Impact', startFrame: 39, endFrame: 57 },
-      { type: 'Recovery', startFrame: 58, endFrame: 137 },
+      { type: 'Windup', startFrame: 1, endFrame: 49 },
+      { type: 'Impact', startFrame: 50, endFrame: 56 },
+      { type: 'Recovery', startFrame: 57, endFrame: 137 },
     ],
     hitbox: {
       boneName: 'mixamorig:RightHand',
-      activeStartFrame: 39,
-      activeEndFrame: 57,
-      peakVelocityFrame: 51,
-      peakVelocityMs: 9.3,
+      activeStartFrame: 50,
+      activeEndFrame: 56,
+      peakVelocityFrame: 52,
+      peakVelocityMs: 104.3,
       peakVelocityBone: 'RightHand',
     },
     crossfadeDurationOut: 0.25,
     vfx: {
-      peakSparksFrame: 51,
+      peakSparksFrame: 52,
       peakSparksBone: 'mixamorig:RightHand',
       peakSparksCount: 30,
-      weaponTrailFrames: { startFrame: 39, endFrame: 57, bone: 'mixamorig:RightHand' },
-      landingDustFrames: [{ frame: 51, bones: ['mixamorig:RightHand'] }], // blade ground impact
+      weaponTrailFrames: { startFrame: 48, endFrame: 57, bone: 'mixamorig:RightHand' },
+      landingDustFrames: [{ frame: 54, bones: ['mixamorig:RightHand'] }], // blade ground impact
     },
     audio: {
-      peakSwooshFrame: 39,
+      peakSwooshFrame: 49,
       peakSwooshFreq: 450,
       peakSwooshDuration: 0.20,
-      peakImpactFrame: 51,
+      peakImpactFrame: 53,
       peakImpactHeavy: true,
     },
   },
 
-  // 4. Standing Melee Combo Attack Ver. 2
+  // 4. Standing Melee Combo Attack Ver. 2 (measured 3 swings: f55..65, f97..105, f158..164; finisher peak 81.6 m/s @ f159)
   attack_combo: {
     id: 'attack_combo',
     fileName: 'Standing Melee Combo Attack Ver. 2.fbx',
@@ -217,35 +223,45 @@ export const KINEMATIC_ACTIONS: Record<string, KinematicActionConfig> = {
     duration: 253 / 60,
     rootMotion: { type: 'In-Place', deltaY: 0, deltaX: 0 },
     phases: [
-      { type: 'Windup', startFrame: 1, endFrame: 147 },
-      { type: 'Impact', startFrame: 148, endFrame: 164 },
+      { type: 'Windup', startFrame: 1, endFrame: 54 },
+      { type: 'Impact', startFrame: 55, endFrame: 164 },
       { type: 'Recovery', startFrame: 165, endFrame: 253 },
     ],
     hitbox: {
       boneName: 'mixamorig:RightHand',
-      activeStartFrame: 148,
+      activeStartFrame: 158,
       activeEndFrame: 164,
-      peakVelocityFrame: 157,
-      peakVelocityMs: 13.4,
+      activeWindows: [
+        { startFrame: 55, endFrame: 65 },
+        { startFrame: 97, endFrame: 105 },
+        { startFrame: 158, endFrame: 164 },
+      ],
+      peakVelocityFrame: 159,
+      peakVelocityMs: 81.6,
       peakVelocityBone: 'RightHand',
     },
     crossfadeDurationOut: 0.35,
     vfx: {
-      peakSparksFrame: 157,
+      peakSparksFrame: 159,
       peakSparksBone: 'mixamorig:RightHand',
       peakSparksCount: 38,
-      weaponTrailFrames: { startFrame: 148, endFrame: 164, bone: 'mixamorig:RightHand' },
+      weaponTrailFrames: { startFrame: 156, endFrame: 165, bone: 'mixamorig:RightHand' },
+      weaponTrailWindows: [
+        { startFrame: 53, endFrame: 66, bone: 'mixamorig:RightHand' },
+        { startFrame: 96, endFrame: 106, bone: 'mixamorig:RightHand' },
+        { startFrame: 156, endFrame: 165, bone: 'mixamorig:RightHand' },
+      ],
     },
     audio: {
-      peakSwooshFrame: 146,
-      peakSwooshFreq: 520,
+      peakSwooshFrame: 55,
+      peakSwooshFreq: 480,
       peakSwooshDuration: 0.22,
-      peakImpactFrame: 157,
+      peakImpactFrame: 160,
       peakImpactHeavy: true,
     },
   },
 
-  // 5. Standing Melee Run Jump Attack
+  // 5. Standing Melee Run Jump Attack (airborne f56..98, feet land f99, blade slam f103..109 peaking 93.3 m/s @ f106)
   attack_jump: {
     id: 'attack_jump',
     fileName: 'Standing Melee Run Jump Attack.fbx',
@@ -255,35 +271,35 @@ export const KINEMATIC_ACTIONS: Record<string, KinematicActionConfig> = {
     duration: 221 / 60,
     rootMotion: { type: 'Root Motion', deltaY: -5.9, deltaX: 0 },
     phases: [
-      { type: 'Windup', startFrame: 1, endFrame: 57 },
-      { type: 'Airborne', startFrame: 58, endFrame: 95 },
-      { type: 'Impact', startFrame: 96, endFrame: 103 },
-      { type: 'Recovery', startFrame: 104, endFrame: 221 },
+      { type: 'Windup', startFrame: 1, endFrame: 55 },
+      { type: 'Airborne', startFrame: 56, endFrame: 98 },
+      { type: 'Impact', startFrame: 103, endFrame: 109 },
+      { type: 'Recovery', startFrame: 110, endFrame: 221 },
     ],
     hitbox: {
       boneName: 'mixamorig:RightHand',
-      activeStartFrame: 96,
-      activeEndFrame: 103,
-      peakVelocityFrame: 99,
-      peakVelocityMs: 23.5,
+      activeStartFrame: 103,
+      activeEndFrame: 109,
+      peakVelocityFrame: 106,
+      peakVelocityMs: 93.3,
       peakVelocityBone: 'RightHand',
     },
     crossfadeDurationOut: 0.40,
     vfx: {
-      // Landing dust kickup when transitioning from Airborne (58-95) to Impact (96)
-      landingDustFrames: [{ frame: 96, bones: ['mixamorig:LeftFoot', 'mixamorig:RightFoot'] }],
-      peakSparksFrame: 99,
+      // Landing dust kickup when feet touch down at frame 99
+      landingDustFrames: [{ frame: 99, bones: ['mixamorig:LeftFoot', 'mixamorig:RightFoot'] }],
+      peakSparksFrame: 106,
       peakSparksBone: 'mixamorig:RightHand',
       peakSparksCount: 46, // highest energy burst
-      weaponTrailFrames: { startFrame: 96, endFrame: 103, bone: 'mixamorig:RightHand' },
+      weaponTrailFrames: { startFrame: 101, endFrame: 109, bone: 'mixamorig:RightHand' },
     },
     audio: {
       peakSwooshFrame: 58, // leap airborne whoosh
       peakSwooshFreq: 260,
       peakSwooshDuration: 0.32,
-      peakImpactFrame: 99,
+      peakImpactFrame: 108,
       peakImpactHeavy: true,
-      footstepFrames: [{ frame: 96, bone: 'mixamorig:LeftFoot', heavy: true }],
+      footstepFrames: [{ frame: 99, bone: 'mixamorig:LeftFoot', heavy: true }],
     },
   },
 
@@ -381,7 +397,7 @@ export const KINEMATIC_ACTIONS: Record<string, KinematicActionConfig> = {
     audio: {},
   },
 
-  // 9. Great Sword Light Attack
+  // 9. Great Sword Light Attack (measured blade tip slash f36..44, peak 53.9 m/s @ f41)
   attack_light: {
     id: 'attack_light',
     fileName: 'Great Sword Light Attack.fbx',
@@ -391,30 +407,30 @@ export const KINEMATIC_ACTIONS: Record<string, KinematicActionConfig> = {
     duration: 77 / 60,
     rootMotion: { type: 'In-Place', deltaY: 0, deltaX: 0 },
     phases: [
-      { type: 'Windup', startFrame: 1, endFrame: 26 },
-      { type: 'Impact', startFrame: 27, endFrame: 44 },
+      { type: 'Windup', startFrame: 1, endFrame: 35 },
+      { type: 'Impact', startFrame: 36, endFrame: 44 },
       { type: 'Recovery', startFrame: 45, endFrame: 77 },
     ],
     hitbox: {
       boneName: 'mixamorig:RightHand',
-      activeStartFrame: 27,
+      activeStartFrame: 36,
       activeEndFrame: 44,
-      peakVelocityFrame: 34,
-      peakVelocityMs: 10.8,
+      peakVelocityFrame: 41,
+      peakVelocityMs: 53.9,
       peakVelocityBone: 'RightHand',
     },
     crossfadeDurationOut: 0.15,
     vfx: {
-      peakSparksFrame: 34,
+      peakSparksFrame: 41,
       peakSparksBone: 'mixamorig:RightHand',
       peakSparksCount: 18,
-      weaponTrailFrames: { startFrame: 27, endFrame: 44, bone: 'mixamorig:RightHand' },
+      weaponTrailFrames: { startFrame: 34, endFrame: 45, bone: 'mixamorig:RightHand' },
     },
     audio: {
-      peakSwooshFrame: 26,
+      peakSwooshFrame: 35,
       peakSwooshFreq: 420,
       peakSwooshDuration: 0.14,
-      peakImpactFrame: 34,
+      peakImpactFrame: 41,
       peakImpactHeavy: false,
     },
   },

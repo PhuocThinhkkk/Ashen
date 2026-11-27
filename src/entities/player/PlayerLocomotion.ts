@@ -214,16 +214,6 @@ export class PlayerLocomotion {
       } else if (player.attackTimer < startup + active) {
         if (player.attackPhase !== 'active') {
           player.attackPhase = 'active';
-          if (!player.hasSpawnedSlashArc) {
-            player.hasSpawnedSlashArc = true;
-            player.vfxSystem?.spawnAttackSlashArc(
-              player.group.position,
-              player.group.rotation.y,
-              player.currentAttack.name,
-              player.currentAttack.isHeavy,
-              false,
-            );
-          }
         }
       } else if (player.attackTimer < startup + active + recovery) {
         player.attackPhase = 'recovery';
@@ -232,6 +222,8 @@ export class PlayerLocomotion {
         player.isAirborneAttack = false;
         player.currentAttack = null;
         player.attackPhase = 'none';
+        player.kinematicController?.reset();
+        player.vfxSystem?.endBladeTrail('player');
         player.clearUpperBodyOverride(0.15);
       }
     }

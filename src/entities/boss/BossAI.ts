@@ -500,19 +500,6 @@ export class BossAI {
       // Hitbox / active swing frame
       if (b.state !== 'active') {
         b.state = 'active';
-        if (!b.hasSpawnedSlashArc) {
-          b.hasSpawnedSlashArc = true;
-          b.vfxSystem?.spawnAttackSlashArc(
-            b.group.position,
-            b.group.rotation.y,
-            b.currentAttack.name,
-            b.currentAttack.isHeavy,
-            true,
-          );
-        }
-        if (b.currentAttack.animationClip === 'attack_jump') {
-          b.triggerJumpGroundSlam?.();
-        }
       }
       b.telegraphGlow = 1.0;
 

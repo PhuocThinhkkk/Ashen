@@ -17,6 +17,7 @@ import {
 } from 'three.quarks';
 import {
   SlashArcInstance,
+  DynamicWeaponTrail,
   createSlashArcGeometry,
 } from '../vfx/SlashArcRibbon';
 import { BloodBurstVFX } from '../vfx/BloodBurstVFX';
@@ -35,11 +36,17 @@ export class VFXSystem {
   public readonly groundSlamVFX: GroundSlamVFX;
   public readonly sparkVFX: SparkBurstVFX;
 
-  // Slash Arc Ribbon Pool
+  // Slash Arc Ribbon Pool (static legacy arcs for remote/test hooks)
   private slashArcPool: SlashArcInstance[] = [];
   private slashArcIndex = 0;
   private readonly slashArcPoolSize = 6;
   private slashGeometry: THREE.BufferGeometry;
+
+  // Dynamic Bone-Tracked Blade Trail Pool
+  private bladeTrailPool: DynamicWeaponTrail[] = [];
+  private bladeTrailIndex = 0;
+  private readonly bladeTrailPoolSize = 6;
+  private readonly activeOwnerTrails = new Map<string, DynamicWeaponTrail>();
 
   // Foot Dust Kickup Pool (three.quarks)
   private footDustPool: ParticleSystem[] = [];
@@ -61,12 +68,17 @@ export class VFXSystem {
     this.groundSlamVFX = new GroundSlamVFX(this.scene, this.batchRenderer);
     this.sparkVFX = new SparkBurstVFX(this.batchRenderer, this.scene);
 
-    // 3. Initialize Elden Ring Sword Slash Arc Ribbon Pool
+    // 3. Initialize Elden Ring Sword Slash Arc Ribbon Pool + Dynamic Blade Trails
     this.slashGeometry = createSlashArcGeometry(0.7, 2.6, Math.PI * 0.8, 44, 4);
     for (let i = 0; i < this.slashArcPoolSize; i++) {
       const arc = new SlashArcInstance(this.slashGeometry);
       this.scene.add(arc.mesh);
       this.slashArcPool.push(arc);
+    }
+    for (let i = 0; i < this.bladeTrailPoolSize; i++) {
+      const trail = new DynamicWeaponTrail();
+      this.scene.add(trail.mesh);
+      this.bladeTrailPool.push(trail);
     }
 
     // 4. Initialize Foot Dust Kickup Pool with three.quarks
@@ -144,6 +156,12 @@ export class VFXSystem {
     }
     this.slashArcIndex = 0;
 
+    for (const trail of this.bladeTrailPool) {
+      trail.reset();
+    }
+    this.bladeTrailIndex = 0;
+    this.activeOwnerTrails.clear();
+
     this.bloodVFX.reset();
     this.sparkVFX.reset();
     this.groundSlamVFX.reset();
@@ -160,6 +178,9 @@ export class VFXSystem {
     let activeSlashArcs = 0;
     for (const arc of this.slashArcPool) {
       if (arc.active) activeSlashArcs++;
+    }
+    for (const trail of this.bladeTrailPool) {
+      if (trail.active) activeSlashArcs++;
     }
 
     let activeParticles = 0;
@@ -187,9 +208,12 @@ export class VFXSystem {
   public prewarm(renderer: THREE.WebGLRenderer, camera: THREE.Camera): void {
     if (typeof window === 'undefined' || !renderer) return;
     try {
-      // 1. Slash Arcs
+      // 1. Slash Arcs & Dynamic Blade Trails
       for (const arc of this.slashArcPool) {
         arc.mesh.visible = true;
+      }
+      if (this.bladeTrailPool.length > 0) {
+        this.bladeTrailPool[0].mesh.visible = true;
       }
 
       // 2. Ground Slam Decals & Shockwaves
@@ -214,6 +238,9 @@ export class VFXSystem {
     } finally {
       for (const arc of this.slashArcPool) {
         arc.mesh.visible = false;
+      }
+      for (const trail of this.bladeTrailPool) {
+        trail.mesh.visible = false;
       }
       this.reset();
     }
@@ -302,6 +329,44 @@ export class VFXSystem {
     this.spawnSlashArc(origin, rot, scale, colorHex, duration, expansion, 2.6);
   }
 
+  public beginBladeTrail(
+    ownerKey: string,
+    colorHex: number | string | THREE.Color = 0xffe066,
+    intensity = 2.2,
+  ): void {
+    if (!SettingsManager.getInstance().data.vfx.slashArcs) return;
+
+    const prev = this.activeOwnerTrails.get(ownerKey);
+    if (prev && prev.recording) {
+      prev.end();
+    }
+
+    const trail = this.bladeTrailPool[this.bladeTrailIndex];
+    this.bladeTrailIndex = (this.bladeTrailIndex + 1) % this.bladeTrailPoolSize;
+    trail.begin(ownerKey, colorHex, intensity);
+    this.activeOwnerTrails.set(ownerKey, trail);
+  }
+
+  public pushBladeTrailSample(
+    ownerKey: string,
+    baseWorld: THREE.Vector3,
+    tipWorld: THREE.Vector3,
+  ): void {
+    if (!SettingsManager.getInstance().data.vfx.slashArcs) return;
+    const trail = this.activeOwnerTrails.get(ownerKey);
+    if (trail && trail.recording) {
+      trail.addSample(baseWorld, tipWorld);
+    }
+  }
+
+  public endBladeTrail(ownerKey: string): void {
+    const trail = this.activeOwnerTrails.get(ownerKey);
+    if (trail) {
+      trail.end();
+      this.activeOwnerTrails.delete(ownerKey);
+    }
+  }
+
   /**
    * Spawns weapon trail arc ribbon parented to bone/hand position.
    */
@@ -364,10 +429,15 @@ export class VFXSystem {
     // 3. Update Ground Slam VFX (shockwaves + decals)
     this.groundSlamVFX.update(delta);
 
-    // 4. Update Slash Arc Ribbons
+    // 4. Update Slash Arc Ribbons & Dynamic Blade Trails
     for (const arc of this.slashArcPool) {
       if (arc.active) {
         arc.update(delta);
+      }
+    }
+    for (const trail of this.bladeTrailPool) {
+      if (trail.active) {
+        trail.update(delta);
       }
     }
   }
@@ -381,6 +451,13 @@ export class VFXSystem {
     }
     this.slashArcPool = [];
     this.slashGeometry.dispose();
+
+    for (const trail of this.bladeTrailPool) {
+      this.scene.remove(trail.mesh);
+      trail.dispose();
+    }
+    this.bladeTrailPool = [];
+    this.activeOwnerTrails.clear();
 
     for (const ps of this.footDustPool) {
       this.batchRenderer.deleteSystem(ps);

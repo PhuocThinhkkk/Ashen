@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { checkAttackHit } from '../combat/HitDetection';
+import { WeaponCollisionSystem, type WeaponBladeSegment } from '../combat/WeaponCollisionSystem';
 import type { PlayerCharacter } from '../entities/PlayerCharacter';
 import type { BossCharacter } from '../entities/BossCharacter';
 import type { RemotePlayerProxy } from '../network/RemotePlayerProxy';
@@ -26,6 +27,17 @@ export interface CollisionResolverContext {
   profiler: PerformanceProfiler;
   projectToScreen: (worldPos: THREE.Vector3, heightOffset?: number) => THREE.Vector2;
   setHitstop: (time: number) => void;
+}
+
+let prevPlayerBladeSegment: WeaponBladeSegment | null = null;
+let prevBossBladeSegment: WeaponBladeSegment | null = null;
+
+function cloneBladeSegment(seg: WeaponBladeSegment): WeaponBladeSegment {
+  return {
+    base: seg.base.clone(),
+    tip: seg.tip.clone(),
+    radius: seg.radius,
+  };
 }
 
 /**
@@ -99,40 +111,62 @@ export function resolveCombatCollisions(ctx: CollisionResolverContext): void {
 
   // 2. Player Attack Hits Boss
   const playerHitboxActive = player.isHitboxActive();
+  if (!playerHitboxActive) {
+    prevPlayerBladeSegment = null;
+  }
   if (
-    player.state === 'attack' &&
-    (player.attackPhase === 'active' || playerHitboxActive) &&
+    (player.state === 'attack' || player.isAirborneAttack) &&
+    playerHitboxActive &&
     player.currentAttack &&
     !player.hasHitCurrentSwing &&
     boss.state !== 'dead'
   ) {
-    const hit = checkAttackHit(
-      player.group.position,
-      player.group.rotation.y,
-      player.currentAttack,
-      boss.group.position,
-      boss.radius,
-      false,
+    const currBlade = player.getWeaponBladeSegment();
+    const bossCapsule = boss.getBodyCapsule();
+    const swept = WeaponCollisionSystem.testSweptBladeToBody(
+      currBlade,
+      prevPlayerBladeSegment,
+      bossCapsule,
     );
+    prevPlayerBladeSegment = cloneBladeSegment(currBlade);
 
-    if (hit.hit) {
-      boss.takeDamage(hit.damage, hit.poiseDamage);
+    // Fallback horizontal check only if sword mesh isn't mounted on hand bone
+    const fallbackHit = !player.swordObject
+      ? checkAttackHit(
+          player.group.position,
+          player.group.rotation.y,
+          player.currentAttack,
+          boss.group.position,
+          boss.radius,
+          false,
+        )
+      : { hit: false, damage: 0, poiseDamage: 0, isHeavy: false, contactPoint: undefined };
+
+    const didHit = swept.hit || fallbackHit.hit;
+    const hitDamage = player.currentAttack.damage;
+    const hitPoiseDamage = player.currentAttack.poiseDamage;
+    const hitIsHeavy = !!player.currentAttack.isHeavy;
+
+    if (didHit) {
+      boss.takeDamage(hitDamage, hitPoiseDamage);
       player.hasHitCurrentSwing = true;
 
       // Visual & Audio Feedback
       const screenPos = projectToScreen(boss.group.position, 1.5);
-      hud.spawnDamageNumber(hit.damage, screenPos.x, screenPos.y, false);
+      hud.spawnDamageNumber(hitDamage, screenPos.x, screenPos.y, false);
 
       // Combat VFX: Minimal Elden Ring blade-slash blood spit right on target surface
       const toBoss = boss.group.position.clone().sub(player.group.position);
       toBoss.y = 0;
       let hitPoint: THREE.Vector3;
-      if (toBoss.length() > 0.01) {
+      if (swept.contactPoint) {
+        hitPoint = swept.contactPoint.clone();
+      } else if (toBoss.length() > 0.01) {
         toBoss.normalize();
         hitPoint = boss.group.position.clone().addScaledVector(toBoss, -boss.radius * 0.75);
         hitPoint.y = boss.group.position.y + 1.15;
       } else {
-        hitPoint = hit.contactPoint || boss.group.position.clone().add(new THREE.Vector3(0, 1.15, 0));
+        hitPoint = fallbackHit.contactPoint || boss.group.position.clone().add(new THREE.Vector3(0, 1.15, 0));
       }
 
       const fwdAngle = player.group.rotation.y;
@@ -142,17 +176,17 @@ export function resolveCombatCollisions(ctx: CollisionResolverContext): void {
         -Math.sin(fwdAngle) * 0.75 - Math.cos(fwdAngle) * 0.35,
       ).normalize();
 
-      vfx.spawnBloodBurst(hitPoint, hitDir, hit.isHeavy);
-      profiler.markCombatEvent('PLAYER_HIT_BOSS', { damage: hit.damage, isHeavy: hit.isHeavy });
+      vfx.spawnBloodBurst(hitPoint, hitDir, hitIsHeavy);
+      profiler.markCombatEvent('PLAYER_HIT_BOSS', { damage: hitDamage, isHeavy: hitIsHeavy });
 
-      audio.hitConfirm(hit.isHeavy);
-      audio.damageTaken(hit.isHeavy, true);
+      audio.hitConfirm(hitIsHeavy);
+      audio.damageTaken(hitIsHeavy, true);
 
       if (settingsManager.data.vfx.cameraShake) {
-        cameraRig.addShake(hit.isHeavy ? 0.32 : 0.16);
+        cameraRig.addShake(hitIsHeavy ? 0.32 : 0.16);
       }
 
-      if (hit.isHeavy) {
+      if (hitIsHeavy) {
         setHitstop(0.05);
       }
 
@@ -168,43 +202,59 @@ export function resolveCombatCollisions(ctx: CollisionResolverContext): void {
 
   // 3. Boss Attack Hits Player
   const bossHitboxActive = boss.isHitboxActive();
+  if (!bossHitboxActive) {
+    prevBossBladeSegment = null;
+  }
   if (
-    (boss.state === 'active' || bossHitboxActive) &&
+    bossHitboxActive &&
     boss.currentAttack &&
     !boss.hasHitCurrentSwing &&
     player.state !== 'dead'
   ) {
-    const bladeHitboxPos = boss.getBladeHitboxWorldPosition();
-    const distToBlade = player.group.position.distanceTo(bladeHitboxPos);
-    const bladeHit = distToBlade <= (player.radius + 2.0);
+    const isKick = boss.currentAttack.animationClip === 'kick';
+    const playerCapsule = player.getBodyCapsule();
+    let sweptHit = false;
+    let sweptContact: THREE.Vector3 | undefined;
 
-    const hit = checkAttackHit(
-      boss.group.position,
-      boss.group.rotation.y,
-      boss.currentAttack,
-      player.group.position,
-      player.radius,
-      player.isInvulnerable,
-    );
+    if (isKick) {
+      const footPos = boss.getFootLocation();
+      const footRes = WeaponCollisionSystem.testSphereToBody(footPos, 0.48, playerCapsule);
+      sweptHit = footRes.hit;
+      sweptContact = footRes.contactPoint;
+    } else {
+      const currBossBlade = boss.getWeaponBladeSegment();
+      const bladeRes = WeaponCollisionSystem.testSweptBladeToBody(
+        currBossBlade,
+        prevBossBladeSegment,
+        playerCapsule,
+      );
+      prevBossBladeSegment = cloneBladeSegment(currBossBlade);
+      sweptHit = bladeRes.hit;
+      sweptContact = bladeRes.contactPoint;
+    }
 
-    if ((bladeHit || hit.hit) && !player.isInvulnerable) {
-      const damageDealt = player.takeDamage(hit.damage || boss.currentAttack.damage, hit.isHeavy);
+    if (sweptHit && !player.isInvulnerable) {
+      const dmg = boss.currentAttack.damage;
+      const isHeavy = !!boss.currentAttack.isHeavy;
+      const damageDealt = player.takeDamage(dmg, isHeavy);
       boss.hasHitCurrentSwing = true;
 
       if (damageDealt) {
         const screenPos = projectToScreen(player.group.position, 1.2);
-        hud.spawnDamageNumber(hit.damage, screenPos.x, screenPos.y, true);
+        hud.spawnDamageNumber(dmg, screenPos.x, screenPos.y, true);
 
         // Combat VFX: Minimal Elden Ring blade-slash blood spit right on player surface
         const toPlayer = player.group.position.clone().sub(boss.group.position);
         toPlayer.y = 0;
         let hitPoint: THREE.Vector3;
-        if (toPlayer.length() > 0.01) {
+        if (sweptContact) {
+          hitPoint = sweptContact.clone();
+        } else if (toPlayer.length() > 0.01) {
           toPlayer.normalize();
           hitPoint = player.group.position.clone().addScaledVector(toPlayer, -player.radius * 0.75);
           hitPoint.y = player.group.position.y + 1.10;
         } else {
-          hitPoint = hit.contactPoint || player.group.position.clone().add(new THREE.Vector3(0, 1.10, 0));
+          hitPoint = player.group.position.clone().add(new THREE.Vector3(0, 1.10, 0));
         }
 
         const fwdAngle = boss.group.rotation.y;
@@ -215,7 +265,7 @@ export function resolveCombatCollisions(ctx: CollisionResolverContext): void {
         ).normalize();
 
         vfx.spawnBloodBurst(hitPoint, hitDir, true);
-        profiler.markCombatEvent('BOSS_HIT_PLAYER', { damage: hit.damage });
+        profiler.markCombatEvent('BOSS_HIT_PLAYER', { damage: dmg });
 
         audio.hitConfirm(true);
         audio.damageTaken(true, false);

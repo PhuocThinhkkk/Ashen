@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import fs from 'fs';
 import path from 'path';
 import { VFXSystem } from '../src/systems/VFXSystem';
-import { createSlashArcGeometry, SlashArcInstance } from '../src/vfx/SlashArcRibbon';
+import { createSlashArcGeometry, SlashArcInstance, DynamicWeaponTrail } from '../src/vfx/SlashArcRibbon';
 import { GroundSlamVFX } from '../src/vfx/GroundSlamVFX';
 import { BloodBurstVFX } from '../src/vfx/BloodBurstVFX';
 import { SparkBurstVFX } from '../src/vfx/SparkBurstVFX';
@@ -50,6 +50,27 @@ test.describe('Elden Ring Combat VFX & SFX Architecture', () => {
 
     geom.dispose();
     arc.dispose();
+  });
+
+  test('verifies DynamicWeaponTrail builds ribbon directly from physical blade base/tip samples', () => {
+    const trail = new DynamicWeaponTrail();
+    trail.begin('boss', 0xff4411, 2.5);
+    expect(trail.active).toBe(true);
+    expect(trail.recording).toBe(true);
+
+    trail.addSample(new THREE.Vector3(0, 2.5, 0), new THREE.Vector3(0, 4.2, 0.5));
+    trail.addSample(new THREE.Vector3(0, 2.0, -1.0), new THREE.Vector3(0, 3.2, -2.5));
+    trail.addSample(new THREE.Vector3(0, 1.2, -1.2), new THREE.Vector3(0, 1.4, -3.2));
+
+    expect(trail.mesh.geometry.drawRange.count).toBeGreaterThan(0);
+
+    trail.end();
+    expect(trail.recording).toBe(false);
+    trail.update(0.10);
+    expect(trail.active).toBe(true);
+    trail.update(0.20);
+    expect(trail.active).toBe(false);
+    trail.dispose();
   });
 
   test('verifies BloodBurstVFX directional three.quarks particle system initialization', () => {

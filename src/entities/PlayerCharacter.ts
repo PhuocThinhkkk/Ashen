@@ -48,6 +48,9 @@ export class PlayerCharacter {
   public comboQueued = false;
   public hasHitCurrentSwing = false;
   public hasSpawnedSlashArc = false;
+  private isPlayerTrailActive = false;
+  private readonly trailBaseScratch = new THREE.Vector3();
+  private readonly trailTipScratch = new THREE.Vector3();
 
   // Dodge Frame Data
   public readonly dodgeConfig: DodgeDefinition = PLAYER_DODGE;
@@ -343,17 +346,6 @@ export class PlayerCharacter {
     this.kinematicController.setCallbacks({
       onFootDust: (pos, count) => this.vfxSystem?.spawnFootDustKickup(pos, count),
       onPeakSparks: (pos, count, isHeavy) => this.vfxSystem?.spawnPeakVelocitySparks(pos, count, isHeavy),
-      onWeaponTrail: () => {
-        if (this.hasSpawnedSlashArc) return;
-        this.hasSpawnedSlashArc = true;
-        this.vfxSystem?.spawnAttackSlashArc(
-          this.group.position,
-          this.group.rotation.y,
-          this.currentAttack?.name || 'light',
-          this.currentAttack?.isHeavy || false,
-          false,
-        );
-      },
       onPeakSwoosh: (freq, duration, isHeavy) => this.audioSystem?.playPeakSwoosh(freq, duration, isHeavy),
       onPeakImpact: (isHeavy) => this.audioSystem?.hitImpact(isHeavy),
       onFootstep: (heavy) => this.audioSystem?.playFootstep(heavy),
@@ -362,11 +354,14 @@ export class PlayerCharacter {
   }
 
   public isHitboxActive(): boolean {
+    if (
+      this.kinematicController?.currentConfig?.hitbox &&
+      (this.state === 'attack' || this.isAirborneAttack)
+    ) {
+      return this.kinematicController.isAttacking;
+    }
     if (this.isAirborneAttack) {
       return this.attackPhase === 'active';
-    }
-    if (this.kinematicController && this.state === 'attack') {
-      return this.kinematicController.isAttacking;
     }
     return this.attackPhase === 'active';
   }
@@ -387,9 +382,11 @@ export class PlayerCharacter {
     outTip = new THREE.Vector3(),
   ): WeaponBladeSegment {
     if (this.bladeBaseLocator.parent && this.bladeTipLocator.parent) {
+      this.bladeBaseLocator.updateMatrixWorld(true);
+      this.bladeTipLocator.updateMatrixWorld(true);
       this.bladeBaseLocator.getWorldPosition(outBase);
       this.bladeTipLocator.getWorldPosition(outTip);
-      return { base: outBase, tip: outTip, radius: 0.16 };
+      return { base: outBase, tip: outTip, radius: 0.18 };
     }
     const fwd = new THREE.Vector3(
       -Math.sin(this.group.rotation.y),
@@ -565,6 +562,27 @@ export class PlayerCharacter {
     }
     this.hitboxDebugger.update(this.isHitboxActive());
 
+    // Dynamic bone-tracked weapon trail following the player's physical sword blade
+    const trailShouldBeActive =
+      !!this.kinematicController?.isTrailActive &&
+      (this.state === 'attack' || this.isAirborneAttack) &&
+      this.currentAttack !== null &&
+      this.state !== 'dead' &&
+      this.state !== 'stagger';
+    if (trailShouldBeActive) {
+      if (!this.isPlayerTrailActive) {
+        this.isPlayerTrailActive = true;
+        this.hasSpawnedSlashArc = true;
+        const trailColor = this.currentAttack?.isHeavy ? 0xff3b1f : 0xffe066;
+        this.vfxSystem?.beginBladeTrail('player', trailColor, this.currentAttack?.isHeavy ? 2.5 : 2.1);
+      }
+      const seg = this.getWeaponBladeSegment(this.trailBaseScratch, this.trailTipScratch);
+      this.vfxSystem?.pushBladeTrailSample('player', seg.base, seg.tip);
+    } else if (this.isPlayerTrailActive) {
+      this.isPlayerTrailActive = false;
+      this.vfxSystem?.endBladeTrail('player');
+    }
+
     // 3. Airborne Physics & Ground Detection
     PlayerLocomotion.updateAirbornePhysics(this, delta, inputs);
 
@@ -660,6 +678,10 @@ export class PlayerCharacter {
     this.comboQueued = false;
     this.hasHitCurrentSwing = false;
     this.hasSpawnedSlashArc = false;
+    if (this.isPlayerTrailActive) {
+      this.isPlayerTrailActive = false;
+      this.vfxSystem?.endBladeTrail('player');
+    }
     this.isInvulnerable = false;
     this.setDodgeIFrameVisual(false);
 

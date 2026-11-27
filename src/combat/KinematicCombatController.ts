@@ -11,6 +11,7 @@ export interface KinematicEventCallbacks {
   onFootDust?: (pos: THREE.Vector3, count: number) => void;
   onPeakSparks?: (pos: THREE.Vector3, count: number, isHeavy: boolean) => void;
   onWeaponTrail?: (bone: THREE.Object3D, duration: number) => void;
+  onSwingWindowStart?: (swingIndex: number) => void;
   onPeakSwoosh?: (freq: number, duration: number, isHeavy: boolean) => void;
   onPeakImpact?: (isHeavy: boolean) => void;
   onFootstep?: (heavy: boolean) => void;
@@ -20,6 +21,8 @@ export interface KinematicEventCallbacks {
 
 export class KinematicCombatController {
   public isAttacking = false;
+  public isTrailActive = false;
+  public activeSwingIndex = -1;
   public currentActionId: string | null = null;
   public currentConfig: KinematicActionConfig | null = null;
   public currentFrame = 1;
@@ -176,6 +179,8 @@ export class KinematicCombatController {
     this.prevTime = 0;
     this.firedTriggers.clear();
     this.isAttacking = false;
+    this.isTrailActive = false;
+    this.activeSwingIndex = -1;
 
     // Set target hitbox bone (Kick targets LeftFoot, melee attacks target RightHand)
     if (nextConfig?.hitbox?.boneName === 'mixamorig:LeftFoot') {
@@ -190,6 +195,8 @@ export class KinematicCombatController {
    */
   public reset(): void {
     this.isAttacking = false;
+    this.isTrailActive = false;
+    this.activeSwingIndex = -1;
     this.currentAction = null;
     this.currentActionId = null;
     this.currentConfig = null;
@@ -239,14 +246,31 @@ export class KinematicCombatController {
       this.prevPhase = this.currentPhase;
       this.currentPhase = activePhase;
 
-      // 1. Precise Hitbox Toggle (Active strictly during Impact startFrame..endFrame)
+      // 1. Precise Hitbox Toggle (supports single or multi-swing activeWindows)
       if (cfg.hitbox) {
-        this.isAttacking =
-          this.currentFrame >= cfg.hitbox.activeStartFrame &&
-          this.currentFrame <= cfg.hitbox.activeEndFrame;
+        const windows = cfg.hitbox.activeWindows ?? [
+          { startFrame: cfg.hitbox.activeStartFrame, endFrame: cfg.hitbox.activeEndFrame },
+        ];
+        const matchedIndex = windows.findIndex(
+          (w) => this.currentFrame >= w.startFrame && this.currentFrame <= w.endFrame,
+        );
+        this.isAttacking = matchedIndex !== -1;
+        if (matchedIndex !== -1 && matchedIndex !== this.activeSwingIndex) {
+          this.activeSwingIndex = matchedIndex;
+          this.callbacks.onSwingWindowStart?.(matchedIndex);
+        } else if (matchedIndex === -1) {
+          this.activeSwingIndex = -1;
+        }
       } else {
         this.isAttacking = false;
+        this.activeSwingIndex = -1;
       }
+
+      // 1b. Continuous Blade Trail Window (tracks physical sword swing frames)
+      const trailWindows = cfg.vfx.weaponTrailWindows ?? (cfg.vfx.weaponTrailFrames ? [cfg.vfx.weaponTrailFrames] : []);
+      this.isTrailActive = trailWindows.some(
+        (tw) => this.currentFrame >= tw.startFrame && this.currentFrame <= tw.endFrame,
+      );
 
       // 2. Root Motion Extraction (Standing Melee Run Jump Attack: delta_y = -5.9m)
       if (cfg.rootMotion.type === 'Root Motion' && cfg.id === 'attack_jump') {

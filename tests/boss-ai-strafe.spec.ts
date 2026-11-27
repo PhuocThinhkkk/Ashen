@@ -250,12 +250,12 @@ test.describe('FromSoftware-Style Boss AI & Strafe Subgoal Stack', () => {
     };
 
     // Step through windup and active frames: full-body attacks should NOT rotate in place without turn animations
-    mockBoss.attackTimer = 1.0;
+    mockBoss.attackTimer = 0.50;
     ai.update(0.016, playerSnapshot);
     expect(mockBoss.state).toBe('windup');
     expect(faceTargetCalledCount).toBe(0);
 
-    mockBoss.attackTimer = 1.15;
+    mockBoss.attackTimer = 0.92;
     ai.update(0.016, playerSnapshot);
     expect(mockBoss.state).toBe('active');
     expect(ai.isAttackActiveFrames).toBe(false);
@@ -265,7 +265,7 @@ test.describe('FromSoftware-Style Boss AI & Strafe Subgoal Stack', () => {
     faceTargetCalledCount = 0;
     mockBoss.currentAttack = BOSS_ATTACKS.jump;
     mockBoss.state = 'windup';
-    mockBoss.attackTimer = 1.25; // in active airborne phase
+    mockBoss.attackTimer = 1.42; // in active slam phase
     ai.update(0.016, playerSnapshot);
     expect(mockBoss.state).toBe('active');
     expect(ai.isAttackActiveFrames).toBe(true); // Jump leap rotation is frozen
@@ -275,7 +275,7 @@ test.describe('FromSoftware-Style Boss AI & Strafe Subgoal Stack', () => {
     faceTargetCalledCount = 0;
     mockBoss.currentAttack = BOSS_ATTACKS.spin360;
     mockBoss.state = 'windup';
-    mockBoss.attackTimer = 1.05; // in active spin phase
+    mockBoss.attackTimer = 1.00; // in active spin phase
     ai.update(0.016, playerSnapshot);
     expect(mockBoss.state).toBe('active');
     expect(ai.isAttackActiveFrames).toBe(true); // 360 spin rotation is frozen
@@ -598,11 +598,11 @@ test.describe('FromSoftware-Style Boss AI & Strafe Subgoal Stack', () => {
 
     expect(minRunningActions, 'Boss must always have >= 1 weighted full-body action across Phase 2 transition').toBeGreaterThanOrEqual(1);
 
-    // Trigger a Phase 2 attack and wait through recovery back to STRAFE_INSPECT
+    // Trigger a Phase 2 attack and capture during active downward cleave (~820ms in Phase 2)
     await page.evaluate(() => {
       window.__THREE_GAME_TEST_HOOKS__?.triggerBossAttack?.('downward');
     });
-    await page.waitForTimeout(600);
+    await page.waitForTimeout(820);
     await page.screenshot({ path: 'artifacts/screenshots/boss-phase2-attack.png', fullPage: true });
 
     await page.waitForFunction(() => {

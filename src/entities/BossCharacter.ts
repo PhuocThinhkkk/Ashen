@@ -47,6 +47,9 @@ export class BossCharacter {
   public hasHitCurrentSwing = false;
   public hasSpawnedSlashArc = false;
   public isAttackActiveFrames = false;
+  private isBossTrailActive = false;
+  private readonly trailBaseScratch = new THREE.Vector3();
+  private readonly trailTipScratch = new THREE.Vector3();
 
   // Locomotion Blend Layer Actions & Weights
   public idleAction: THREE.AnimationAction | null = null;
@@ -716,6 +719,10 @@ export class BossCharacter {
       this.currentLowerActionName = 'idle';
     }
 
+    if (this.isBossTrailActive) {
+      this.isBossTrailActive = false;
+      this.vfxSystem?.endBladeTrail('boss');
+    }
     this.kinematicController?.reset();
   }
 
@@ -746,25 +753,15 @@ export class BossCharacter {
     this.kinematicController.setCallbacks({
       onFootDust: (pos, count) => this.vfxSystem?.spawnFootDustKickup(pos, count),
       onPeakSparks: (pos, count, isHeavy) => this.vfxSystem?.spawnPeakVelocitySparks(pos, count, isHeavy),
-      onWeaponTrail: () => {
-        if (this.hasSpawnedSlashArc) return;
-        this.hasSpawnedSlashArc = true;
-        this.vfxSystem?.spawnAttackSlashArc(
-          this.group.position,
-          this.group.rotation.y,
-          this.currentAttack?.name || 'boss_attack',
-          this.currentAttack?.isHeavy || false,
-          true,
-        );
+      onSwingWindowStart: () => {
+        // Each swing in a multi-hit combo (e.g. attack_combo) can hit independently
+        this.hasHitCurrentSwing = false;
       },
       onPeakSwoosh: (freq, duration, isHeavy) => this.audioSystem?.playPeakSwoosh(freq, duration, isHeavy),
       onPeakImpact: (isHeavy) => this.audioSystem?.hitImpact(isHeavy),
       onFootstep: (heavy) => this.audioSystem?.playFootstep(heavy),
       onLandingThud: (heavy) => {
         this.audioSystem?.playLandingThud(heavy);
-        if (this.currentAttack?.animationClip === 'attack_jump') {
-          this.triggerJumpGroundSlam();
-        }
       },
       onGroundSlam: (pos) => {
         this.triggerJumpGroundSlam(pos);
@@ -785,7 +782,7 @@ export class BossCharacter {
   }
 
   public isHitboxActive(): boolean {
-    if (this.kinematicController && (this.state === 'active' || this.state === 'windup' || this.state === 'recovery')) {
+    if (this.kinematicController?.currentConfig?.hitbox) {
       return this.kinematicController.isAttacking;
     }
     return this.state === 'active';
@@ -940,6 +937,26 @@ export class BossCharacter {
       this.handBone.updateMatrixWorld(true);
       this.greatswordGroup.updateMatrixWorld(true);
       this.bladeHitbox.updateMatrixWorld(true);
+    }
+
+    // Dynamic bone-tracked weapon trail following the physical blade across active swing frames
+    const trailShouldBeActive =
+      !!this.kinematicController?.isTrailActive &&
+      this.currentAttack !== null &&
+      this.state !== 'dead' &&
+      this.state !== 'stagger';
+    if (trailShouldBeActive) {
+      if (!this.isBossTrailActive) {
+        this.isBossTrailActive = true;
+        this.hasSpawnedSlashArc = true;
+        const trailColor = this.currentAttack?.isHeavy ? 0xff4411 : 0xff7722;
+        this.vfxSystem?.beginBladeTrail('boss', trailColor, this.currentAttack?.isHeavy ? 2.6 : 2.2);
+      }
+      const seg = this.getWeaponBladeSegment(this.trailBaseScratch, this.trailTipScratch);
+      this.vfxSystem?.pushBladeTrailSample('boss', seg.base, seg.tip);
+    } else if (this.isBossTrailActive) {
+      this.isBossTrailActive = false;
+      this.vfxSystem?.endBladeTrail('boss');
     }
 
     const isKick = this.currentAttack?.animationClip === 'kick';
@@ -1171,6 +1188,10 @@ export class BossCharacter {
     this.hasTriggeredGroundSlam = false;
     this.telegraphGlow = 0;
     this.isAttackActiveFrames = false;
+    if (this.isBossTrailActive) {
+      this.isBossTrailActive = false;
+      this.vfxSystem?.endBladeTrail('boss');
+    }
 
     // Reset Goal-Stack AI
     this.ai.reset();
