@@ -23,7 +23,7 @@ export const BOSS_CONFIG = {
 
   // 4. Attack Animation Speed Multipliers
   attackSpeedPhase1: 1.0,
-  attackSpeedPhase2: 1.15, // Phase 2 attacks execute 15% faster
+  attackSpeedPhase2: 1.12, // Phase 2 attacks execute slightly faster while retaining heavy Souls weight
 
   // 5. Preferred Orbit Distance (meters)
   preferredOrbitRadius: 5.5,
@@ -236,9 +236,27 @@ export class BossAI {
     }
   }
 
+  private isFacingTarget(playerPos: THREE.Vector3, maxAngleRad = 0.38): boolean {
+    const b = this.boss;
+    const dx = playerPos.x - b.group.position.x;
+    const dz = playerPos.z - b.group.position.z;
+    const targetAngle = Math.atan2(-dx, -dz);
+    let diff = targetAngle - b.group.rotation.y;
+    while (diff > Math.PI) diff -= Math.PI * 2;
+    while (diff < -Math.PI) diff += Math.PI * 2;
+    return Math.abs(diff) <= maxAngleRad;
+  }
+
   private evaluateNextGoalByDistance(dt: number, playerPos: THREE.Vector3): void {
     const b = this.boss;
     const dist = b.distanceTo(playerPos);
+    if (dist <= 6.0 && !this.isFacingTarget(playerPos, 0.40)) {
+      // Turn to face player using synced Turn Left / Turn Right footwork before committing to a swing
+      b.state = 'idle';
+      b.faceTarget(playerPos, this.maxTurnRate, dt);
+      b.updateLocomotionWeights(dt, 0, 0);
+      return;
+    }
     if (dist <= 3.6) {
       // Close range: combo
       b.stateTimer = 0;
@@ -261,12 +279,12 @@ export class BossAI {
         this.queueCombo(BOSS_ATTACKS.combo, BOSS_ATTACKS.downward);
       }
     } else {
-      // Long range (> 6m): brief initial observation before approaching
+      // Long range (> 6m): deliberate observation & turn alignment before approaching
       b.stateTimer += dt;
       b.state = 'idle';
       b.faceTarget(playerPos, this.maxTurnRate, dt);
       b.updateLocomotionWeights(dt, 0, 0);
-      const idleLimit = b.isPhase2 ? 0.35 : 0.65;
+      const idleLimit = b.isPhase2 ? 0.55 : 0.85;
       if (b.stateTimer >= idleLimit) {
         b.stateTimer = 0;
         if (Math.random() < 0.35) {
@@ -305,19 +323,22 @@ export class BossAI {
         if (dist > maxDist) {
           // Player dodged out of range! Clear remaining queued attacks and return directly to STRAFE_INSPECT
           this.clearGoalStack();
-          this.attackCooldown = 1.5 + Math.random() * 1.3;
+          b.endAttackAction?.();
+          this.attackCooldown = 1.8 + Math.random() * 1.4;
           this.pushSubgoal({
             type: 'STRAFE_INSPECT',
-            duration: Math.min(3.0, Math.max(1.5, this.attackCooldown)),
+            duration: Math.min(3.2, Math.max(1.8, this.attackCooldown)),
             timer: 0,
             strafeDir: Math.random() < 0.5 ? 1 : -1,
           });
         } else {
-          // Player is still in range: pop COMBO_CHECK and immediately start followup attack
+          // Player is still in range: pop COMBO_CHECK and smoothly crossfade into followup attack
           this.goalStack.pop();
           const next = this.goalStack[this.goalStack.length - 1];
           if (next && next.type === 'ATTACK' && next.attack) {
             this.startAttack(next.attack);
+          } else {
+            b.endAttackAction?.();
           }
         }
         break;
@@ -474,9 +495,6 @@ export class BossAI {
       b.state = 'windup';
       this.isAttackActiveFrames = false;
       const progress = b.attackTimer / startup;
-
-      // Capped turn rate wind-up tracking
-      b.faceTarget(playerPos, this.maxTurnRate, dt);
       b.telegraphGlow = progress;
     } else if (b.attackTimer < startup + active) {
       // Hitbox / active swing frame
@@ -499,24 +517,16 @@ export class BossAI {
       b.telegraphGlow = 1.0;
 
       if (b.currentAttack.animationClip && FULL_BODY_EXEMPT_CLIPS.has(b.currentAttack.animationClip)) {
-        // Jump / 360 Attack exception: freeze mid-air/spin rotation during active leap/swing
+        // Jump / 360 Attack exception
         this.isAttackActiveFrames = true;
       } else {
-        // Non-jump attacks: lock positional movement (0 translation), allow in-place turning towards player
         this.isAttackActiveFrames = false;
-        b.faceTarget(playerPos, this.maxTurnRate, dt);
       }
     } else if (b.attackTimer < startup + active + recovery) {
       b.state = 'recovery';
       b.telegraphGlow = Math.max(0, 1.0 - (b.attackTimer - startup - active) / (recovery * 0.5));
-      if (b.currentAttack.animationClip && FULL_BODY_EXEMPT_CLIPS.has(b.currentAttack.animationClip)) {
-        this.isAttackActiveFrames = false;
-        b.setTurnDirection?.(null);
-      } else {
-        // Non-jump attacks: allow in-place turning towards target during recovery
-        this.isAttackActiveFrames = false;
-        b.faceTarget(playerPos, this.maxTurnRate, dt);
-      }
+      this.isAttackActiveFrames = false;
+      b.setTurnDirection?.(null);
     } else {
       // Attack complete!
       b.state = 'idle';
@@ -526,21 +536,38 @@ export class BossAI {
       this.isAttackActiveFrames = false;
       b.setTurnDirection?.(null);
 
-      // Cross-fade back into locomotion blend layer
-      b.endAttackAction();
-
-      // Pop the completed ATTACK subgoal from the stack
+      // Pop the completed ATTACK subgoal from the stack before deciding whether to chain or return to locomotion
       const top = this.getCurrentSubgoal();
       if (top && top.type === 'ATTACK') {
         this.popSubgoal();
       }
 
+      const nextGoal = this.getCurrentSubgoal();
+      if (nextGoal && nextGoal.type === 'COMBO_CHECK') {
+        const dist = b.distanceTo(playerPos);
+        const maxDist = nextGoal.maxDistance ?? 4.2;
+        if (dist <= maxDist) {
+          this.popSubgoal();
+          const followup = this.getCurrentSubgoal();
+          if (followup && followup.type === 'ATTACK' && followup.attack) {
+            // Direct smooth crossfade from Hit 1 recovery into Hit 2 windup without popping back to idle
+            this.startAttack(followup.attack);
+            return;
+          }
+        } else {
+          this.clearGoalStack();
+        }
+      }
+
+      // Cross-fade smoothly back into locomotion blend layer
+      b.endAttackAction();
+
       // Check if stack is now empty (combo finished)
       if (this.goalStack.length === 0) {
-        this.attackCooldown = 1.5 + Math.random() * 1.3; // 1.5s–2.8s cooldown
+        this.attackCooldown = 1.8 + Math.random() * 1.4; // 1.8s–3.2s breathing room
         this.pushSubgoal({
           type: 'STRAFE_INSPECT',
-          duration: Math.min(3.0, Math.max(1.5, this.attackCooldown)),
+          duration: Math.min(3.2, Math.max(1.8, this.attackCooldown)),
           timer: 0,
           strafeDir: Math.random() < 0.5 ? 1 : -1,
         });

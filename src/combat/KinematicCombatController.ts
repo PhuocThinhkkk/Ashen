@@ -125,6 +125,7 @@ export class KinematicCombatController {
       clampWhenFinished?: boolean;
       timeScale?: number;
       fadeDuration?: number;
+      skipMixerFade?: boolean;
     },
   ): void {
     const nextConfig = getKinematicAction(actionId) || null;
@@ -135,34 +136,36 @@ export class KinematicCombatController {
       if (this.currentConfig) {
         crossfadeDuration = this.currentConfig.crossfadeDurationOut;
       } else {
-        crossfadeDuration = 0.20;
+        crossfadeDuration = 0.25;
       }
     }
 
-    if (this.currentAction === action && action.isRunning()) {
-      action.timeScale = options?.timeScale ?? 1.0;
-      return;
-    }
-
-    action.reset();
-    action.enabled = true;
-    action.setLoop(
-      options?.loop ?? THREE.LoopRepeat,
-      options?.loop === THREE.LoopOnce ? 1 : Infinity,
-    );
-    action.clampWhenFinished = options?.clampWhenFinished ?? false;
-    action.setEffectiveTimeScale(options?.timeScale ?? 1.0);
-
-    if (this.currentAction && this.currentAction !== action) {
-      action.setEffectiveWeight(1.0);
-      this.currentAction.crossFadeTo(action, crossfadeDuration, true);
-    } else {
-      action.setEffectiveWeight(1.0);
-      if (crossfadeDuration > 0) {
-        action.fadeIn(crossfadeDuration);
+    if (!options?.skipMixerFade) {
+      if (this.currentAction === action && action.isRunning()) {
+        action.timeScale = options?.timeScale ?? 1.0;
+        return;
       }
+
+      action.reset();
+      action.enabled = true;
+      action.setLoop(
+        options?.loop ?? THREE.LoopRepeat,
+        options?.loop === THREE.LoopOnce ? 1 : Infinity,
+      );
+      action.clampWhenFinished = options?.clampWhenFinished ?? false;
+      action.setEffectiveTimeScale(options?.timeScale ?? 1.0);
+
+      if (this.currentAction && this.currentAction !== action) {
+        action.setEffectiveWeight(1.0);
+        this.currentAction.crossFadeTo(action, crossfadeDuration, false);
+      } else {
+        action.setEffectiveWeight(1.0);
+        if (crossfadeDuration > 0) {
+          action.fadeIn(crossfadeDuration);
+        }
+      }
+      action.play();
     }
-    action.play();
 
     this.currentAction = action;
     this.currentActionId = actionId;

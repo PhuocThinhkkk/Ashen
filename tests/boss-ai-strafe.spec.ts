@@ -249,18 +249,23 @@ test.describe('FromSoftware-Style Boss AI & Strafe Subgoal Stack', () => {
       isStaggered: false,
     };
 
-    // 1. Non-jump attack active frame: in-place rotation tracking remains enabled
+    // Step through windup and active frames: full-body attacks should NOT rotate in place without turn animations
     mockBoss.attackTimer = 1.0;
     ai.update(0.016, playerSnapshot);
+    expect(mockBoss.state).toBe('windup');
+    expect(faceTargetCalledCount).toBe(0);
+
+    mockBoss.attackTimer = 1.15;
+    ai.update(0.016, playerSnapshot);
     expect(mockBoss.state).toBe('active');
-    expect(ai.isAttackActiveFrames).toBe(false); // In-place rotation allowed for non-jump attacks
-    expect(faceTargetCalledCount).toBe(1);
+    expect(ai.isAttackActiveFrames).toBe(false);
+    expect(faceTargetCalledCount).toBe(0);
 
     // 2. Jump attack active frame: mid-air rotation is frozen
     faceTargetCalledCount = 0;
     mockBoss.currentAttack = BOSS_ATTACKS.jump;
     mockBoss.state = 'windup';
-    mockBoss.attackTimer = 1.2; // in active airborne phase
+    mockBoss.attackTimer = 1.25; // in active airborne phase
     ai.update(0.016, playerSnapshot);
     expect(mockBoss.state).toBe('active');
     expect(ai.isAttackActiveFrames).toBe(true); // Jump leap rotation is frozen
@@ -270,7 +275,7 @@ test.describe('FromSoftware-Style Boss AI & Strafe Subgoal Stack', () => {
     faceTargetCalledCount = 0;
     mockBoss.currentAttack = BOSS_ATTACKS.spin360;
     mockBoss.state = 'windup';
-    mockBoss.attackTimer = 1.0; // in active spin phase
+    mockBoss.attackTimer = 1.05; // in active spin phase
     ai.update(0.016, playerSnapshot);
     expect(mockBoss.state).toBe('active');
     expect(ai.isAttackActiveFrames).toBe(true); // 360 spin rotation is frozen
@@ -403,7 +408,7 @@ test.describe('FromSoftware-Style Boss AI & Strafe Subgoal Stack', () => {
       const diag = window.__THREE_GAME_TEST_HOOKS__?.getBossAIDiagnostics?.();
       // When out-of-range is detected, stack is cleared and STRAFE_INSPECT is pushed
       return diag && diag.subgoal === 'STRAFE_INSPECT';
-    }, { timeout: 4000 });
+    }, { timeout: 6500 });
 
     const branchedDiag = await page.evaluate(() => window.__THREE_GAME_TEST_HOOKS__?.getBossAIDiagnostics?.());
     expect(branchedDiag.subgoal).toBe('STRAFE_INSPECT');
@@ -457,7 +462,7 @@ test.describe('FromSoftware-Style Boss AI & Strafe Subgoal Stack', () => {
     expect(bossGroup.position.z).toBeCloseTo(initialPos.z, 5);
   });
 
-  test('Boss rotates toward target and triggers lower-body turn during non-jump attacks', () => {
+  test('Boss turns toward flanked player using Turn Left/Right footwork when idle/strafing, not during committed attacks', () => {
     let turnedDirection: 'left' | 'right' | null = null;
     let faceTargetCalled = false;
     const bossGroup = new THREE.Group();
@@ -497,20 +502,18 @@ test.describe('FromSoftware-Style Boss AI & Strafe Subgoal Stack', () => {
     };
 
     const ai = new BossAI(mockBoss);
-    ai.startAttack(BOSS_ATTACKS.combo);
-
-    // Player moves to the left flank (x = -4, z = 0)
+    // Player flanks to the left (x = -4, z = 0) while boss is idle/aligning before attacking
     const playerFlankPos = new THREE.Vector3(-4, 0, 0);
 
-    // Step into active attack phase
     const dt = 0.016;
-    for (let t = 0; t < 0.6; t += dt) {
+    for (let t = 0; t < 0.3; t += dt) {
       ai.update(dt, { position: playerFlankPos, velocity: new THREE.Vector3(), isHealing: false, isAttacking: false, isStaggered: false });
     }
 
     expect(faceTargetCalled).toBe(true);
     expect(turnedDirection).toBe('left');
     expect(bossGroup.rotation.y).not.toBe(0);
+    expect(mockBoss.currentAttack).toBeNull();
   });
 
   test('Boss endAttackAction always restores non-zero idle action weight preventing T-Pose', () => {

@@ -76,9 +76,10 @@ export class BossCharacter {
   public currentUpperActionName = 'idle';
   public currentLowerActionName = 'idle';
 
-  // Lower-Body Turn Layer Actions & Weights
+  // Lower-Body Turn Layer + Upper-Body Guard Stance (only dual-layer exception)
   public turnLeftAction: THREE.AnimationAction | null = null;
   public turnRightAction: THREE.AnimationAction | null = null;
+  public turnUpperIdleAction: THREE.AnimationAction | null = null;
   public turnDirection: 'left' | 'right' | null = null;
   public currentTurnLeftWeight = 0;
   public currentTurnRightWeight = 0;
@@ -303,7 +304,18 @@ export class BossCharacter {
       this.actions.set(clip.name, action);
     }
 
-    // Setup Lower-Body Turn Actions
+    // Setup Lower-Body Turn Actions + Upper-Body Guard Stance (only dual-layer exception)
+    const idleClip = ModelLoader.findClip(this.rawClips, 'idle');
+    if (idleClip) {
+      const idleSplit = this.splitClips.get(idleClip.name) || splitClipByBodyPart(idleClip);
+      this.turnUpperIdleAction = this.mixer.clipAction(idleSplit.upper);
+      this.turnUpperIdleAction.enabled = true;
+      this.turnUpperIdleAction.setLoop(THREE.LoopRepeat, Infinity);
+      this.turnUpperIdleAction.clampWhenFinished = false;
+      this.turnUpperIdleAction.setEffectiveWeight(0.0);
+      this.turnUpperIdleAction.play();
+    }
+
     const turnLeftClip = ModelLoader.findClip(this.rawClips, 'turn_left');
     if (turnLeftClip) {
       const split = this.splitClips.get(turnLeftClip.name) || splitClipByBodyPart(turnLeftClip);
@@ -311,6 +323,7 @@ export class BossCharacter {
       this.turnLeftAction.enabled = true;
       this.turnLeftAction.setLoop(THREE.LoopRepeat, Infinity);
       this.turnLeftAction.clampWhenFinished = false;
+      this.turnLeftAction.setEffectiveTimeScale(1.15);
       this.turnLeftAction.setEffectiveWeight(0.0);
       this.turnLeftAction.play();
     }
@@ -322,6 +335,7 @@ export class BossCharacter {
       this.turnRightAction.enabled = true;
       this.turnRightAction.setLoop(THREE.LoopRepeat, Infinity);
       this.turnRightAction.clampWhenFinished = false;
+      this.turnRightAction.setEffectiveTimeScale(1.15);
       this.turnRightAction.setEffectiveWeight(0.0);
       this.turnRightAction.play();
     }
@@ -458,28 +472,37 @@ export class BossCharacter {
       this.currentWeights.idle = 1.0;
     }
 
-    // 4. Smooth locomotionMasterWeight crossfade (fade in/out ~0.15s)
+    // 4. Smooth locomotionMasterWeight crossfade (weighty ~0.25s-0.30s blend in/out)
     const targetMaster = this.isLocomotionActive ? 1.0 : 0.0;
+    const masterRate = this.isLocomotionActive ? 10.0 : 12.0;
     this.locomotionMasterWeight = THREE.MathUtils.damp(
       this.locomotionMasterWeight,
       targetMaster,
-      1.0 / 0.15,
+      masterRate,
       delta,
     );
+    if (this.isLocomotionActive && this.locomotionMasterWeight > 0.995) {
+      this.locomotionMasterWeight = 1.0;
+    } else if (!this.isLocomotionActive && this.locomotionMasterWeight < 0.002) {
+      this.locomotionMasterWeight = 0.0;
+    }
 
-    // 5. Apply effective weights to mixer actions with guaranteed playback
+    // 5. Apply effective weights to full-body locomotion actions, yielding smoothly to Turn layer when active
     const master = this.locomotionMasterWeight;
+    const totalTurnWeight = Math.min(1.0, this.currentTurnLeftWeight + this.currentTurnRightWeight);
+    const locoBaseScale = master * (1.0 - totalTurnWeight);
     const actionsWithWeights = [
-      { action: this.idleAction, weight: this.currentWeights.idle * master },
-      { action: this.walkForwardAction, weight: this.currentWeights.walkForward * master },
-      { action: this.walkBackAction, weight: this.currentWeights.walkBack * master },
-      { action: this.strafeLeftAction, weight: this.currentWeights.strafeLeft * master },
-      { action: this.strafeRightAction, weight: this.currentWeights.strafeRight * master },
+      { action: this.idleAction, weight: this.currentWeights.idle * locoBaseScale },
+      { action: this.walkForwardAction, weight: this.currentWeights.walkForward * locoBaseScale },
+      { action: this.walkBackAction, weight: this.currentWeights.walkBack * locoBaseScale },
+      { action: this.strafeLeftAction, weight: this.currentWeights.strafeLeft * locoBaseScale },
+      { action: this.strafeRightAction, weight: this.currentWeights.strafeRight * locoBaseScale },
     ];
 
     for (const item of actionsWithWeights) {
       if (!item.action) continue;
       item.action.enabled = true;
+      item.action.setEffectiveTimeScale(1.0);
       if (item.weight > 0.001 && !item.action.isRunning()) {
         item.action.play();
       }
@@ -510,6 +533,9 @@ export class BossCharacter {
       this.currentActionName = dominant;
       if (this.turnDirection === null) {
         this.currentLowerActionName = dominant;
+        this.currentUpperActionName = dominant;
+      } else {
+        this.currentUpperActionName = 'idle';
       }
     }
   }
@@ -520,32 +546,35 @@ export class BossCharacter {
       this.targetTurnLeftWeight = 1.0;
       this.targetTurnRightWeight = 0.0;
       this.currentLowerActionName = 'turn_left';
+      if (!this.currentAttack) {
+        this.currentUpperActionName = 'idle';
+      }
     } else if (dir === 'right') {
       this.targetTurnLeftWeight = 0.0;
       this.targetTurnRightWeight = 1.0;
       this.currentLowerActionName = 'turn_right';
+      if (!this.currentAttack) {
+        this.currentUpperActionName = 'idle';
+      }
     } else {
       this.targetTurnLeftWeight = 0.0;
       this.targetTurnRightWeight = 0.0;
       if (!this.currentAttack) {
         this.currentLowerActionName = this.currentActionName || 'idle';
+        this.currentUpperActionName = this.currentActionName || 'idle';
       }
     }
   }
 
   public updateTurnWeights(delta: number): void {
-    // If an attack is active, force turn weights to 0 so turn clips never override or break attacks
-    if (this.currentUpperAttackAction && this.currentUpperAttackAction.isRunning()) {
+    // Smoothly fade turn layer out during full-body attacks, stagger, or death
+    if (this.currentAttack !== null || this.state === 'stagger' || this.state === 'dead') {
+      this.turnDirection = null;
       this.targetTurnLeftWeight = 0;
       this.targetTurnRightWeight = 0;
-      this.currentTurnLeftWeight = 0;
-      this.currentTurnRightWeight = 0;
-      if (this.turnLeftAction) this.turnLeftAction.setEffectiveWeight(0);
-      if (this.turnRightAction) this.turnRightAction.setEffectiveWeight(0);
-      return;
     }
 
-    const blendRate = 12.0;
+    const blendRate = this.currentAttack !== null ? 16.0 : 10.0;
     this.currentTurnLeftWeight = THREE.MathUtils.damp(
       this.currentTurnLeftWeight,
       this.targetTurnLeftWeight,
@@ -558,166 +587,139 @@ export class BossCharacter {
       blendRate,
       delta,
     );
+    if (this.targetTurnLeftWeight === 0 && this.currentTurnLeftWeight < 0.002) {
+      this.currentTurnLeftWeight = 0;
+    }
+    if (this.targetTurnRightWeight === 0 && this.currentTurnRightWeight < 0.002) {
+      this.currentTurnRightWeight = 0;
+    }
+
+    const master = this.locomotionMasterWeight;
+    const totalTurnWeight = Math.min(1.0, this.currentTurnLeftWeight + this.currentTurnRightWeight);
 
     if (this.turnLeftAction) {
       this.turnLeftAction.enabled = true;
       if (!this.turnLeftAction.isRunning()) {
         this.turnLeftAction.play();
       }
-      this.turnLeftAction.setEffectiveWeight(this.currentTurnLeftWeight);
+      this.turnLeftAction.setEffectiveWeight(this.currentTurnLeftWeight * master);
     }
     if (this.turnRightAction) {
       this.turnRightAction.enabled = true;
       if (!this.turnRightAction.isRunning()) {
         this.turnRightAction.play();
       }
-      this.turnRightAction.setEffectiveWeight(this.currentTurnRightWeight);
+      this.turnRightAction.setEffectiveWeight(this.currentTurnRightWeight * master);
     }
-
-    const totalTurnWeight = Math.min(1.0, this.currentTurnLeftWeight + this.currentTurnRightWeight);
-    if (this.currentLowerAttackAction && this.currentLowerAttackAction.isRunning()) {
-      this.currentLowerAttackAction.setEffectiveWeight(Math.max(0, 1.0 - totalTurnWeight));
+    if (this.turnUpperIdleAction) {
+      this.turnUpperIdleAction.enabled = true;
+      if (!this.turnUpperIdleAction.isRunning()) {
+        this.turnUpperIdleAction.play();
+      }
+      this.turnUpperIdleAction.setEffectiveWeight(totalTurnWeight * master);
     }
   }
 
-  public startAttackAction(clipName: string, timeScale: number): THREE.AnimationAction | null {
-    // 1. Immediately zero out all locomotion blend layer actions & master weight
+  public startAttackAction(clipName: string, timeScale: number, fadeDuration = 0.24): THREE.AnimationAction | null {
+    // 1. Smoothly crossfade locomotion blend layer out instead of hard-snapping weights to 0
     this.isLocomotionActive = false;
-    this.locomotionMasterWeight = 0.0;
-    const locoActions = [
-      this.idleAction,
-      this.walkForwardAction,
-      this.walkBackAction,
-      this.strafeLeftAction,
-      this.strafeRightAction,
-    ];
-    for (const act of locoActions) {
-      if (act) {
-        act.setEffectiveWeight(0.0);
-        act.fadeOut(0.12);
-      }
+    this.setTurnDirection(null);
+    this.isFullBodyExemptAttack = true;
+
+    // Ensure no legacy split attack/idle layers linger
+    if (this.currentUpperAttackAction) {
+      this.currentUpperAttackAction.stop();
+      this.currentUpperAttackAction = null;
     }
-
-    // 2. Identify if this attack is full-body exempt (attack_jump, attack_360)
-    const isFullBodyExempt = clipName === 'attack_jump' || clipName === 'attack_360';
-    this.isFullBodyExemptAttack = isFullBodyExempt;
-
-    // Reset previous lower idle action if any
+    if (this.currentLowerAttackAction) {
+      this.currentLowerAttackAction.stop();
+      this.currentLowerAttackAction = null;
+    }
     if (this.currentLowerIdleAction) {
       this.currentLowerIdleAction.stop();
       this.currentLowerIdleAction = null;
     }
 
-    // Resolve split upper and lower actions
-    let upperAction = this.upperActions.get(clipName) || null;
-    let lowerAction = this.lowerActions.get(clipName) || null;
+    // 2. Resolve full-body attack clip (all boss attacks are full-body)
     let fullAction = this.actions.get(clipName) || null;
-
-    if (!upperAction || !fullAction) {
+    if (!fullAction) {
       const clip = ModelLoader.findClip(this.rawClips, clipName);
       if (clip) {
-        upperAction = this.upperActions.get(clip.name) || null;
-        lowerAction = this.lowerActions.get(clip.name) || null;
         fullAction = this.actions.get(clip.name) || null;
-      }
-    }
-
-    // Play upper body attack action independently so upper body (dual swords, arms, chest)
-    // is never overridden or reset when turning
-    if (upperAction) {
-      upperAction.reset();
-      upperAction.enabled = true;
-      upperAction.setLoop(THREE.LoopOnce, 1);
-      upperAction.clampWhenFinished = true;
-      upperAction.setEffectiveTimeScale(timeScale);
-      upperAction.setEffectiveWeight(1.0);
-      upperAction.play();
-      this.currentUpperAttackAction = upperAction;
-    }
-
-    // Lower body handling:
-    // - Full-body exempt (jump, 360): lower body performs the attack sub-clip (full hips/pelvis twist)
-    // - Turnable attacks (downward, combo, kick): lower body uses lower idle sub-clip to maintain 2H greatsword grip
-    if (isFullBodyExempt) {
-      if (lowerAction) {
-        lowerAction.reset();
-        lowerAction.enabled = true;
-        lowerAction.setLoop(THREE.LoopOnce, 1);
-        lowerAction.clampWhenFinished = true;
-        lowerAction.setEffectiveTimeScale(timeScale);
-        lowerAction.setEffectiveWeight(1.0);
-        lowerAction.play();
-        this.currentLowerAttackAction = lowerAction;
-      }
-    } else {
-      let lowerIdle = this.lowerActions.get('idle');
-      if (!lowerIdle) {
-        const idleClip = ModelLoader.findClip(this.rawClips, 'idle');
-        if (idleClip) {
-          lowerIdle = this.lowerActions.get(idleClip.name);
+        if (!fullAction && this.mixer) {
+          fullAction = this.mixer.clipAction(clip);
+          this.actions.set(clip.name, fullAction);
         }
       }
-      if (lowerIdle) {
-        lowerIdle.reset();
-        lowerIdle.enabled = true;
-        lowerIdle.setLoop(THREE.LoopRepeat, Infinity);
-        lowerIdle.clampWhenFinished = false;
-        lowerIdle.setEffectiveWeight(1.0);
-        lowerIdle.play();
-        this.currentLowerIdleAction = lowerIdle;
-      }
-      this.currentLowerAttackAction = null;
     }
 
-    // Route tracking through kinematicController for frames, VFX, and audio
-    const trackAction = upperAction || fullAction || this.playAction(clipName, 0.15, THREE.LoopOnce, true, timeScale);
-    if (this.kinematicController && trackAction) {
-      this.kinematicController.playAction(clipName, trackAction, {
-        fadeDuration: 0.15,
+    if (fullAction) {
+      const prevAction = this.currentAttackAction;
+      fullAction.reset();
+      fullAction.enabled = true;
+      fullAction.setLoop(THREE.LoopOnce, 1);
+      fullAction.clampWhenFinished = true;
+      fullAction.setEffectiveTimeScale(timeScale);
+      fullAction.setEffectiveWeight(1.0);
+
+      if (prevAction && prevAction !== fullAction && prevAction.isRunning()) {
+        prevAction.crossFadeTo(fullAction, fadeDuration, false);
+      } else {
+        fullAction.fadeIn(fadeDuration);
+      }
+      fullAction.play();
+    }
+
+    if (this.kinematicController && fullAction) {
+      this.kinematicController.playAction(clipName, fullAction, {
+        fadeDuration,
         loop: THREE.LoopOnce,
         clampWhenFinished: true,
         timeScale,
+        skipMixerFade: true,
       });
     }
 
-    this.currentAttackAction = trackAction;
-    this.currentAction = trackAction;
+    this.currentAttackAction = fullAction;
+    this.currentAction = fullAction;
     this.currentActionName = clipName;
     this.currentUpperActionName = clipName;
-    return trackAction;
+    this.currentLowerActionName = clipName;
+    return fullAction;
   }
 
-  public endAttackAction(): void {
+  public endAttackAction(fadeDuration = 0.30): void {
     if (this.currentUpperAttackAction) {
-      this.currentUpperAttackAction.fadeOut(0.15);
+      this.currentUpperAttackAction.fadeOut(fadeDuration);
       this.currentUpperAttackAction = null;
     }
     if (this.currentLowerAttackAction) {
-      this.currentLowerAttackAction.fadeOut(0.15);
+      this.currentLowerAttackAction.fadeOut(fadeDuration);
       this.currentLowerAttackAction = null;
     }
     if (this.currentLowerIdleAction) {
-      this.currentLowerIdleAction.fadeOut(0.15);
+      this.currentLowerIdleAction.fadeOut(fadeDuration);
       this.currentLowerIdleAction = null;
     }
     if (this.currentAttackAction) {
-      this.currentAttackAction.fadeOut(0.15);
+      this.currentAttackAction.fadeOut(fadeDuration);
       this.currentAttackAction = null;
     }
 
     this.isFullBodyExemptAttack = false;
 
-    // Guaranteed active base pose: immediately re-enable, play, and fadeIn idleAction to prevent T-Pose
+    // Ensure idle/locomotion actions are enabled and ready as locomotionMasterWeight smoothly fades back in
     if (this.idleAction) {
       this.idleAction.enabled = true;
-      this.idleAction.play();
-      this.idleAction.setEffectiveWeight(1.0);
-      this.idleAction.fadeIn(0.15);
+      this.idleAction.setEffectiveTimeScale(1.0);
+      if (!this.idleAction.isRunning()) {
+        this.idleAction.play();
+      }
     }
 
-    // Cross-fade back into locomotion blend layer (~0.15s)
     this.isLocomotionActive = true;
-    this.locomotionMasterWeight = 1.0;
+    this.currentAction = this.idleAction;
+    this.currentActionName = 'idle';
     this.currentUpperActionName = 'idle';
     if (this.turnDirection === null) {
       this.currentLowerActionName = 'idle';
@@ -854,8 +856,11 @@ export class BossCharacter {
     arenaRadius: number,
     arena?: any,
   ): void {
-    // Update lower-body turn layer weights
+    // Update lower-body turn layer weights and smooth locomotion crossfade even during attacks
     this.updateTurnWeights(delta);
+    if (!this.isLocomotionActive && this.locomotionMasterWeight > 0) {
+      this.updateLocomotionWeights(delta, 0, 0);
+    }
 
     if (this.mixer) {
       // T-Pose Fail-Safe Guard: Ensure mixer always has at least one active, weighted action
@@ -1036,12 +1041,8 @@ export class BossCharacter {
   }
 
   public faceTarget(targetPos: THREE.Vector3, turnRateOrMaxTurnRate: number, delta?: number): void {
-    // Rotation tracking is frozen during full-body exempt attacks (jump leap, 360 spin)
-    const isExempt =
-      (this.currentAttack?.animationClip === 'attack_jump' ||
-        this.currentAttack?.animationClip === 'attack_360') &&
-      this.isAttackActiveFrames;
-    if (isExempt) {
+    // Full-body attacks, staggers, and death do not spin in place without turn animations
+    if (this.currentAttack !== null || this.state === 'stagger' || this.state === 'dead') {
       this.setTurnDirection(null);
       return;
     }
@@ -1054,30 +1055,31 @@ export class BossCharacter {
     while (diff > Math.PI) diff -= Math.PI * 2;
     while (diff < -Math.PI) diff += Math.PI * 2;
 
-    const isAttacking =
-      this.currentAttack !== null ||
-      (this.currentUpperAttackAction !== null && this.currentUpperAttackAction.isRunning());
-
-    if (isAttacking) {
-      // During any attack, lower body does not activate turn clips (stays in 2H idle or full-body attack)
-      this.setTurnDirection(null);
+    const turnThreshold = 0.08; // ~4.6 degrees deadzone
+    if (diff > turnThreshold) {
+      this.setTurnDirection('left');
+    } else if (diff < -turnThreshold) {
+      this.setTurnDirection('right');
     } else {
-      const turnThreshold = 0.08; // ~4.6 degrees deadzone
-      if (diff > turnThreshold) {
-        this.setTurnDirection('left');
-      } else if (diff < -turnThreshold) {
-        this.setTurnDirection('right');
-      } else {
-        this.setTurnDirection(null);
-      }
+      this.setTurnDirection(null);
+      return;
+    }
+
+    // Strictly sync yaw rotation to active turn animation weight
+    const activeTurnWeight =
+      diff > 0 ? this.currentTurnLeftWeight : this.currentTurnRightWeight;
+    const hasTurnActions = this.turnLeftAction !== null || this.turnRightAction !== null;
+    const syncScale = hasTurnActions ? Math.min(1.0, activeTurnWeight) : 1.0;
+    if (syncScale <= 0.01) {
+      return;
     }
 
     if (delta !== undefined) {
-      const maxStep = turnRateOrMaxTurnRate * delta;
+      const maxStep = turnRateOrMaxTurnRate * delta * syncScale;
       const step = Math.sign(diff) * Math.min(Math.abs(diff), maxStep);
       this.group.rotation.y += step;
     } else {
-      this.group.rotation.y += diff * Math.min(1.0, turnRateOrMaxTurnRate);
+      this.group.rotation.y += diff * Math.min(1.0, turnRateOrMaxTurnRate) * syncScale;
     }
   }
 
@@ -1137,6 +1139,7 @@ export class BossCharacter {
     this.targetTurnRightWeight = 0;
     this.turnLeftAction?.setEffectiveWeight(0);
     this.turnRightAction?.setEffectiveWeight(0);
+    this.turnUpperIdleAction?.setEffectiveWeight(0);
 
     for (const action of this.upperActions.values()) {
       action.stop();
@@ -1169,6 +1172,7 @@ export class BossCharacter {
     this.footHitboxDebugger.dispose();
     this.turnLeftAction?.stop();
     this.turnRightAction?.stop();
+    this.turnUpperIdleAction?.stop();
     this.upperActions.clear();
     this.lowerActions.clear();
     this.splitClips.clear();
