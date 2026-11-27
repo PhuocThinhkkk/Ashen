@@ -335,6 +335,51 @@ test.describe('In-Game Drinking-While-Walking & Jumping Combat Integration', () 
       { timeout: 5000 },
     );
 
+    // 6. Verify Lock-On Jump Attack aims downward & connects reliably against boss
+    await page.keyboard.press('KeyY');
+    await page.waitForTimeout(120);
+    await page.keyboard.press('KeyQ');
+    await page.waitForTimeout(80);
+    const initialBossHp = await page.evaluate(() => {
+      const hooks = (window as any).__THREE_GAME_TEST_HOOKS__;
+      hooks?.setBossAttackCooldown?.(10);
+      hooks?.setBossPosition?.({ x: 0, y: 0, z: 0 });
+      hooks?.setPlayerPosition?.({ x: 0, y: 0, z: 2.5 });
+      return window.__THREE_GAME_DIAGNOSTICS__?.boss.hp ?? 800;
+    });
+    await page.waitForTimeout(80);
+
+    await page.keyboard.press('KeyF');
+    await page.waitForTimeout(90);
+    await page.keyboard.press('KeyJ');
+
+    let capturedAirScreenshot = false;
+    let peakJumpAttackTilt = 0;
+    const connectStart = Date.now();
+    while (Date.now() - connectStart < 750) {
+      const state = await page.evaluate(() => {
+        const d = window.__THREE_GAME_DIAGNOSTICS__;
+        const j = (window as any).__THREE_GAME_TEST_HOOKS__?.getPlayerJumpDiagnostics?.();
+        return {
+          tiltAngle: d?.player.tiltAngle ?? j?.tiltAngle ?? 0,
+          isAirborneAttack: d?.player.isAirborneAttack ?? j?.isAirborneAttack ?? false,
+          posY: d?.player.position.y ?? 0,
+          bossHp: d?.boss.hp ?? 800,
+        };
+      });
+      if (state.tiltAngle > peakJumpAttackTilt) peakJumpAttackTilt = state.tiltAngle;
+      if (!capturedAirScreenshot && state.isAirborneAttack && state.posY > 0.7 && state.tiltAngle > 0.05) {
+        await page.waitForTimeout(180);
+        await page.screenshot({ path: 'artifacts/screenshots/player-jump-lockon-attack.png' });
+        capturedAirScreenshot = true;
+      }
+      await page.waitForTimeout(25);
+    }
+
+    const postJumpBossHp = await page.evaluate(() => window.__THREE_GAME_DIAGNOSTICS__?.boss.hp ?? 800);
+    expect(peakJumpAttackTilt, 'Lock-on jump attack must pitch spine downward toward boss').toBeGreaterThan(0.05);
+    expect(postJumpBossHp, 'Lock-on jump attack must connect and damage the boss').toBeLessThan(initialBossHp);
+
     expect(consoleErrors).toEqual([]);
     expect(pageErrors).toEqual([]);
   });

@@ -32,6 +32,8 @@ export class PlayerCombat {
     }
   }
 
+  public static readonly MID_AIR_SPEED_BOOST = 1.45;
+
   public static startMidAirAttack(player: PlayerCharacter, attack: AttackDefinition): void {
     if (player.isGrounded || player.isDrinking) return;
 
@@ -50,7 +52,9 @@ export class PlayerCombat {
     const clipName = attack.animationClip || (attack.isHeavy ? 'attack_heavy' : 'attack_light');
     const totalDuration = attack.startup + attack.active + attack.recovery;
     const rawDuration = attack.isHeavy ? 137 / 60 : 77 / 60;
-    const timeScale = totalDuration > 0 ? rawDuration / totalDuration : 1.65;
+    // Speed up mid-air swing so startup + active + recovery land cleanly within the ~0.75s jump arc
+    const timeScale =
+      (totalDuration > 0 ? rawDuration / totalDuration : 1.65) * PlayerCombat.MID_AIR_SPEED_BOOST;
     const upperAction = player.playUpperBodyAction(clipName, 0.08, THREE.LoopOnce, true, timeScale);
     if (player.kinematicController && upperAction) {
       player.kinematicController.playAction(clipName, upperAction, {

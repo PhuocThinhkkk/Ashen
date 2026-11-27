@@ -529,6 +529,7 @@ export class PlayerCharacter {
       this.spineBones,
       this.modelScene,
       this.handBone,
+      this.isAirborneAttack && this.isUpperBodyOverride,
     );
   }
 
@@ -554,49 +555,24 @@ export class PlayerCharacter {
     // Full-Body Sync: keep normalized time aligned when no upper override is active
     this.animator.syncNormalizedTime();
 
-    // 2. Late-update Procedural Pitch Tilt (Executed AFTER mixer.update)
-    this.updateSpinePitchTilt(delta, lockedTargetPos);
-
-    if (this.kinematicController) {
-      this.kinematicController.update(delta, this.group.rotation.y);
-    }
-    this.hitboxDebugger.update(this.isHitboxActive());
-
-    // Dynamic bone-tracked weapon trail following the player's physical sword blade
-    const trailShouldBeActive =
-      !!this.kinematicController?.isTrailActive &&
-      (this.state === 'attack' || this.isAirborneAttack) &&
-      this.currentAttack !== null &&
-      this.state !== 'dead' &&
-      this.state !== 'stagger';
-    if (trailShouldBeActive) {
-      if (!this.isPlayerTrailActive) {
-        this.isPlayerTrailActive = true;
-        this.hasSpawnedSlashArc = true;
-        const trailColor = this.currentAttack?.isHeavy ? 0xff3b1f : 0xffe066;
-        this.vfxSystem?.beginBladeTrail('player', trailColor, this.currentAttack?.isHeavy ? 2.5 : 2.1);
-      }
-      const seg = this.getWeaponBladeSegment(this.trailBaseScratch, this.trailTipScratch);
-      this.vfxSystem?.pushBladeTrailSample('player', seg.base, seg.tip);
-    } else if (this.isPlayerTrailActive) {
-      this.isPlayerTrailActive = false;
-      this.vfxSystem?.endBladeTrail('player');
-    }
-
-    // 3. Airborne Physics & Ground Detection
+    // 2. Airborne Physics & Ground Detection
     PlayerLocomotion.updateAirbornePhysics(this, delta, inputs);
 
-    // 4. Drinking While Walking Progress & Heal Timing
+    // 3. Drinking While Walking Progress & Heal Timing
     PlayerLocomotion.updateDrinkingState(this, delta);
 
     if (this.state === 'dead') {
+      if (this.isPlayerTrailActive) {
+        this.isPlayerTrailActive = false;
+        this.vfxSystem?.endBladeTrail('player');
+      }
       if (this.currentActionName !== 'death') {
         this.playFullBodyAction('death', 0.1, THREE.LoopOnce, true, 1.0);
       }
       return;
     }
 
-    // 5. Stamina Regeneration
+    // 4. Stamina Regeneration
     if (this.staminaRegenDelay > 0) {
       this.staminaRegenDelay -= delta;
     } else if (
@@ -609,7 +585,7 @@ export class PlayerCharacter {
       this.stamina = Math.min(this.maxStamina, this.stamina + regenRate * delta);
     }
 
-    // 6. Handle Current State
+    // 5. Handle Current State
     switch (this.state) {
       case 'dodge':
         this.updateDodge(delta, inputs);
@@ -629,13 +605,42 @@ export class PlayerCharacter {
         break;
     }
 
-    // 7. Keep Inside Arena
+    // 6. Keep Inside Arena
     const maxR = arenaRadius - this.radius - 0.5;
     const distSq = this.group.position.x * this.group.position.x + this.group.position.z * this.group.position.z;
     if (distSq > maxR * maxR) {
       const dist = Math.sqrt(distSq);
       this.group.position.x = (this.group.position.x / dist) * maxR;
       this.group.position.z = (this.group.position.z / dist) * maxR;
+    }
+
+    // 7. Late-update Procedural Pitch Tilt, Kinematic Hitboxes & Blade Trail
+    // Executed AFTER mixer.update and movement/facing updates so world transforms match pose & position
+    this.updateSpinePitchTilt(delta, lockedTargetPos);
+
+    if (this.kinematicController) {
+      this.kinematicController.update(delta, this.group.rotation.y);
+    }
+    this.hitboxDebugger.update(this.isHitboxActive());
+
+    // Dynamic bone-tracked weapon trail following the player's physical sword blade
+    const trailShouldBeActive =
+      !!this.kinematicController?.isTrailActive &&
+      (this.state === 'attack' || this.isAirborneAttack) &&
+      this.currentAttack !== null &&
+      this.state !== 'stagger';
+    if (trailShouldBeActive) {
+      if (!this.isPlayerTrailActive) {
+        this.isPlayerTrailActive = true;
+        this.hasSpawnedSlashArc = true;
+        const trailColor = this.currentAttack?.isHeavy ? 0xff3b1f : 0xffe066;
+        this.vfxSystem?.beginBladeTrail('player', trailColor, this.currentAttack?.isHeavy ? 2.5 : 2.1);
+      }
+      const seg = this.getWeaponBladeSegment(this.trailBaseScratch, this.trailTipScratch);
+      this.vfxSystem?.pushBladeTrailSample('player', seg.base, seg.tip);
+    } else if (this.isPlayerTrailActive) {
+      this.isPlayerTrailActive = false;
+      this.vfxSystem?.endBladeTrail('player');
     }
   }
 

@@ -73,6 +73,8 @@ export class PlayerLocomotion {
           player.isAirborneAttack = false;
           player.currentAttack = null;
           player.attackPhase = 'none';
+          player.kinematicController?.reset();
+          player.vfxSystem?.endBladeTrail('player');
           player.clearUpperBodyOverride(0.12);
         }
 
@@ -204,10 +206,30 @@ export class PlayerLocomotion {
       }
     }
 
-    // Mid-air attack phase progression
+    // Mid-air attack phase progression & lock-on aerial lunge
     if (player.isAirborneAttack && player.currentAttack) {
-      player.attackTimer += delta;
+      player.attackTimer += delta * 1.45;
       const { startup, active, recovery } = player.currentAttack;
+
+      if (lockedTargetPos && (player.attackPhase === 'startup' || player.attackPhase === 'active')) {
+        const dx = lockedTargetPos.x - player.group.position.x;
+        const dz = lockedTargetPos.z - player.group.position.z;
+        const horizDist = Math.hypot(dx, dz);
+        if (horizDist > 0.01) {
+          const targetAngle = Math.atan2(-dx, -dz);
+          let diff = targetAngle - player.group.rotation.y;
+          while (diff > Math.PI) diff -= Math.PI * 2;
+          while (diff < -Math.PI) diff += Math.PI * 2;
+          player.group.rotation.y += diff * Math.min(1.0, delta * 16.0);
+
+          // Forward aerial homing lunge toward locked target so lock-on jump slashes connect cleanly
+          if (horizDist > 1.65 && inputs.move.y <= 0.1) {
+            const step = Math.min(horizDist - 1.65, 3.6 * delta);
+            player.group.position.x += (dx / horizDist) * step;
+            player.group.position.z += (dz / horizDist) * step;
+          }
+        }
+      }
 
       if (player.attackTimer < startup) {
         player.attackPhase = 'startup';
