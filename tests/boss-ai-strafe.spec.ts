@@ -99,9 +99,9 @@ test.describe('FromSoftware-Style Boss AI & Strafe Subgoal Stack', () => {
     // Update AI: COMBO_CHECK executes
     ai.update(0.016, playerSnapshot);
 
-    // Verify: stack was cleared of followup attack, cooldown applied (1.5-2.8s), and STRAFE_INSPECT pushed
-    expect(ai.attackCooldown).toBeGreaterThanOrEqual(1.5);
-    expect(ai.attackCooldown).toBeLessThanOrEqual(2.8);
+    // Verify: stack was cleared of followup attack, cooldown applied (1.8-3.2s), and STRAFE_INSPECT pushed
+    expect(ai.attackCooldown).toBeGreaterThanOrEqual(1.8);
+    expect(ai.attackCooldown).toBeLessThanOrEqual(3.2);
     expect(ai.getCurrentSubgoal()?.type).toBe('STRAFE_INSPECT');
     expect(ai.goalStack.length).toBe(1);
   });
@@ -559,5 +559,62 @@ test.describe('FromSoftware-Style Boss AI & Strafe Subgoal Stack', () => {
     expect(idlePlaying).toBe(true);
     expect(idleWeight).toBe(1.0);
     expect(mockBoss.isLocomotionActive).toBe(true);
+  });
+
+  test('Browser: Phase 2 mid-attack transition and follow-up attacks never drop into T-pose', async ({
+    page,
+  }) => {
+    test.setTimeout(45_000);
+    const consoleErrors: string[] = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') consoleErrors.push(msg.text());
+    });
+
+    await page.goto('/');
+    await page.waitForFunction(() => {
+      const d = window.__THREE_GAME_DIAGNOSTICS__;
+      return d && d.assetsLoaded === true && (d.frame ?? 0) > 15;
+    });
+
+    // Trigger an attack in Phase 1, then immediately trigger Phase 2 mid-attack
+    await page.evaluate(() => {
+      window.__THREE_GAME_TEST_HOOKS__?.triggerBossAttack?.('downward');
+    });
+    await page.waitForTimeout(250);
+    await page.evaluate(() => {
+      window.__THREE_GAME_TEST_HOOKS__?.setState?.('boss_phase2');
+    });
+
+    // Sample across phaseTransition -> returnToLocomotion -> Phase 2 attacks
+    let minRunningActions = 99;
+    const startMs = Date.now();
+    while (Date.now() - startMs < 3200) {
+      const diag = await page.evaluate(() => window.__THREE_GAME_TEST_HOOKS__?.getBossAIDiagnostics?.());
+      if (diag && diag.fullBodyActionRunningCount < minRunningActions) {
+        minRunningActions = diag.fullBodyActionRunningCount;
+      }
+      await page.waitForTimeout(60);
+    }
+
+    expect(minRunningActions, 'Boss must always have >= 1 weighted full-body action across Phase 2 transition').toBeGreaterThanOrEqual(1);
+
+    // Trigger a Phase 2 attack and wait through recovery back to STRAFE_INSPECT
+    await page.evaluate(() => {
+      window.__THREE_GAME_TEST_HOOKS__?.triggerBossAttack?.('downward');
+    });
+    await page.waitForTimeout(600);
+    await page.screenshot({ path: 'artifacts/screenshots/boss-phase2-attack.png', fullPage: true });
+
+    await page.waitForFunction(() => {
+      const d = window.__THREE_GAME_DIAGNOSTICS__;
+      return d && d.boss.state === 'idle';
+    }, { timeout: 6000 });
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: 'artifacts/screenshots/boss-phase2-post-recovery.png', fullPage: true });
+
+    const postDiag = await page.evaluate(() => window.__THREE_GAME_TEST_HOOKS__?.getBossAIDiagnostics?.());
+    expect(postDiag.fullBodyActionRunningCount).toBeGreaterThanOrEqual(1);
+    expect(postDiag.locomotionMasterWeight).toBeGreaterThan(0.5);
+    expect(consoleErrors).toEqual([]);
   });
 });

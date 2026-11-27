@@ -141,6 +141,15 @@ export function installGameTestHooks(game: Game): void {
       lowerClip: g.boss.currentLowerActionName,
       turnDirection: g.boss.turnDirection,
       yaw: g.boss.group.rotation.y,
+      locomotionWeightSum:
+        (g.boss.idleAction?.isRunning() ? g.boss.idleAction.getEffectiveWeight() : 0) +
+        (g.boss.walkForwardAction?.isRunning() ? g.boss.walkForwardAction.getEffectiveWeight() : 0) +
+        (g.boss.walkBackAction?.isRunning() ? g.boss.walkBackAction.getEffectiveWeight() : 0) +
+        (g.boss.strafeLeftAction?.isRunning() ? g.boss.strafeLeftAction.getEffectiveWeight() : 0) +
+        (g.boss.strafeRightAction?.isRunning() ? g.boss.strafeRightAction.getEffectiveWeight() : 0),
+      fullBodyActionRunningCount: Array.from((g.boss.actions as Map<string, THREE.AnimationAction>).values()).filter(
+        (a) => a.isRunning() && a.enabled && a.getEffectiveWeight() > 0.05,
+      ).length,
     }),
     queueBossCombo: (openerKey: string, followupKey: string) => {
       const opener = BOSS_ATTACKS[openerKey] || BOSS_ATTACKS.combo;

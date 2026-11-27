@@ -688,6 +688,37 @@ export class BossCharacter {
     return fullAction;
   }
 
+  public returnToLocomotion(fadeDuration = 0.30): void {
+    if (this.currentAttackAction) {
+      this.currentAttackAction.fadeOut(fadeDuration);
+      this.currentAttackAction = null;
+    }
+    if (this.currentAction && this.currentAction !== this.idleAction) {
+      this.currentAction.fadeOut(fadeDuration);
+    }
+
+    this.isFullBodyExemptAttack = false;
+    this.isLocomotionActive = true;
+
+    if (this.idleAction) {
+      this.idleAction.enabled = true;
+      this.idleAction.paused = false;
+      this.idleAction.setEffectiveTimeScale(1.0);
+      if (!this.idleAction.isRunning()) {
+        this.idleAction.play();
+      }
+    }
+
+    this.currentAction = this.idleAction;
+    this.currentActionName = 'idle';
+    this.currentUpperActionName = 'idle';
+    if (this.turnDirection === null) {
+      this.currentLowerActionName = 'idle';
+    }
+
+    this.kinematicController?.reset();
+  }
+
   public endAttackAction(fadeDuration = 0.30): void {
     if (this.currentUpperAttackAction) {
       this.currentUpperAttackAction.fadeOut(fadeDuration);
@@ -701,33 +732,7 @@ export class BossCharacter {
       this.currentLowerIdleAction.fadeOut(fadeDuration);
       this.currentLowerIdleAction = null;
     }
-    if (this.currentAttackAction) {
-      this.currentAttackAction.fadeOut(fadeDuration);
-      this.currentAttackAction = null;
-    }
-
-    this.isFullBodyExemptAttack = false;
-
-    // Ensure idle/locomotion actions are enabled and ready as locomotionMasterWeight smoothly fades back in
-    if (this.idleAction) {
-      this.idleAction.enabled = true;
-      this.idleAction.setEffectiveTimeScale(1.0);
-      if (!this.idleAction.isRunning()) {
-        this.idleAction.play();
-      }
-    }
-
-    this.isLocomotionActive = true;
-    this.currentAction = this.idleAction;
-    this.currentActionName = 'idle';
-    this.currentUpperActionName = 'idle';
-    if (this.turnDirection === null) {
-      this.currentLowerActionName = 'idle';
-    }
-
-    if (this.kinematicController) {
-      this.kinematicController.reset();
-    }
+    this.returnToLocomotion(fadeDuration);
   }
 
   public setVfxAndAudio(vfx: VFXSystem, audio: AudioSystem): void {
@@ -814,10 +819,40 @@ export class BossCharacter {
     }
     if (!action) return null;
 
-    if (this.currentAction === action && action.isRunning()) {
-      action.timeScale = timeScale;
+    const isIdleTarget = action === this.idleAction;
+    if (isIdleTarget && loop === THREE.LoopRepeat) {
+      this.returnToLocomotion(fadeDuration);
       return action;
     }
+
+    if (this.currentAction === action && action.isRunning()) {
+      action.setEffectiveTimeScale(timeScale);
+      return action;
+    }
+
+    // Non-locomotion full-body action (special, hit, die): smoothly yield locomotion layer
+    this.isLocomotionActive = false;
+    this.setTurnDirection(null);
+
+    const prevNonLoco =
+      this.currentAction && this.currentAction !== this.idleAction && this.currentAction.isRunning()
+        ? this.currentAction
+        : null;
+
+    action.reset();
+    action.enabled = true;
+    action.paused = false;
+    action.setLoop(loop, loop === THREE.LoopRepeat ? Infinity : 1);
+    action.clampWhenFinished = clampWhenFinished;
+    action.setEffectiveTimeScale(timeScale);
+    action.setEffectiveWeight(1.0);
+
+    if (prevNonLoco && prevNonLoco !== action) {
+      prevNonLoco.crossFadeTo(action, fadeDuration, false);
+    } else {
+      action.fadeIn(fadeDuration);
+    }
+    action.play();
 
     if (this.kinematicController) {
       this.kinematicController.playAction(name, action, {
@@ -825,21 +860,14 @@ export class BossCharacter {
         loop,
         clampWhenFinished,
         timeScale,
+        skipMixerFade: true,
       });
-    } else {
-      action.reset();
-      action.setLoop(loop, loop === THREE.LoopRepeat ? Infinity : 1);
-      action.clampWhenFinished = clampWhenFinished;
-      action.timeScale = timeScale;
-
-      if (this.currentAction) {
-        this.currentAction.crossFadeTo(action, fadeDuration, true);
-      }
-      action.play();
     }
 
     this.currentAction = action;
     this.currentActionName = name;
+    this.currentUpperActionName = name;
+    this.currentLowerActionName = name;
     return action;
   }
 
@@ -863,32 +891,37 @@ export class BossCharacter {
     }
 
     if (this.mixer) {
-      // T-Pose Fail-Safe Guard: Ensure mixer always has at least one active, weighted action
-      let activeWeightSum = 0;
+      // T-Pose Fail-Safe Guard: Ensure BOTH upper-body and lower-body hierarchies always have active weight >= 0.05
+      let fullBodyWeightSum = 0;
       for (const action of this.actions.values()) {
-        if (action.isRunning() && action.enabled) {
-          activeWeightSum += action.getEffectiveWeight();
+        if (action.isRunning() && action.enabled && !action.paused) {
+          fullBodyWeightSum += action.getEffectiveWeight();
         }
-      }
-      for (const action of this.upperActions.values()) {
-        if (action.isRunning() && action.enabled) {
-          activeWeightSum += action.getEffectiveWeight();
-        }
-      }
-      if (this.currentLowerIdleAction?.isRunning() && this.currentLowerIdleAction.enabled) {
-        activeWeightSum += this.currentLowerIdleAction.getEffectiveWeight();
-      }
-      if (this.turnLeftAction?.isRunning() && this.turnLeftAction.enabled) {
-        activeWeightSum += this.turnLeftAction.getEffectiveWeight();
-      }
-      if (this.turnRightAction?.isRunning() && this.turnRightAction.enabled) {
-        activeWeightSum += this.turnRightAction.getEffectiveWeight();
       }
 
-      if (activeWeightSum < 0.05 && this.idleAction) {
+      let upperWeightSum = fullBodyWeightSum;
+      if (this.turnUpperIdleAction?.isRunning() && this.turnUpperIdleAction.enabled) {
+        upperWeightSum += this.turnUpperIdleAction.getEffectiveWeight();
+      }
+
+      let lowerWeightSum = fullBodyWeightSum;
+      if (this.turnLeftAction?.isRunning() && this.turnLeftAction.enabled) {
+        lowerWeightSum += this.turnLeftAction.getEffectiveWeight();
+      }
+      if (this.turnRightAction?.isRunning() && this.turnRightAction.enabled) {
+        lowerWeightSum += this.turnRightAction.getEffectiveWeight();
+      }
+
+      if (this.state !== 'dead' && (upperWeightSum < 0.05 || lowerWeightSum < 0.05) && this.idleAction) {
         this.idleAction.enabled = true;
+        this.idleAction.paused = false;
+        this.idleAction.setEffectiveTimeScale(1.0);
         this.idleAction.play();
         this.idleAction.setEffectiveWeight(1.0);
+        if (!this.currentAttack && this.state !== 'phaseTransition' && this.state !== 'stagger') {
+          this.isLocomotionActive = true;
+          this.locomotionMasterWeight = Math.max(this.locomotionMasterWeight, 1.0);
+        }
       }
 
       this.mixer.update(delta);
@@ -1004,6 +1037,10 @@ export class BossCharacter {
 
     if (isDead) {
       this.state = 'dead';
+      this.currentAttack = null;
+      this.isAttackActiveFrames = false;
+      this.currentAttackAction?.fadeOut(0.15);
+      this.currentAttackAction = null;
       this.playAction('die', 0.15, THREE.LoopOnce, true, 1.0);
       return true;
     }
@@ -1020,7 +1057,10 @@ export class BossCharacter {
       this.state = 'stagger';
       this.stateTimer = 0;
       this.currentAttack = null;
-      this.playAction('hit', 0.1, THREE.LoopOnce, true, 0.8);
+      this.isAttackActiveFrames = false;
+      this.currentAttackAction?.fadeOut(0.12);
+      this.currentAttackAction = null;
+      this.playAction('hit', 0.12, THREE.LoopOnce, true, 0.8);
     }
 
     return true;
@@ -1031,13 +1071,42 @@ export class BossCharacter {
     this.state = 'phaseTransition';
     this.stateTimer = 0;
     this.currentAttack = null;
+    this.attackTimer = 0;
+    this.hasHitCurrentSwing = false;
+    this.hasSpawnedSlashArc = false;
+    this.hasTriggeredGroundSlam = false;
+    this.isAttackActiveFrames = false;
     this.ai.clearGoalStack();
     this.ai.attackCooldown = 0;
+
+    // Cleanly stop any interrupted attack or turn layers before playing Phase 2 special
+    this.setTurnDirection(null);
+    if (this.currentUpperAttackAction) {
+      this.currentUpperAttackAction.stop();
+      this.currentUpperAttackAction = null;
+    }
+    if (this.currentLowerAttackAction) {
+      this.currentLowerAttackAction.stop();
+      this.currentLowerAttackAction = null;
+    }
+    if (this.currentLowerIdleAction) {
+      this.currentLowerIdleAction.stop();
+      this.currentLowerIdleAction = null;
+    }
+    if (this.currentAttackAction) {
+      this.currentAttackAction.fadeOut(0.25);
+      this.currentAction = this.currentAttackAction;
+      this.currentAttackAction = null;
+    }
+    this.kinematicController?.reset();
+
     if (playerPos) {
-      this.faceTarget(playerPos, this.ai.maxTurnRate, 0.05);
+      const dx = playerPos.x - this.group.position.x;
+      const dz = playerPos.z - this.group.position.z;
+      this.group.rotation.y = Math.atan2(-dx, -dz);
     }
 
-    this.playAction('special', 0.2, THREE.LoopOnce, true, 1.0);
+    this.playAction('special', 0.25, THREE.LoopOnce, true, 1.0);
   }
 
   public faceTarget(targetPos: THREE.Vector3, turnRateOrMaxTurnRate: number, delta?: number): void {

@@ -582,7 +582,7 @@ export class BossAI {
     if (b.stateTimer >= 2.2) {
       b.state = 'idle';
       b.stateTimer = 0;
-      b.playAction('idle', 0.2);
+      (b as any).returnToLocomotion ? (b as any).returnToLocomotion(0.25) : b.playAction('idle', 0.25);
     }
   }
 
@@ -594,7 +594,7 @@ export class BossAI {
       b.faceTarget(playerPos, this.maxTurnRate, dt);
     }
     b.telegraphGlow = Math.sin(b.stateTimer * 8.0) * 0.5 + 0.5;
-    if (b.stateTimer >= 2.0) {
+    if (b.stateTimer >= 2.35) {
       b.state = 'idle';
       b.stateTimer = 0;
       b.telegraphGlow = 0;
@@ -606,7 +606,7 @@ export class BossAI {
         timer: 0,
         strafeDir: 1,
       });
-      b.playAction('idle', 0.2);
+      (b as any).returnToLocomotion ? (b as any).returnToLocomotion(0.30) : b.playAction('idle', 0.30);
     }
   }
 
