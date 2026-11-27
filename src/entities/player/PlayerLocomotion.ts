@@ -24,8 +24,10 @@ export class PlayerLocomotion {
       player.flaskMesh.visible = true;
     }
 
-    // Crossfade upper body into drinking clip (LoopOnce, clampWhenFinished = true)
-    player.playUpperBodyAction('drinking', 0.18, THREE.LoopOnce, true, 2.5);
+    player.audioSystem?.estusUncork();
+
+    // Crossfade upper body into trimmed drinking clip (3.65s / 2.15x ≈ 1.70s Estus sip)
+    player.playUpperBodyAction('drinking', 0.14, THREE.LoopOnce, true, 2.15);
   }
 
   public static startJump(player: PlayerCharacter): void {
@@ -135,7 +137,7 @@ export class PlayerLocomotion {
     if (player.flaskMesh) {
       player.flaskMesh.visible = false;
     }
-    player.clearUpperBodyOverride(0.18);
+    player.clearUpperBodyOverride(0.22);
   }
 
   public static updateJumping(

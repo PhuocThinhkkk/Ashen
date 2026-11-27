@@ -43,20 +43,27 @@ export class PlayerDualLayerAnimator {
     this.rawClips = clips;
 
     for (const clip of clips) {
-      kinematicController?.stripRootMotion(clip);
+      // Trim the bloated Mixamo drinking clip (static lead-in f1..124, idle tail f345..533)
+      // down to the active raise -> sip -> lower arc [f124..f344] @ 60fps (~3.65s).
+      const processedClip =
+        clip.name === 'drinking' && clip.duration > 6.0
+          ? THREE.AnimationUtils.subclip(clip, clip.name, 124, 344, 60)
+          : clip;
+
+      kinematicController?.stripRootMotion(processedClip);
 
       // Pre-generate split upper and lower sub-clips
-      const split = splitClipByBodyPart(clip);
-      this.splitClips.set(clip.name, split);
+      const split = splitClipByBodyPart(processedClip);
+      this.splitClips.set(processedClip.name, split);
 
       const upperAction = mixer.clipAction(split.upper);
       const lowerAction = mixer.clipAction(split.lower);
-      this.upperActions.set(clip.name, upperAction);
-      this.lowerActions.set(clip.name, lowerAction);
+      this.upperActions.set(processedClip.name, upperAction);
+      this.lowerActions.set(processedClip.name, lowerAction);
 
       // Full-body action for compatibility
-      const fullAction = mixer.clipAction(clip);
-      this.actions.set(clip.name, fullAction);
+      const fullAction = mixer.clipAction(processedClip);
+      this.actions.set(processedClip.name, fullAction);
     }
   }
 

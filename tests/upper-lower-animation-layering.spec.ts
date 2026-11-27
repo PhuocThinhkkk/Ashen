@@ -179,9 +179,11 @@ test.describe('In-Game Drinking-While-Walking & Jumping Combat Integration', () 
       });
       if (currentHp > damagedHp) {
         sawHealTick = true;
+        await page.waitForTimeout(80);
+        await page.screenshot({ path: 'artifacts/screenshots/player-estus-heal.png' });
         break;
       }
-      await page.waitForTimeout(100);
+      await page.waitForTimeout(60);
     }
 
     expect(sawHealTick, 'Player HP recovery tick should trigger before drink finishes').toBe(true);

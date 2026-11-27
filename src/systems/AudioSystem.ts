@@ -421,23 +421,72 @@ export class AudioSystem {
     osc.stop(now + 0.22);
   }
 
+  public estusUncork(): void {
+    if (!this.context || this.context.state !== 'running') return;
+    const now = this.context.currentTime;
+
+    // Subtle glass-flask uncork pop
+    const osc = this.context.createOscillator();
+    const gain = this.context.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(520, now);
+    osc.frequency.exponentialRampToValueAtTime(980, now + 0.045);
+    gain.gain.setValueAtTime(0.001, now);
+    gain.gain.linearRampToValueAtTime(0.08, now + 0.012);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.07);
+    osc.connect(gain).connect(this.sfxDestination);
+    osc.start(now);
+    osc.stop(now + 0.08);
+  }
+
   public estusDrink(): void {
     if (!this.context || this.context.state !== 'running') return;
     const now = this.context.currentTime;
 
-    const osc = this.context.createOscillator();
-    const gain = this.context.createGain();
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(380, now);
-    osc.frequency.exponentialRampToValueAtTime(620, now + 0.45);
+    // 1. Warm fiery-liquid rush (filtered noise burst rising in brightness)
+    const bufferSize = Math.floor(this.context.sampleRate * 0.35);
+    const noiseBuffer = this.context.createBuffer(1, bufferSize, this.context.sampleRate);
+    const data = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = Math.random() * 2 - 1;
+    }
+    const noise = this.context.createBufferSource();
+    noise.buffer = noiseBuffer;
 
-    gain.gain.setValueAtTime(0.001, now);
-    gain.gain.linearRampToValueAtTime(0.25, now + 0.15);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.5);
+    const filter = this.context.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(340, now);
+    filter.frequency.exponentialRampToValueAtTime(1150, now + 0.28);
+    filter.Q.setValueAtTime(1.4, now);
 
-    osc.connect(gain).connect(this.sfxDestination);
-    osc.start(now);
-    osc.stop(now + 0.55);
+    const noiseGain = this.context.createGain();
+    noiseGain.gain.setValueAtTime(0.001, now);
+    noiseGain.gain.linearRampToValueAtTime(0.18, now + 0.07);
+    noiseGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.34);
+
+    noise.connect(filter).connect(noiseGain).connect(this.sfxDestination);
+    noise.start(now);
+    noise.stop(now + 0.35);
+
+    // 2. Authentic Soulslike golden shimmer chord (harmonic overtones + warm swell)
+    const freqs = [392.0, 587.33, 783.99, 1174.66];
+    freqs.forEach((freq, idx) => {
+      const osc = this.context!.createOscillator();
+      const gain = this.context!.createGain();
+      osc.type = idx % 2 === 0 ? 'sine' : 'triangle';
+      const delay = idx * 0.025;
+      osc.frequency.setValueAtTime(freq * 0.992, now + delay);
+      osc.frequency.exponentialRampToValueAtTime(freq, now + delay + 0.14);
+
+      const peak = 0.14 / (idx * 0.55 + 1);
+      gain.gain.setValueAtTime(0.0001, now + delay);
+      gain.gain.linearRampToValueAtTime(peak, now + delay + 0.08);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + delay + 0.85);
+
+      osc.connect(gain).connect(this.sfxDestination);
+      osc.start(now + delay);
+      osc.stop(now + delay + 0.9);
+    });
   }
 
   public staggerClang(): void {

@@ -75,7 +75,7 @@ export class PlayerCharacter {
   // Drinking While Walking State & Limited Heal Charges
   public isDrinking = false;
   public drinkTimer = 0;
-  public readonly drinkDuration = 3.55;
+  public readonly drinkDuration = 1.70;
   public hasHealedDuringDrink = false;
   public maxHealCharges = 2;
   public healCharges = 2;
@@ -487,14 +487,15 @@ export class PlayerCharacter {
     if (this.state === 'dead' || this.hp <= 0) return;
     this.hp = Math.min(this.maxHp, this.hp + amount);
     if (this.vfxSystem) {
-      this.vfxSystem.spawnPeakVelocitySparks(
-        this.group.position.clone().add(new THREE.Vector3(0, 1.0, 0)),
-        14,
-        true,
-      );
+      let flaskWorldPos: THREE.Vector3 | undefined;
+      if (this.flaskMesh) {
+        this.flaskMesh.updateMatrixWorld(true);
+        flaskWorldPos = this.flaskMesh.getWorldPosition(new THREE.Vector3());
+      }
+      this.vfxSystem.spawnEstusHeal(this.group.position, flaskWorldPos);
     }
     if (this.audioSystem) {
-      this.audioSystem.playPeakSwoosh(650, 0.35, false);
+      this.audioSystem.estusDrink();
     }
   }
 

@@ -55,6 +55,36 @@ export class VFXTextureFactory {
     );
   }
 
+  public getEstusGlowTexture(): THREE.Texture {
+    return this.getOrCreate('estus_glow', getAssetUrl('textures/vfx/estus_glow.png'), () =>
+      this.createSparkCanvasTexture(),
+    );
+  }
+
+  public getEstusFlareTexture(): THREE.Texture {
+    return this.getOrCreate('estus_flare', getAssetUrl('textures/vfx/estus_flare.png'), () =>
+      this.createSparkCanvasTexture(),
+    );
+  }
+
+  public getEstusRuneTexture(): THREE.Texture {
+    return this.getOrCreate('estus_rune', getAssetUrl('textures/vfx/estus_rune.png'), () =>
+      this.createShockwaveCanvasTexture(),
+    );
+  }
+
+  public getEstusEmberTexture(): THREE.Texture {
+    return this.getOrCreate('estus_ember', getAssetUrl('textures/vfx/estus_ember.png'), () =>
+      this.createSparkCanvasTexture(),
+    );
+  }
+
+  public getEstusWispTexture(): THREE.Texture {
+    return this.getOrCreate('estus_wisp', getAssetUrl('textures/vfx/estus_wisp.png'), () =>
+      this.createSmokeCanvasTexture(),
+    );
+  }
+
   private getOrCreate(
     key: string,
     url: string,

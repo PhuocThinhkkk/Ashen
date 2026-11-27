@@ -23,6 +23,7 @@ import {
 import { BloodBurstVFX } from '../vfx/BloodBurstVFX';
 import { GroundSlamVFX } from '../vfx/GroundSlamVFX';
 import { SparkBurstVFX } from '../vfx/SparkBurstVFX';
+import { EstusHealVFX } from '../vfx/EstusHealVFX';
 import { VFXTextureFactory } from '../vfx/VFXTextureFactory';
 import { SettingsManager } from './SettingsManager';
 import type { ActiveVFXCounts } from './PerformanceProfiler';
@@ -35,6 +36,7 @@ export class VFXSystem {
   public readonly bloodVFX: BloodBurstVFX;
   public readonly groundSlamVFX: GroundSlamVFX;
   public readonly sparkVFX: SparkBurstVFX;
+  public readonly estusHealVFX: EstusHealVFX;
 
   // Slash Arc Ribbon Pool (static legacy arcs for remote/test hooks)
   private slashArcPool: SlashArcInstance[] = [];
@@ -67,6 +69,7 @@ export class VFXSystem {
     this.bloodVFX = new BloodBurstVFX(this.batchRenderer, this.scene);
     this.groundSlamVFX = new GroundSlamVFX(this.scene, this.batchRenderer);
     this.sparkVFX = new SparkBurstVFX(this.batchRenderer, this.scene);
+    this.estusHealVFX = new EstusHealVFX(this.batchRenderer, this.scene);
 
     // 3. Initialize Elden Ring Sword Slash Arc Ribbon Pool + Dynamic Blade Trails
     this.slashGeometry = createSlashArcGeometry(0.7, 2.6, Math.PI * 0.8, 44, 4);
@@ -164,6 +167,7 @@ export class VFXSystem {
 
     this.bloodVFX.reset();
     this.sparkVFX.reset();
+    this.estusHealVFX.reset();
     this.groundSlamVFX.reset();
     for (const ps of this.footDustPool) {
       ps.restart();
@@ -229,6 +233,7 @@ export class VFXSystem {
       this.bloodVFX.emit(dummyOffscreen, dummyDir, false);
       this.spawnFootDustKickup(dummyOffscreen, 2);
       this.sparkVFX.emit(dummyOffscreen, dummyDir, false);
+      this.estusHealVFX.emit(dummyOffscreen);
       this.triggerGroundSlam(dummyOffscreen);
 
       this.batchRenderer.update(0.016);
@@ -419,12 +424,20 @@ export class VFXSystem {
     this.sparkVFX.emit(origin, direction, isHeavy);
   }
 
+  /**
+   * Spawns Dark Souls Estus-style golden healing VFX (rising embers, wisps, flask flare, and floor rune).
+   */
+  public spawnEstusHeal(playerBasePos: THREE.Vector3, flaskWorldPos?: THREE.Vector3): void {
+    this.estusHealVFX.emit(playerBasePos, flaskWorldPos);
+  }
+
   public update(delta: number): void {
     // 1. Update three.quarks BatchedRenderer (GPU particles)
     this.batchRenderer.update(delta);
 
-    // 2. Update Blood Burst VFX (Directional Liquid Whip)
+    // 2. Update Blood Burst VFX & Estus Heal VFX
     this.bloodVFX.update(delta);
+    this.estusHealVFX.update(delta);
 
     // 3. Update Ground Slam VFX (shockwaves + decals)
     this.groundSlamVFX.update(delta);
@@ -444,6 +457,7 @@ export class VFXSystem {
 
   public dispose(): void {
     this.sparkVFX.dispose();
+    this.estusHealVFX.dispose();
 
     for (const arc of this.slashArcPool) {
       this.scene.remove(arc.mesh);
