@@ -131,7 +131,7 @@ export const BOSS_ATTACKS: Record<string, AttackDefinition> = {
     staminaCost: 0,
     range: 6.0,
     arcAngle: Math.PI * 0.65,
-    forwardImpulse: 7.0,
+    forwardImpulse: 6.2,
     isHeavy: true,
     animationClip: 'attack_jump',
   },

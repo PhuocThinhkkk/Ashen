@@ -215,7 +215,7 @@ export class KinematicCombatController {
    * @param delta,characterFacingRotationY Simulation delta time in seconds, and character yaw angle (radians) for orienting root motion.
    * @returns Updates currentFrame, currentPhase, activeHitboxBone, and accumulates pendingRootMotionDelta.
    */
-  public update(delta: number, characterFacingRotationY = 0): void {
+  public update(_delta: number, characterFacingRotationY = 0): void {
     if (!this.currentAction || !this.currentAction.isRunning()) {
       this.isAttacking = false;
       return;
@@ -225,6 +225,7 @@ export class KinematicCombatController {
     const time = this.currentAction.time;
 
     // Detect loop wrap-around
+    const prevAnimTime = time < this.prevTime ? 0 : this.prevTime;
     if (time < this.prevTime) {
       this.firedTriggers.clear();
     }
@@ -272,37 +273,19 @@ export class KinematicCombatController {
         (tw) => this.currentFrame >= tw.startFrame && this.currentFrame <= tw.endFrame,
       );
 
-      // 2. Root Motion Extraction (Standing Melee Run Jump Attack: delta_y = -5.9m)
+      // 2. TimeScale-invariant analytical Root Motion Extraction for attack_jump
+      // Evaluates cumulative displacement D(animTime) so Phase 1 & Phase 2 travel the exact same distance
       if (cfg.rootMotion.type === 'Root Motion' && cfg.id === 'attack_jump') {
-        const windupPhase = cfg.phases.find((p) => p.type === 'Windup');
-        const airbornePhase = cfg.phases.find((p) => p.type === 'Airborne');
-
         const forward = new THREE.Vector3(
           -Math.sin(characterFacingRotationY),
           0,
           -Math.cos(characterFacingRotationY),
         ).normalize();
 
-        // A. Approach Run before the leap (frames 15 to 57)
-        if (windupPhase && this.currentFrame >= 15 && this.currentFrame <= windupPhase.endFrame) {
-          const runProgress = (this.currentFrame - 15) / Math.max(1, windupPhase.endFrame - 15);
-          const startSpeed = BOSS_CONFIG.jumpRunStartSpeed;
-          const endSpeed = BOSS_CONFIG.jumpRunEndSpeed;
-          const runSpeed = startSpeed + runProgress * (endSpeed - startSpeed); // Accelerate from start to end
-          this.pendingRootMotionDelta.addScaledVector(forward, runSpeed * delta);
-        }
-
-        // B. Airborne parabolic leap (frames 58 to 95)
-        if (airbornePhase && this.currentFrame >= airbornePhase.startFrame && this.currentFrame <= airbornePhase.endFrame) {
-          const avgSpeed = BOSS_CONFIG.jumpLeapSpeed; // ~9.32 m/s
-          const phaseProgress =
-            (this.currentFrame - airbornePhase.startFrame) /
-            Math.max(1, airbornePhase.endFrame - airbornePhase.startFrame);
-          // Half-sine impulse curve (starts at 0, peaks at mid-jump, returns to 0 on landing)
-          const impulseFactor = Math.sin(phaseProgress * Math.PI) * (Math.PI / 2);
-          const forwardSpeed = avgSpeed * impulseFactor;
-
-          this.pendingRootMotionDelta.addScaledVector(forward, forwardSpeed * delta);
+        const deltaDist =
+          this.evalJumpDisplacement(time, cfg) - this.evalJumpDisplacement(prevAnimTime, cfg);
+        if (deltaDist > 0) {
+          this.pendingRootMotionDelta.addScaledVector(forward, deltaDist);
         }
       }
 
@@ -312,6 +295,41 @@ export class KinematicCombatController {
       // 4. Audio Triggers
       this.checkAudioTriggers(cfg);
     }
+  }
+
+  /**
+   * Computes deterministic cumulative forward travel (in meters) at clip timestamp animTimeSec
+   * for attack_jump, normalized to BOSS_CONFIG.impulses.jump so Phase 1 and Phase 2 match identically.
+   */
+  private evalJumpDisplacement(animTimeSec: number, cfg: KinematicActionConfig): number {
+    const windupPhase = cfg.phases.find((p) => p.type === 'Windup');
+    const airbornePhase = cfg.phases.find((p) => p.type === 'Airborne');
+    const fps = cfg.fps || 60;
+
+    const runStartT = (15 - 1) / fps;
+    const runEndT = windupPhase ? (windupPhase.endFrame - 1) / fps : (55 - 1) / fps;
+    const runDur = Math.max(1e-4, runEndT - runStartT);
+
+    const airStartT = airbornePhase ? (airbornePhase.startFrame - 1) / fps : (56 - 1) / fps;
+    const airEndT = airbornePhase ? (airbornePhase.endFrame - 1) / fps : (98 - 1) / fps;
+    const airDur = Math.max(1e-4, airEndT - airStartT);
+
+    const v0 = BOSS_CONFIG.jumpRunStartSpeed;
+    const v1 = BOSS_CONFIG.jumpRunEndSpeed;
+    const vAir = BOSS_CONFIG.jumpLeapSpeed;
+
+    const maxRawRun = runDur * 0.5 * (v0 + v1);
+    const maxRawAir = airDur * vAir;
+    const rawTotal = maxRawRun + maxRawAir;
+    const scale = rawTotal > 1e-4 ? BOSS_CONFIG.impulses.jump / rawTotal : 1.0;
+
+    const uRun = THREE.MathUtils.clamp((animTimeSec - runStartT) / runDur, 0, 1);
+    const dRun = runDur * (v0 * uRun + 0.5 * (v1 - v0) * uRun * uRun);
+
+    const uAir = THREE.MathUtils.clamp((animTimeSec - airStartT) / airDur, 0, 1);
+    const dAir = airDur * vAir * 0.5 * (1 - Math.cos(Math.PI * uAir));
+
+    return (dRun + dAir) * scale;
   }
 
   /**

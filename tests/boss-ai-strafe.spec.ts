@@ -617,4 +617,66 @@ test.describe('FromSoftware-Style Boss AI & Strafe Subgoal Stack', () => {
     expect(postDiag.locomotionMasterWeight).toBeGreaterThan(0.5);
     expect(consoleErrors).toEqual([]);
   });
+
+  test('Browser: Phase 1 and Phase 2 boss jump attacks travel the exact same distance and land in the same spot', async ({
+    page,
+  }) => {
+    test.setTimeout(45_000);
+    await page.goto('/');
+    await page.waitForFunction(() => {
+      const d = window.__THREE_GAME_DIAGNOSTICS__;
+      return d && d.assetsLoaded === true && (d.frame ?? 0) > 15;
+    });
+
+    const runJumpAndMeasure = async (isPhase2: boolean) => {
+      await page.evaluate((p2) => {
+        window.__THREE_GAME_TEST_HOOKS__?.triggerRestart?.();
+        // Place player far behind boss target line so entity separation does not alter landing
+        window.__THREE_GAME_TEST_HOOKS__?.setPlayerPosition?.({ x: 0, y: 0, z: 14 });
+        window.__THREE_GAME_TEST_HOOKS__?.setBossPosition?.({ x: 0, y: 0, z: -10 });
+        if (p2) {
+          window.__THREE_GAME_TEST_HOOKS__?.setState?.('boss_phase2');
+        }
+      }, isPhase2);
+
+      if (isPhase2) {
+        await page.waitForFunction(
+          () => window.__THREE_GAME_DIAGNOSTICS__?.boss.state === 'idle',
+          { timeout: 6000 },
+        );
+        await page.evaluate(() => {
+          window.__THREE_GAME_TEST_HOOKS__?.setBossPosition?.({ x: 0, y: 0, z: -10 });
+        });
+      }
+
+      const startPos = await page.evaluate(() => window.__THREE_GAME_DIAGNOSTICS__!.boss.position);
+      await page.evaluate(() => {
+        window.__THREE_GAME_TEST_HOOKS__?.triggerBossAttack?.('jump');
+      });
+
+      // Wait until jump attack actually finishes recovery (currentAttack cleared and active frames done)
+      await page.waitForFunction(
+        () => {
+          const d = window.__THREE_GAME_DIAGNOSTICS__;
+          const ai = window.__THREE_GAME_TEST_HOOKS__?.getBossAIDiagnostics?.();
+          return d && d.boss.state === 'idle' && ai && ai.activeClip !== 'attack_jump';
+        },
+        { timeout: 6000 },
+      );
+
+      const endPos = await page.evaluate(() => window.__THREE_GAME_DIAGNOSTICS__!.boss.position);
+      return {
+        dist: Math.hypot(endPos.x - startPos.x, endPos.z - startPos.z),
+        startPos,
+        endPos,
+      };
+    };
+
+    const p1 = await runJumpAndMeasure(false);
+    const p2 = await runJumpAndMeasure(true);
+
+    expect(p1.dist, JSON.stringify({ p1, p2 })).toBeGreaterThan(5.5);
+    expect(p1.dist, JSON.stringify({ p1, p2 })).toBeLessThan(6.8);
+    expect(Math.abs(p1.dist - p2.dist), JSON.stringify({ p1, p2 })).toBeLessThan(0.15);
+  });
 });

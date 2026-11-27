@@ -162,6 +162,7 @@ export function installGameTestHooks(game: Game): void {
     },
     setBossPosition: (pos: { x: number; y: number; z: number }) => {
       g.boss.group.position.set(pos.x, pos.y, pos.z);
+      g.publishDiagnostics();
     },
     setBossAttackCooldown: (cd: number) => {
       g.boss.ai.attackCooldown = cd;

@@ -36,7 +36,7 @@ export const BOSS_CONFIG = {
   // 7. Forward Lunge Impulses per Attack (meters) - locked to 0 for stationary non-jump attacks
   impulses: {
     combo: 0.0,
-    jump: 7.0,
+    jump: 6.2,
     downward: 0.0,
     spin360: 0.0,
     kick: 0.0,
