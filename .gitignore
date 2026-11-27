@@ -14,3 +14,6 @@ public/audio/*.ogg
 public/audio/*.flac
 public/audio/*.m4a
 public/audio/presets.json
+
+# Test animation & raw asset packs (kept local until implemented)
+assets/test-assets/
