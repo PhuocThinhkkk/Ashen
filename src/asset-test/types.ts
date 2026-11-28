@@ -58,6 +58,9 @@ declare global {
       isHitboxVisible?: () => boolean;
       stepFrame?: (frames: number) => void;
       togglePause?: () => boolean;
+      seekTime?: (category: 'player' | 'boss', seconds: number) => any;
+      seekFrame?: (category: 'player' | 'boss', frame: number) => any;
+      getFrameInfo?: (category: 'player' | 'boss') => any;
       setTabMode?: (mode: 'raw' | 'combat' | 'socket' | 'music' | null) => void;
       setMode?: (mode: 'orbit' | 'walk') => void;
       getHitboxDebugState?: () => { playerActive: boolean; bossActive: boolean };

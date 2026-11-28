@@ -16,6 +16,17 @@ import { CONFIG } from '../config';
 import { loadHealingFlaskMesh } from '../../entities/player/HealingFlask';
 import type { AssetTestDiagnostics } from '../types';
 
+export interface RawFrameInfo {
+  clip: string;
+  time: number;
+  duration: number;
+  frame: number;
+  totalFrames: number;
+  phase: string;
+  hitboxActive: boolean;
+  paused: boolean;
+}
+
 export class RawAnimationStage {
   public readonly diagnostics: AssetTestDiagnostics = {
     loaded: false,
@@ -484,67 +495,104 @@ export class RawAnimationStage {
    * @param none Operates on active player and boss animation actions and mixer states.
    * @returns Telemetry state object with active flags and formatted debug text string.
    */
+  private computeActionInfo(
+    action: THREE.AnimationAction | null,
+    clipName: string,
+  ): RawFrameInfo | null {
+    if (!action) return null;
+    const cfg = getKinematicAction(clipName);
+    const duration = action.getClip().duration || 0;
+    const totalFrames = cfg ? cfg.totalFrames : Math.max(1, Math.round(duration * 60));
+    const isOneShot = action.loop === THREE.LoopOnce;
+    const clampedTime =
+      duration > 0
+        ? isOneShot
+          ? Math.min(duration, Math.max(0, action.time))
+          : ((action.time % duration) + duration) % duration
+        : 0;
+    const frame = Math.min(totalFrames, Math.max(1, Math.floor(clampedTime * 60) + 1));
+
+    let phase = 'Idle';
+    let hitboxActive = false;
+    if (cfg) {
+      for (const p of cfg.phases) {
+        if (frame >= p.startFrame && frame <= p.endFrame) {
+          phase = p.type;
+          break;
+        }
+      }
+      if (cfg.hitbox) {
+        const windows = cfg.hitbox.activeWindows ?? [
+          { startFrame: cfg.hitbox.activeStartFrame, endFrame: cfg.hitbox.activeEndFrame },
+        ];
+        hitboxActive = windows.some((w) => frame >= w.startFrame && frame <= w.endFrame);
+      }
+    }
+
+    return {
+      clip: clipName,
+      time: clampedTime,
+      duration,
+      frame,
+      totalFrames,
+      phase,
+      hitboxActive,
+      paused: action.paused,
+    };
+  }
+
+  public getFrameInfo(category: 'player' | 'boss'): RawFrameInfo | null {
+    return category === 'player'
+      ? this.computeActionInfo(this.currentPlayerAction, this.diagnostics.player.activeClip)
+      : this.computeActionInfo(this.currentBossAction, this.diagnostics.boss.activeClip);
+  }
+
+  public seekTime(category: 'player' | 'boss', seconds: number): RawFrameInfo | null {
+    const action = category === 'player' ? this.currentPlayerAction : this.currentBossAction;
+    const mixer = category === 'player' ? this.playerMixer : this.bossMixer;
+    if (!action || !mixer) return null;
+    const duration = action.getClip().duration || 0;
+    const target = Math.max(0, Math.min(Math.max(0, duration - 1e-4), seconds));
+    action.enabled = true;
+    action.paused = true;
+    action.time = target;
+    mixer.update(0);
+    this.updateFrameTelemetry();
+    return this.getFrameInfo(category);
+  }
+
+  public seekFrame(category: 'player' | 'boss', frame: number): RawFrameInfo | null {
+    const targetSec = (Math.max(1, Math.round(frame)) - 1) / 60;
+    return this.seekTime(category, targetSec);
+  }
+
   public updateFrameTelemetry(): {
     playerActive: boolean;
     bossActive: boolean;
     telemetryText: string;
   } {
-    let playerImpact = false;
-    let bossImpact = false;
-    let telemetryText = '';
+    const pInfo = this.computeActionInfo(
+      this.currentPlayerAction,
+      this.diagnostics.player.activeClip,
+    );
+    const bInfo = this.computeActionInfo(
+      this.currentBossAction,
+      this.diagnostics.boss.activeClip,
+    );
 
-    if (this.currentPlayerAction) {
-      const clipName = this.diagnostics.player.activeClip;
-      const cfg = getKinematicAction(clipName);
-      const duration = this.currentPlayerAction.getClip().duration;
-      const totalFrames = cfg ? cfg.totalFrames : Math.round(duration * 60);
-      const timeNorm = ((this.currentPlayerAction.time % duration) + duration) % duration;
-      const frame = Math.min(totalFrames, Math.floor(timeNorm * 60) + 1);
+    const playerImpact = pInfo?.hitboxActive ?? false;
+    const bossImpact = bInfo?.hitboxActive ?? false;
 
-      let phase = 'Idle';
-      if (cfg) {
-        for (const p of cfg.phases) {
-          if (frame >= p.startFrame && frame <= p.endFrame) {
-            phase = p.type;
-            break;
-          }
-        }
-        if (
-          cfg.hitbox &&
-          frame >= cfg.hitbox.activeStartFrame &&
-          frame <= cfg.hitbox.activeEndFrame
-        ) {
-          playerImpact = true;
-        }
-      }
-      telemetryText = `Player: [${clipName}] F:${frame}/${totalFrames} [${phase}]`;
+    const parts: string[] = [];
+    if (pInfo) {
+      parts.push(
+        `Player: [${pInfo.clip}] F:${pInfo.frame}/${pInfo.totalFrames} T:${pInfo.time.toFixed(2)}s/${pInfo.duration.toFixed(2)}s [${pInfo.phase}]`,
+      );
     }
-
-    if (this.currentBossAction) {
-      const clipName = this.diagnostics.boss.activeClip;
-      const cfg = getKinematicAction(clipName);
-      const duration = this.currentBossAction.getClip().duration;
-      const totalFrames = cfg ? cfg.totalFrames : Math.round(duration * 60);
-      const timeNorm = ((this.currentBossAction.time % duration) + duration) % duration;
-      const frame = Math.min(totalFrames, Math.floor(timeNorm * 60) + 1);
-
-      let phase = 'Idle';
-      if (cfg) {
-        for (const p of cfg.phases) {
-          if (frame >= p.startFrame && frame <= p.endFrame) {
-            phase = p.type;
-            break;
-          }
-        }
-        if (
-          cfg.hitbox &&
-          frame >= cfg.hitbox.activeStartFrame &&
-          frame <= cfg.hitbox.activeEndFrame
-        ) {
-          bossImpact = true;
-        }
-      }
-      telemetryText += ` | Boss: [${clipName}] F:${frame}/${totalFrames} [${phase}]`;
+    if (bInfo) {
+      parts.push(
+        `Boss: [${bInfo.clip}] F:${bInfo.frame}/${bInfo.totalFrames} T:${bInfo.time.toFixed(2)}s/${bInfo.duration.toFixed(2)}s [${bInfo.phase}]`,
+      );
     }
 
     this.playerHitboxDebugger.update(playerImpact);
@@ -552,7 +600,7 @@ export class RawAnimationStage {
     this.bossHitboxDebugger.update(!isKick && bossImpact);
     this.bossFootHitboxDebugger.update(isKick && bossImpact);
 
-    return { playerActive: playerImpact, bossActive: bossImpact, telemetryText };
+    return { playerActive: playerImpact, bossActive: bossImpact, telemetryText: parts.join(' | ') };
   }
 
   public update(delta: number): void {

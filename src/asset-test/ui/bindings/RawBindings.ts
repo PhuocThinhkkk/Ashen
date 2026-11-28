@@ -19,6 +19,7 @@ export interface RawBindings {
   btnStepPrev: HTMLButtonElement | null;
   btnPlayPause: HTMLButtonElement | null;
   btnStepNext: HTMLButtonElement | null;
+  timelineScrubber: HTMLInputElement | null;
   hitboxStatusBadge: HTMLElement | null;
   frameTelemetry: HTMLElement | null;
   reticle: HTMLElement | null;
@@ -47,6 +48,7 @@ export function getRawBindings(): RawBindings {
     btnStepPrev: document.querySelector<HTMLButtonElement>('#btn-step-prev'),
     btnPlayPause: document.querySelector<HTMLButtonElement>('#btn-play-pause'),
     btnStepNext: document.querySelector<HTMLButtonElement>('#btn-step-next'),
+    timelineScrubber: document.querySelector<HTMLInputElement>('#timeline-scrubber'),
     hitboxStatusBadge: document.querySelector<HTMLElement>('#hitbox-status-badge'),
     frameTelemetry: document.querySelector<HTMLElement>('#frame-telemetry'),
     reticle: document.querySelector<HTMLElement>('#reticle'),

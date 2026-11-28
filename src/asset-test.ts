@@ -138,6 +138,8 @@ function toggleUI(): void {
 
 function togglePause(): boolean {
   isPaused = !isPaused;
+  if (rawStage.currentPlayerAction) rawStage.currentPlayerAction.paused = isPaused;
+  if (rawStage.currentBossAction) rawStage.currentBossAction.paused = isPaused;
   if (dom.btnPlayPause && activeMode !== 'combat') {
     dom.btnPlayPause.textContent = isPaused ? '▶ Play' : '⏸ Pause';
   }
@@ -146,6 +148,8 @@ function togglePause(): boolean {
 
 function stepFrame(framesCount: number): void {
   isPaused = true;
+  if (rawStage.currentPlayerAction) rawStage.currentPlayerAction.paused = true;
+  if (rawStage.currentBossAction) rawStage.currentBossAction.paused = true;
   if (dom.btnPlayPause && activeMode !== 'combat') dom.btnPlayPause.textContent = '▶ Play';
 
   const deltaSeconds = framesCount * (1 / 60);
@@ -289,10 +293,36 @@ function setGameFollowMode(enabled: boolean): void {
   }
 }
 
+let activeScrubTarget: 'player' | 'boss' = 'boss';
+let isScrubbingTimeline = false;
+
+dom.timelineScrubber?.addEventListener('input', () => {
+  isScrubbingTimeline = true;
+  isPaused = true;
+  if (dom.btnPlayPause && activeMode !== 'combat') dom.btnPlayPause.textContent = '▶ Play';
+  const info = rawStage.getFrameInfo(activeScrubTarget);
+  if (info && info.duration > 0) {
+    const frac = parseFloat(dom.timelineScrubber!.value) / 1000;
+    rawStage.seekTime(activeScrubTarget, frac * info.duration);
+    updateTelemetry();
+    renderer.render(scene, cameraMgr.camera);
+  }
+});
+
+dom.timelineScrubber?.addEventListener('change', () => {
+  isScrubbingTimeline = false;
+});
+
 function updateTelemetry(): { playerActive: boolean; bossActive: boolean } {
   const telemetry = rawStage.updateFrameTelemetry();
   if (dom.frameTelemetry && telemetry.telemetryText) {
     dom.frameTelemetry.textContent = telemetry.telemetryText;
+  }
+  if (dom.timelineScrubber && !isScrubbingTimeline) {
+    const info = rawStage.getFrameInfo(activeScrubTarget);
+    if (info && info.duration > 0) {
+      dom.timelineScrubber.value = String(Math.round((info.time / info.duration) * 1000));
+    }
   }
   return { playerActive: telemetry.playerActive, bossActive: telemetry.bossActive };
 }
@@ -570,12 +600,18 @@ async function initHarness(): Promise<void> {
 window.__ASSET_TEST__ = {
   diagnostics: rawStage.diagnostics,
   playPlayerClip: (name: string) => {
+    activeScrubTarget = 'player';
     rawStage.playPlayerAnimation(name);
+    if (rawStage.currentPlayerAction) rawStage.currentPlayerAction.paused = isPaused;
     rawUI.updateActiveClipLabels();
+    updateTelemetry();
   },
   playBossClip: (name: string) => {
+    activeScrubTarget = 'boss';
     rawStage.playBossAnimation(name);
+    if (rawStage.currentBossAction) rawStage.currentBossAction.paused = isPaused;
     rawUI.updateActiveClipLabels();
+    updateTelemetry();
   },
   getWeaponDistanceToHand: () => rawStage.getWeaponDistanceToHand(),
   switchPlayerModel: async (modelId: string) => {
@@ -603,6 +639,25 @@ window.__ASSET_TEST__ = {
   isHitboxVisible: () => rawStage.isHitboxVisible,
   stepFrame,
   togglePause,
+  seekTime: (category: 'player' | 'boss', seconds: number) => {
+    activeScrubTarget = category;
+    isPaused = true;
+    if (dom.btnPlayPause && activeMode !== 'combat') dom.btnPlayPause.textContent = '▶ Play';
+    const info = rawStage.seekTime(category, seconds);
+    updateTelemetry();
+    renderer.render(scene, cameraMgr.camera);
+    return info;
+  },
+  seekFrame: (category: 'player' | 'boss', frame: number) => {
+    activeScrubTarget = category;
+    isPaused = true;
+    if (dom.btnPlayPause && activeMode !== 'combat') dom.btnPlayPause.textContent = '▶ Play';
+    const info = rawStage.seekFrame(category, frame);
+    updateTelemetry();
+    renderer.render(scene, cameraMgr.camera);
+    return info;
+  },
+  getFrameInfo: (category: 'player' | 'boss') => rawStage.getFrameInfo(category),
   setTabMode,
   setMode: (mode: 'orbit' | 'walk') => {
     setGameFollowMode(mode === 'walk');

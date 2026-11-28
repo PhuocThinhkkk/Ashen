@@ -878,13 +878,23 @@
       <button id="btn-play-pause" class="btn-util" title="Play/Pause (Space)">⏸ Pause</button>
       <button id="btn-step-next" class="btn-util" title="Step Forward 1 Frame (Key: ])">+1 Frame ▶</button>
       <div class="playback-divider"></div>
+      <input
+        id="timeline-scrubber"
+        type="range"
+        min="0"
+        max="1000"
+        value="0"
+        title="Scrub Clip Frame & Time"
+        style="width: 140px; accent-color: #d4af37; cursor: pointer;"
+      />
+      <div class="playback-divider"></div>
       <div class="btn-group" id="speed-buttons">
         <button class="btn-util" data-speed="0.25">0.25x</button>
         <button class="btn-util" data-speed="0.5">0.5x</button>
         <button class="btn-util active" data-speed="1.0">1.0x</button>
         <button class="btn-util" data-speed="1.5">1.5x</button>
       </div>
-      <div id="frame-telemetry">Frame: -- / -- | Phase: --</div>
+      <div id="frame-telemetry">Frame: -- / -- | Time: -- / -- | Phase: --</div>
     </nav>
 
     <!-- Hidden compatibility elements for existing event bindings -->
