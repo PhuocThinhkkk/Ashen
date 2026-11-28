@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { BOSS_ATTACKS, type AttackDefinition } from '../../combat/FrameCombat';
-import { ModelLoader } from '../../utils/ModelLoader';
 import type { BossCharacter } from '../BossCharacter';
 
 /**
@@ -140,15 +139,9 @@ export class BossAI {
     this.isAttackActiveFrames = false;
 
     const speedMod = b.isPhase2 ? BOSS_CONFIG.attackSpeedPhase2 : BOSS_CONFIG.attackSpeedPhase1;
-    const totalDuration = (attack.startup + attack.active + attack.recovery) / speedMod;
-
     const clipName = attack.animationClip || 'attack_heavy';
-    const clip = ModelLoader.findClip(b.rawClips, clipName);
-    const clipDuration = clip ? clip.duration : 2.5;
-    const attackTimeScale = clipDuration / totalDuration;
-
-    // Cross-fade out of locomotion blend layer and fade into attack action
-    b.startAttackAction(clipName, attackTimeScale);
+    // Play boss attack clips at true 1.0x raw speed in Phase 1 (1.12x in Phase 2) so swing angles & pacing match raw Mixamo timing
+    b.startAttackAction(clipName, speedMod);
   }
 
   public update(
@@ -514,6 +507,15 @@ export class BossAI {
       b.telegraphGlow = Math.max(0, 1.0 - (b.attackTimer - startup - active) / (recovery * 0.5));
       this.isAttackActiveFrames = false;
       b.setTurnDirection?.(null);
+
+      // Blend smoothly from late recovery back into the 2-handed idle stance once follow-through finishes,
+      // unless a combo follow-up is ready to chain immediately at recovery end.
+      const recoveryElapsed = b.attackTimer - (startup + active);
+      const willCheckCombo =
+        this.goalStack.some((g) => g.type === 'COMBO_CHECK');
+      if (!willCheckCombo && recoveryElapsed >= recovery * 0.55) {
+        (b as any).beginRecoveryBlendToIdle?.(Math.max(0.25, recovery * 0.45));
+      }
     } else {
       // Attack complete!
       b.state = 'idle';
@@ -581,7 +583,10 @@ export class BossAI {
       b.faceTarget(playerPos, this.maxTurnRate, dt);
     }
     b.telegraphGlow = Math.sin(b.stateTimer * 8.0) * 0.5 + 0.5;
-    if (b.stateTimer >= 2.35) {
+    if (b.stateTimer >= 1.72) {
+      (b as any).beginRecoveryBlendToIdle?.(0.36);
+    }
+    if (b.stateTimer >= 2.08) {
       b.state = 'idle';
       b.stateTimer = 0;
       b.telegraphGlow = 0;
@@ -593,7 +598,7 @@ export class BossAI {
         timer: 0,
         strafeDir: 1,
       });
-      (b as any).returnToLocomotion ? (b as any).returnToLocomotion(0.30) : b.playAction('idle', 0.30);
+      (b as any).returnToLocomotion ? (b as any).returnToLocomotion(0.34) : b.playAction('idle', 0.34);
     }
   }
 

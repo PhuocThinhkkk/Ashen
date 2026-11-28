@@ -265,7 +265,7 @@ test.describe('FromSoftware-Style Boss AI & Strafe Subgoal Stack', () => {
     faceTargetCalledCount = 0;
     mockBoss.currentAttack = BOSS_ATTACKS.jump;
     mockBoss.state = 'windup';
-    mockBoss.attackTimer = 1.42; // in active slam phase
+    mockBoss.attackTimer = 1.74; // in active slam phase (startup=1.70, active=0.12)
     ai.update(0.016, playerSnapshot);
     expect(mockBoss.state).toBe('active');
     expect(ai.isAttackActiveFrames).toBe(true); // Jump leap rotation is frozen
