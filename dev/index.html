@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#06080e" />
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="icon" href="data:," />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
+    <title>Souls Browser: The Ashen Knight</title>
+    <script type="module" crossorigin src="/Ashen/dev/assets/main-WSetWiTr.js"></script>
+    <link rel="modulepreload" crossorigin href="/Ashen/dev/assets/WeaponCollisionSystem-CMVWAc4X.js">
+    <link rel="stylesheet" crossorigin href="/Ashen/dev/assets/main-CLGhdMTg.css">
+  </head>
+  <body>
+    <main id="app">
+      <canvas id="game-canvas" aria-label="Playable Three.js game canvas"></canvas>
+
+      <!-- Player Status Bars (Top Left) -->
+      <section id="player-bars" aria-label="Player Status">
+        <div class="bar-wrapper hp-wrapper">
+          <div class="bar-label">HP</div>
+          <div class="bar-track">
+            <div id="player-hp-chip" class="bar-chip"></div>
+            <div id="player-hp-fill" class="bar-fill hp-fill"></div>
+          </div>
+          <div id="player-hp-text" class="bar-text">100 / 100</div>
+        </div>
+        <div class="bar-wrapper stamina-wrapper">
+          <div class="bar-label">SP</div>
+          <div class="bar-track">
+            <div id="player-stamina-fill" class="bar-fill stamina-fill"></div>
+          </div>
+          <div id="player-stamina-text" class="bar-text">100 / 100</div>
+        </div>
+        <div id="fps-display" class="fps-display" aria-label="Frames Per Second">FPS: --</div>
+      </section>
+
+      <!-- Top Actions Bar (Fullscreen, Restart, Settings) -->
+      <header id="top-actions" class="top-actions" aria-label="Game Navigation Actions">
+        <button id="fullscreen-btn" class="top-action-btn" type="button" title="Toggle Fullscreen" aria-label="Toggle Fullscreen">
+          <svg class="ui-icon" id="fullscreen-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path class="fs-enter-path" d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
+            <path class="fs-exit-path hidden" d="M4 14h6v6m10-10h-6V4m0 6 7-7M9 15l-7 7"></path>
+          </svg>
+          <span class="btn-text">FULLSCREEN</span>
+        </button>
+        <button id="quick-restart-btn" class="top-action-btn" type="button" title="Restart Trial (R)" aria-label="Restart Trial">
+          <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="1 4 1 10 7 10"></polyline>
+            <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+          </svg>
+          <span class="btn-text">RESTART</span>
+        </button>
+        <button id="game-settings-btn" class="top-action-btn unified-settings-trigger" type="button" title="Game Settings, Models & Performance Diagnostics" aria-label="Settings">
+          <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          </svg>
+          <span class="btn-text">SETTINGS</span>
+        </button>
+      </header>
+
+      <!-- Pre-Match Preparation Loading Screen -->
+      <div id="prewarm-loading-screen" class="prewarm-loading-screen">
+        <div class="prewarm-modal">
+          <span class="prewarm-badge">SANCTUARY TRIAL</span>
+          <h1 class="prewarm-title">PREPARING ENCOUNTER</h1>
+          <div class="prewarm-bar-track">
+            <div id="prewarm-progress-fill" class="prewarm-progress-fill"></div>
+          </div>
+          <p id="prewarm-status-text" class="prewarm-status">Preparing 3D Armatures & Textures...</p>
+        </div>
+      </div>
+
+      <!-- Lock-On Reticle -->
+      <div id="lockon-reticle" class="hidden">
+        <div class="reticle-diamond"></div>
+      </div>
+
+      <!-- Boss Status Bar (Bottom Center) -->
+      <section id="boss-hud" aria-label="Boss Status">
+        <div class="boss-header">
+          <span class="boss-title">THE ASHEN SANCTUARY</span>
+          <h2 id="boss-name" class="boss-name">MALAKHOR, THE ASHEN KNIGHT</h2>
+        </div>
+        <div class="boss-bar-track">
+          <div id="boss-hp-chip" class="boss-hp-chip"></div>
+          <div id="boss-hp-fill" class="boss-hp-fill"></div>
+          <div class="boss-bar-frame"></div>
+        </div>
+      </section>
+
+      <!-- Floating Damage Numbers Container -->
+      <div id="damage-container" pointer-events="none"></div>
+
+      <!-- Health Potion Item HUD (Bottom Left) -->
+      <div id="potion-hud" class="potion-hud" role="button" aria-label="Health Potion [R]" tabindex="0">
+        <div class="potion-frame">
+          <img src="/Ashen/dev/assets/items/health_potions.png" alt="Health Potion" class="potion-img" />
+          <span id="potion-charges-badge" class="potion-charges-badge">2</span>
+        </div>
+        <div class="potion-info">
+          <span class="potion-key-hint"><kbd>R</kbd> HEAL</span>
+        </div>
+      </div>
+
+      <!-- Controls Guide Overlay (Moved to Settings Tabs, kept hidden for backward compatibility) -->
+      <div id="controls-guide" style="display: none;">
+        <div class="control-key"><kbd>WASD</kbd> Move</div>
+        <div class="control-key"><kbd>Space</kbd> Roll (Tap) / Run (Hold)</div>
+        <div class="control-key"><kbd>R</kbd> Drink Flask</div>
+        <div class="control-key"><kbd>F</kbd> Jump / Air Attack</div>
+        <div class="control-key"><kbd>L-Click / J</kbd> Light Combo</div>
+        <div class="control-key"><kbd>R-Click / K</kbd> Heavy Thrust</div>
+        <div class="control-key"><kbd>Tab / Q</kbd> Lock On</div>
+        <div class="control-key"><kbd>Y</kbd> Reset Match</div>
+      </div>
+
+      <!-- Death & Victory Banners -->
+      <div id="death-overlay" class="banner-overlay hidden" role="dialog" aria-label="Player Defeated">
+        <h1 class="death-title">YOU DIED</h1>
+        <p class="banner-prompt">Press <kbd>Y</kbd> or <kbd>R</kbd> or tap below to Rise Again</p>
+        <button id="death-restart-btn" class="banner-restart-btn" type="button" aria-label="Rise Again">
+          RISE AGAIN [Y]
+        </button>
+      </div>
+
+      <div id="victory-overlay" class="banner-overlay hidden" role="dialog" aria-label="Boss Vanquished">
+        <h1 class="victory-title">LEGEND VANQUISHED</h1>
+        <p class="banner-prompt">Press <kbd>Y</kbd> or <kbd>R</kbd> or tap below to Face the Trial Once More</p>
+        <button id="victory-restart-btn" class="banner-restart-btn" type="button" aria-label="Face Trial Once More">
+          FACE TRIAL ONCE MORE [Y]
+        </button>
+      </div>
+
+      <!-- Mobile Touch Controls -->
+      <div id="touch-controls" class="touch-controls" aria-label="Mobile Touch Controls">
+        <div id="touch-stick-zone" class="touch-stick-zone">
+          <div id="touch-stick" class="touch-stick">
+            <div id="touch-knob" class="touch-knob"></div>
+          </div>
+        </div>
+        <div class="touch-action-buttons">
+          <div class="touch-aux-row">
+            <button id="touch-heal-btn" class="touch-btn touch-btn-aux" type="button" aria-label="Drink Flask">
+              <span>HEAL</span>
+            </button>
+            <button id="touch-jump-btn" class="touch-btn touch-btn-aux" type="button" aria-label="Jump">
+              <span>JUMP</span>
+            </button>
+            <button id="touch-lock-btn" class="touch-btn touch-btn-aux" type="button" aria-label="Toggle Lock On">
+              <svg class="touch-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <circle cx="12" cy="12" r="7"></circle>
+                <circle cx="12" cy="12" r="2" fill="currentColor"></circle>
+              </svg>
+              <span>LOCK</span>
+            </button>
+            <button id="touch-sprint-btn" class="touch-btn touch-btn-aux" type="button" aria-label="Sprint">
+              <svg class="touch-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+              </svg>
+              <span>SPRINT</span>
+            </button>
+          </div>
+          <div class="touch-combat-cluster">
+            <button id="touch-heavy-btn" class="touch-btn touch-btn-heavy" type="button" aria-label="Heavy Thrust Attack">
+              <span>HEAVY</span>
+            </button>
+            <button id="touch-attack-btn" class="touch-btn touch-btn-attack" type="button" aria-label="Light Attack Combo">
+              <span>ATTACK</span>
+            </button>
+            <button id="touch-dodge-btn" class="touch-btn touch-btn-dodge" type="button" aria-label="Dodge Roll">
+              <span>DODGE</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Horizontal / Landscape Device Prompt Overlay -->
+      <div id="orientation-overlay" class="orientation-overlay hidden" aria-live="polite">
+        <div class="orientation-modal">
+          <div class="orientation-phone-graphic">
+            <div class="phone-anim-wrapper">
+              <svg class="rotate-phone-svg" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect class="phone-rect" x="18" y="10" width="28" height="44" rx="4"></rect>
+                <circle cx="32" cy="48" r="1.5" fill="currentColor"></circle>
+                <path class="rotate-arrow-curve" d="M12 28 C12 18, 22 10, 32 10"></path>
+                <polyline points="9 23 12 28 17 26"></polyline>
+              </svg>
+            </div>
+          </div>
+          <span class="orientation-badge">LANDSCAPE RECOMMENDED</span>
+          <h2 class="orientation-title">PLEASE ROTATE YOUR PHONE</h2>
+          <p class="orientation-desc">Souls Browser is optimized for horizontal landscape gameplay with dual-thumb combat controls.</p>
+          <div class="orientation-btn-group">
+            <button id="orientation-fullscreen-btn" class="orientation-primary-btn" type="button">
+              <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
+              </svg>
+              <span>ENTER LANDSCAPE FULLSCREEN</span>
+            </button>
+            <button id="orientation-dismiss-btn" class="orientation-secondary-btn" type="button">
+              <span>Continue in Portrait</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </main>
+  </body>
+</html>

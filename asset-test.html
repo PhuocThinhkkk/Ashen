@@ -1,0 +1,479 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="data:," />
+    <title>Isolated Asset & Animation Validation Harness</title>
+    <style>*,:before,:after{box-sizing:border-box}body,html{color:#e5ded2;-webkit-user-select:none;user-select:none;background:#0a0e16;width:100%;height:100%;margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Courier New,monospace;overflow:hidden}#test-canvas{width:100vw;height:100vh;display:block}#mode-switcher-bar{z-index:1000;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);background:#080c12f2;border:1px solid #7a5e2a;border-radius:6px;align-items:center;gap:5px;height:38px;padding:0 6px;display:flex;position:fixed;top:10px;left:12px;box-shadow:0 4px 20px #000000bf}.mode-tab-btn{color:#c8c0b4;cursor:pointer;letter-spacing:.03em;white-space:nowrap;background:#141c28;border:1px solid #7a5e2a;border-radius:4px;padding:5px 8px;font-family:monospace;font-size:11px;font-weight:600;transition:all .15s}.mode-tab-btn:hover{color:#fff;background:#273549;border-color:gold}.mode-tab-btn.active{color:gold;background:#d4af3738;border-color:gold;box-shadow:0 0 10px #ffd70059}.mode-tab-btn.btn-hide-ui{color:#8bb2d6;border-color:#556b82}.mode-tab-btn.btn-hide-ui:hover{color:#fff;border-color:gold}.mode-tab-btn.btn-hide-ui.active{color:#fff;background:#3b5575;border-color:#8bb2d6}#docked-navbar,.top-camera-bar{z-index:990;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);background:#080c12f2;border:1px solid #7a5e2a;border-radius:6px;align-items:center;gap:5px;height:38px;padding:0 8px;display:flex;position:fixed;top:10px;right:12px;box-shadow:0 4px 20px #000000bf}#single-panel-slot{z-index:100;pointer-events:auto;width:340px;max-height:calc(100vh - 120px);position:fixed;top:56px;left:12px}.test-window{-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);background:#0a0e16f0;border:1px solid #7a5e2a;border-radius:6px;width:100%;max-height:calc(100vh - 120px);padding:12px 14px;font-size:12px;line-height:1.5;overflow-y:auto;box-shadow:0 8px 32px #000c,inset 0 0 16px #7a5e2a1f}.test-window::-webkit-scrollbar{width:6px}.test-window::-webkit-scrollbar-track{background:#0a0e1699}.test-window::-webkit-scrollbar-thumb{background:#7a5e2a;border-radius:3px}.test-window.hidden,.test-window.collapsed .win-body,.test-window.collapsed .section,.test-window.collapsed .diag-line,.test-window.collapsed .hint{display:none!important}.win-header,.panel-header{color:#fa3;letter-spacing:.08em;text-transform:uppercase;border-bottom:1px solid #7a5e2a80;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;padding-bottom:6px;font-size:12px;font-weight:700;display:flex}.panel-toggle-btn{color:#fa3;cursor:pointer;background:0 0;border:1px solid #7a5e2a;border-radius:3px;padding:2px 6px;font-size:10px}.panel-toggle-btn:hover{background:#7a5e2a4d}.status-ok{color:#38d665;font-weight:600}.status-wait{color:#fa3;font-weight:600}.status-err{color:#db2c2c;font-weight:600}.diag-line{color:#c0b8ac;margin:3px 0;font-family:monospace;font-size:11px}.diag-line strong{color:#e5ded2}.section{border-top:1px solid #ffffff14;margin-top:10px;padding-top:8px}.section-header{letter-spacing:.05em;text-transform:uppercase;justify-content:space-between;align-items:center;margin-bottom:6px;font-size:11px;font-weight:700;display:flex}.section-header.player{color:#d4af37}.section-header.boss{color:#f55}.section-header.util{color:#8bb2d6}.active-badge{color:#e5ded2;background:#ffffff14;border:1px solid #ffffff26;border-radius:3px;padding:2px 6px;font-family:monospace;font-size:10px;font-weight:400}.btn-group{flex-wrap:wrap;gap:5px;display:flex}button{color:#e5ded2;cursor:pointer;background:#141c28;border:1px solid #7a5e2a;border-radius:3px;padding:5px 8px;font-family:monospace;font-size:11px;transition:background .15s,border-color .15s}button:hover{background:#233145;border-color:#b5954a}button:active{transform:translateY(1px)}button.btn-player{border-color:#8c733b}button.btn-player:hover{background:#273549;border-color:#d4af37}button.btn-player.active{color:#0a0e16;background:#b5954a;border-color:gold;font-weight:700}button.btn-boss{color:#f0c0c0;border-color:#8b2b2b}button.btn-boss:hover{background:#381a1a;border-color:#db2c2c}button.btn-boss.active{color:#fff;background:#b82222;border-color:#f66;font-weight:700}button.btn-util{border-color:#485c75;padding:3px 8px;font-size:10.5px}button.btn-util.active{color:#fff;background:#3b5575;border-color:#8bb2d6;font-weight:700}button.btn-action-p{color:#ffd777;background:#19202a;border-color:#7a5e2a;padding:4px 7px;font-size:10.5px;font-weight:600}button.btn-action-p:hover{background:#2b3648;border-color:gold}button.btn-action-p.active{color:#fff;background:#8c6a23;border-color:gold}button.btn-action-b{color:#f99;background:#201316;border-color:#752828;padding:4px 7px;font-size:10.5px;font-weight:600}button.btn-action-b:hover{background:#381a1f;border-color:#f55}button.btn-action-b.active{color:#fff;background:#821f1f;border-color:#f66}.telemetry-grid{background:#00000073;border:1px solid #7a5e2a59;border-radius:4px;grid-template-columns:1fr 1fr;gap:5px;margin-top:6px;padding:6px 8px;font-family:monospace;font-size:11px;display:grid}.slider-row{justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px;font-family:monospace;font-size:11px;display:flex}.slider-label{color:#c0b8ac;width:80px}.slider-input{accent-color:gold;cursor:pointer;flex:1}.slider-val{text-align:right;color:gold;width:48px;font-weight:600}#unified-playback-strip{z-index:1000;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);background:#080c12f2;border:1px solid #7a5e2a;border-radius:6px;align-items:center;gap:8px;padding:6px 14px;font-family:monospace;display:flex;position:fixed;bottom:14px;left:50%;transform:translate(-50%);box-shadow:0 4px 24px #000000d9}.playback-divider{background:#7a5e2a73;width:1px;height:18px;margin:0 4px}#frame-telemetry{color:#fa3;white-space:nowrap;margin-left:6px;font-family:monospace;font-size:11px}#roam-banner{color:#ffd777;pointer-events:none;text-align:center;z-index:500;background:#0a0e16f0;border:1px solid #d4af37;border-radius:6px;padding:10px 18px;font-family:monospace;font-size:12px;display:none;position:absolute;bottom:64px;left:50%;transform:translate(-50%);box-shadow:0 4px 24px #000000d9}#reticle{pointer-events:none;z-index:400;border:2px solid #f44;border-radius:50%;width:32px;height:32px;display:none;position:absolute;transform:translate(-50%,-50%);box-shadow:0 0 10px #f44}#reticle:after{content:"";background:#f44;border-radius:50%;width:6px;height:6px;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)}.hint{color:#807667;border-top:1px dashed #7a5e2a4d;flex-wrap:wrap;justify-content:space-between;gap:4px;margin-top:8px;padding-top:5px;font-size:10px;display:flex}.lil-gui.lil-root{display:none!important}</style>
+    <script type="module" crossorigin src="/Ashen/assets/assetTest-DFABeM-X.js"></script>
+    <link rel="modulepreload" crossorigin href="/Ashen/assets/SoulslikeCamera-CCE6ywpb.js">
+  </head>
+  <body>
+    <!-- 3D Canvas -->
+    <canvas id="test-canvas"></canvas>
+    <div id="reticle"></div>
+
+    <!-- 3rd Person Roam Overlay Banner -->
+    <div id="roam-banner">
+      <strong>3RD-PERSON PLAYABLE ROAM ACTIVE</strong><br/>
+      Press [Esc] or Click [3rd-Person Follow] to Return to Free Orbit
+    </div>
+
+    <!-- ================= TOP MODE SWITCHER BAR (TOP-LEFT) ================= -->
+    <nav id="mode-switcher-bar" class="mode-switcher-bar" aria-label="Mode Switcher">
+      <button id="btn-toggle-win-1" class="mode-tab-btn active" data-mode="raw" title="Raw Animation (Key: 1)">1. Raw Animation</button>
+      <button id="btn-toggle-win-2" class="mode-tab-btn" data-mode="combat" title="Combat & Player (Key: 2)">2. Combat & Player</button>
+      <button id="btn-toggle-win-3" class="mode-tab-btn" data-mode="socket" title="Weapon Socket (Key: 3)">3. Weapon Socket</button>
+      <button id="btn-toggle-win-4" class="mode-tab-btn" data-mode="music" title="Boss Music (Key: 4)">4. Boss Music</button>
+      <button id="btn-toggle-ui" class="mode-tab-btn btn-hide-ui" title="Hide/Show UI (Key: H or Tab)">Hide UI</button>
+    </nav>
+
+    <!-- ================= CAMERA & UTILS QUICK SWITCHER (TOP-RIGHT) ================= -->
+    <header id="docked-navbar" class="top-camera-bar">
+      <div class="btn-group" id="camera-buttons">
+        <button class="btn-util active" data-cam="both" title="Raw Stage Both Models">Raw Stage</button>
+        <button class="btn-util" data-cam="player" title="Focus Raw Player">Focus Player</button>
+        <button class="btn-util" data-cam="boss" title="Focus Raw Boss">Focus Boss</button>
+        <button class="btn-util" data-cam="duel" style="border-color: #ffd700; color: #ffd777;" title="Cinematic Duel View">Duel Arena</button>
+        <button class="btn-util" data-cam="side" style="border-color: #ffd700;" title="Side Profile Reach View">Side View</button>
+        <button class="btn-util" data-cam="overview" title="Full 4-Model Arena Overview">Overview</button>
+        <button class="btn-util" data-cam="reset" title="Reset View">Reset</button>
+      </div>
+      <button id="btn-toggle-hitbox" class="btn-util" style="border-color: #ffd700; color: #ffd777; font-weight: 700;">Yellow Hitbox (H)</button>
+      <span id="hitbox-status-badge" class="active-badge" style="color: #ffff00; border-color: #ffff00; display: inline-flex; align-items: center;">HITBOX: OFF</span>
+      <button id="btn-mode-toggle" class="btn-util" style="border-color: #38d665; color: #38d665; font-weight: 700;">3rd-Person Follow</button>
+      <button id="btn-open-settings" class="btn-util" style="border-color: #ffd700; color: #ffd777;" title="Toggles Settings Panel">Settings</button>
+    </header>
+
+    <!-- ================= SINGLE ACTIVE PANEL SLOT (LEFT EDGE) ================= -->
+    <main id="single-panel-slot" class="single-panel-slot">
+      <!-- ================= WINDOW 1: RAW ANIMATION INSPECTOR ================= -->
+      <!-- Preserves #overlay ID for backward compatibility with existing tests -->
+      <aside id="overlay" class="test-window" data-window="1">
+        <div class="win-header panel-header">
+          <span>1. Raw Animation</span>
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <button id="overlay-toggle" class="panel-toggle-btn" title="Minimize / Expand Window">_</button>
+          </div>
+        </div>
+
+        <div class="win-body">
+          <div class="diag-line" id="player-info">Player: -</div>
+          <div class="diag-line" id="boss-info">Boss: -</div>
+          <div class="diag-line" id="weapon-info">Weapon Socket: -</div>
+
+          <!-- Model Selection -->
+          <div style="display: flex; align-items: center; gap: 6px; margin: 6px 0;">
+            <span style="font-size: 11px; color: #a0988c;">Model:</span>
+            <div class="btn-group" id="player-model-buttons">
+              <button class="btn-util active" data-model="knight">Knight</button>
+              <button class="btn-util" data-model="samurai">Samurai</button>
+            </div>
+          </div>
+
+          <!-- Player Raw Clips -->
+          <div class="section">
+            <div class="section-header player">
+              <span>Player Animations</span>
+              <span id="player-active-label" class="active-badge">idle</span>
+            </div>
+            <div class="btn-group" id="player-anim-buttons"></div>
+          </div>
+
+          <!-- Boss Raw Clips -->
+          <div class="section">
+            <div class="section-header boss">
+              <span>Boss Animations</span>
+              <span id="boss-active-label" class="active-badge">idle</span>
+            </div>
+            <div class="btn-group" id="boss-anim-buttons"></div>
+          </div>
+
+          <!-- Snapshot Utility -->
+          <div class="section">
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <button id="btn-capture-all" class="btn-util" style="border-color: #ffaa33; color: #ffaa33; font-weight: 700;">Capture Mid-Frames</button>
+              <span id="capture-status" style="font-size: 11px; color: #38d665;"></span>
+            </div>
+          </div>
+
+          <div class="hint">
+            <span>Space: Pause</span>
+            <span>[/]: Step Frame</span>
+            <span>Tab / H: Hide UI</span>
+            <span>R: Reset</span>
+          </div>
+        </div>
+      </aside>
+
+      <!-- ================= WINDOW 2: IN-GAME COMBAT & DUEL ================= -->
+      <section id="win-combat-duel" class="test-window hidden" data-window="2">
+        <div class="win-header">
+          <span>2. In-Game Combat & Player</span>
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <span id="duel-status-badge" class="active-badge" style="color: #ffd777; border-color: #ffd777;">4.0M LANE</span>
+            <button id="btn-min-win-2" class="panel-toggle-btn" title="Minimize / Expand Window">_</button>
+          </div>
+        </div>
+
+        <div class="win-body">
+          <!-- Top Mode & Reset Toolbar -->
+          <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px;">
+            <button id="btn-toggle-auto-reset" class="btn-util active" style="color: #38d665; border-color: #38d665;">Auto-Reset: ON</button>
+            <button id="btn-reset-duel-pos" class="btn-util" style="border-color: #ffd700; color: #ffd777;" title="Reset Positions (Key: R)">Reset (R)</button>
+            <button id="btn-toggle-trajectory" class="btn-util active">Trajectory: ON</button>
+          </div>
+
+          <!-- Action Player Section -->
+          <div style="margin-bottom: 8px;">
+            <div class="section-header player" style="margin-bottom: 4px;">
+              <span>Action Player (Knight)</span>
+              <span id="player-action-state-label" class="active-badge">Idle (HP: 100)</span>
+            </div>
+            <div class="btn-group">
+              <button id="btn-act-light1" class="btn-action-p" title="Slash 1 (Damage: Frames 27-44)">Slash 1 (F27-44)</button>
+              <button id="btn-act-light2" class="btn-action-p" title="Slash 2 (Damage: Frames 27-44)">Slash 2 (F27-44)</button>
+              <button id="btn-act-light3" class="btn-action-p" title="Finisher (Damage: Frames 30-52)">Finisher (F30-52)</button>
+              <button id="btn-act-combo" class="btn-action-p" style="border-color: #ffd700;" title="Full 3-Hit Combo Sequence">Combo 1-2-3</button>
+              <button id="btn-act-heavy" class="btn-action-p" style="border-color: #ffaa33;" title="Sundering Heavy Thrust (Damage: Frames 52-68)">Heavy Thrust (F52-68)</button>
+              <button id="btn-act-dodge-fwd" class="btn-action-p" style="border-color: #38d665;" title="Dodge Roll Forward (I-Frames: 33-90)">Roll Fwd (I-Frames 33-90)</button>
+              <button id="btn-act-dodge-back" class="btn-action-p" title="Dodge Roll Backward">Roll Back</button>
+              <button id="btn-act-drink" class="btn-action-p" style="border-color: #38d665; color: #7bf59f; font-weight: 700;" title="Drink Healing Potion">Drink Potion</button>
+            </div>
+          </div>
+
+          <!-- Action Boss Section -->
+          <div style="margin-bottom: 8px;">
+            <div class="section-header boss" style="margin-bottom: 4px;">
+              <span>Action Boss (Titan)</span>
+              <div style="display: flex; gap: 6px;">
+                <button id="btn-boss-ai-mode" class="btn-util" style="padding: 1px 6px; font-size: 10px;">Dummy Mode</button>
+                <span id="boss-action-state-label" class="active-badge">Idle (HP: 350)</span>
+              </div>
+            </div>
+            <div class="btn-group">
+              <button id="btn-act-boss-downward" class="btn-action-b" title="Downward Cleave (Planted, Damage: Frames 57-70)">Downward (Planted F57-70)</button>
+              <button id="btn-act-boss-combo" class="btn-action-b" title="Relentless Flurry (Small steps, Damage: Frames 42-66)">Flurry (F42-66)</button>
+              <button id="btn-act-boss-jump" class="btn-action-b" style="border-color: #ff3333; font-weight: 700;" title="Leaping Wrath (Approach Run + Leap, Damage: Frames 96-103)">Leaping Wrath (F96-103)</button>
+              <button id="btn-act-boss-360" class="btn-action-b" title="Ashen Maelstrom (Planted, Damage: Frames 51-74)">360° Maelstrom (F51-74)</button>
+              <button id="btn-act-boss-kick" class="btn-action-b" title="Spartan Kick (Planted, Damage: Frames 32-48)">Kick (F32-48)</button>
+            </div>
+          </div>
+
+          <!-- Damage Frame Window Visual Timeline -->
+          <div class="damage-window-box" style="margin-top: 6px; padding: 6px 8px; background: rgba(30, 25, 10, 0.7); border: 1px solid #d4af37; border-radius: 4px; font-family: monospace; font-size: 11px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+              <strong style="color: #ffd700;">DAMAGE ACTIVE FRAME WINDOW</strong>
+              <span id="tel-dmg-badge" class="active-badge" style="color: #888; border-color: #666;">STANDBY</span>
+            </div>
+            <div id="tel-dmg-frames" style="color: #e5ded2; margin-bottom: 4px; font-size: 10.5px;">
+              Action: None | Damage Window: Standby
+            </div>
+            <!-- Visual Timeline Bar -->
+            <div style="position: relative; width: 100%; height: 10px; background: rgba(255,255,255,0.08); border-radius: 2px; overflow: hidden; border: 1px solid rgba(255, 215, 0, 0.3);">
+              <div id="tel-timeline-windup" style="position: absolute; left: 0; width: 30%; height: 100%; background: rgba(255, 200, 0, 0.35);"></div>
+              <div id="tel-timeline-dmg" style="position: absolute; left: 30%; width: 20%; height: 100%; background: #ffff00; box-shadow: 0 0 10px #ffff00;"></div>
+              <div id="tel-timeline-recovery" style="position: absolute; left: 50%; width: 50%; height: 100%; background: rgba(0, 255, 120, 0.25);"></div>
+              <div id="tel-timeline-cursor" style="position: absolute; left: 0%; top: 0; width: 2px; height: 100%; background: #ffffff; z-index: 2; box-shadow: 0 0 4px #ffffff;"></div>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 9px; color: #a0988c; margin-top: 3px;">
+              <span>[Windup]</span>
+              <span style="color: #ffff00; font-weight: 700;">■ DAMAGE ACTIVE (Yellow)</span>
+              <span>[Recovery]</span>
+            </div>
+          </div>
+
+          <!-- Duel Spacing & Combat Telemetry Box -->
+          <div class="telemetry-grid">
+            <div><strong style="color: #ffd700;">Distance:</strong> <span id="tel-distance">4.00m</span></div>
+            <div><strong style="color: #38d665;">Reach:</strong> <span id="tel-reach">Safe (>3.5m)</span></div>
+            <div><strong style="color: #ffd777;">Player Δ:</strong> <span id="tel-player-disp">Δ0.00m</span></div>
+            <div><strong style="color: #ff9999;">Boss Δ:</strong> <span id="tel-boss-disp">Δ0.00m</span></div>
+            <div style="grid-column: span 2;"><strong style="color: #8bb2d6;">Combat Hit Log:</strong> <span id="tel-hit-log" style="color: #e5ded2;">Ready</span></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= WINDOW 3: WEAPON SOCKET OFFSET CONTROLLER ================= -->
+      <aside id="win-weapon-offsets" class="test-window hidden" data-window="3">
+        <div class="win-header">
+          <span>3. Weapon Socket Tuning</span>
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <span id="socket-save-status" class="active-badge" style="color: #38d665; border-color: #38d665;">READY</span>
+            <button id="btn-min-win-3" class="panel-toggle-btn" title="Minimize / Expand Window">_</button>
+          </div>
+        </div>
+
+        <div class="win-body">
+          <!-- Weapon Target Switcher -->
+          <div style="display: flex; gap: 6px; margin-bottom: 8px;">
+            <button id="tab-socket-player" class="btn-util active" style="flex: 1; border-color: #d4af37; color: #ffd777;">Knight Sword</button>
+            <button id="tab-socket-boss" class="btn-util" style="flex: 1; border-color: #ff5555; color: #ff9999;">Titan Greatsword</button>
+            <button id="tab-socket-potion" class="btn-util" style="flex: 1; border-color: #38d665; color: #7bf59f;">Healing Potion</button>
+          </div>
+
+          <!-- Slider Controls for Selected Weapon -->
+          <div id="socket-controls-container">
+            <div class="slider-row">
+              <span class="slider-label">Pos X:</span>
+              <input type="range" id="inp-pos-x" class="slider-input" min="-50" max="60" step="0.1" value="-14.3" />
+              <span id="val-pos-x" class="slider-val">-14.3</span>
+            </div>
+            <div class="slider-row">
+              <span class="slider-label">Pos Y (Palm):</span>
+              <input type="range" id="inp-pos-y" class="slider-input" min="-50" max="80" step="0.1" value="21.5" />
+              <span id="val-pos-y" class="slider-val">21.5</span>
+            </div>
+            <div class="slider-row">
+              <span class="slider-label">Pos Z:</span>
+              <input type="range" id="inp-pos-z" class="slider-input" min="-50" max="50" step="0.1" value="10.1" />
+              <span id="val-pos-z" class="slider-val">10.1</span>
+            </div>
+            <div class="slider-row">
+              <span class="slider-label">Rot X°:</span>
+              <input type="range" id="inp-rot-x" class="slider-input" min="-180" max="180" step="1" value="180" />
+              <span id="val-rot-x" class="slider-val">180°</span>
+            </div>
+            <div class="slider-row">
+              <span class="slider-label">Rot Y°:</span>
+              <input type="range" id="inp-rot-y" class="slider-input" min="-180" max="180" step="1" value="-15" />
+              <span id="val-rot-y" class="slider-val">-15°</span>
+            </div>
+            <div class="slider-row">
+              <span class="slider-label">Rot Z°:</span>
+              <input type="range" id="inp-rot-z" class="slider-input" min="-180" max="180" step="1" value="-112" />
+              <span id="val-rot-z" class="slider-val">-112°</span>
+            </div>
+            <div class="slider-row">
+              <span class="slider-label">Scale:</span>
+              <input type="range" id="inp-scale" class="slider-input" min="1" max="200" step="0.5" value="18" />
+              <span id="val-scale" class="slider-val">18</span>
+            </div>
+          </div>
+
+          <!-- Quick Grip Presets -->
+          <div class="section">
+            <div class="section-header" style="color: #ffaa33;">
+              <span>Quick Grip Presets</span>
+            </div>
+            <div class="btn-group">
+              <button id="btn-preset-knight-2h" class="btn-player" style="border-color: #d4af37; font-weight: 700;">Knight 2H Grip</button>
+              <button id="btn-preset-boss-2h" class="btn-boss" style="border-color: #ff5555; font-weight: 700;">Titan 2H Grip</button>
+              <button id="btn-flip-player-blade" class="btn-util">Flip Knight</button>
+              <button id="btn-flip-boss-blade" class="btn-util">Flip Titan</button>
+              <button id="btn-reset-socket-config" class="btn-util" style="border-color: #777;">Reset</button>
+            </div>
+          </div>
+
+          <!-- Save & Export Section -->
+          <div class="section">
+            <div class="section-header" style="color: #38d665;">
+              <span>Save & Export</span>
+            </div>
+            <div class="btn-group">
+              <button id="btn-save-print-config" style="background: #1c3824; border-color: #38d665; color: #38d665; font-weight: 700;">Save & Print Config</button>
+              <button id="btn-copy-config-ts" class="btn-util">Copy TypeScript</button>
+            </div>
+            <div id="socket-code-container" style="margin-top: 6px; display: none;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                <span style="font-size: 10px; color: #ffaa33;">WeaponSocketConfig.ts:</span>
+                <button id="btn-close-code-box" style="padding: 1px 4px; font-size: 9px;">&times;</button>
+              </div>
+              <pre id="socket-code-output" style="background: #06090e; border: 1px solid #7a5e2a; padding: 6px; border-radius: 4px; font-size: 10px; color: #38d665; max-height: 140px; overflow-y: auto; margin: 0;"></pre>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- ================= WINDOW 4: BOSS MUSIC EDITOR ================= -->
+      <aside id="win-boss-music" class="test-window hidden" data-window="4">
+        <div class="win-header">
+          <span>4. Boss Music Editor</span>
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <span id="music-state-badge" class="active-badge" style="color: #ffd777; border-color: #ffd777;">IDLE</span>
+            <button id="btn-min-win-4" class="panel-toggle-btn" title="Minimize / Expand Window">_</button>
+          </div>
+        </div>
+
+        <div class="win-body">
+          <!-- Mode Switcher -->
+          <div style="display: flex; gap: 6px; margin-bottom: 8px;">
+            <button id="btn-music-mode-single" class="btn-util active" style="flex: 1; border-color: #d4af37; color: #ffd777;">Single-Track</button>
+            <button id="btn-music-mode-dual" class="btn-util" style="flex: 1; border-color: #8bb2d6; color: #8bb2d6;">Dual-Track</button>
+          </div>
+
+          <!-- Preset Management -->
+          <div class="section" style="margin-top: 0; padding-top: 0; border-top: none;">
+            <div style="display: flex; gap: 6px; margin-bottom: 6px;">
+              <select id="music-preset-select" style="flex: 1; background: #0c121c; border: 1px solid rgba(181, 149, 74, 0.4); color: #ffd777; padding: 4px 6px; border-radius: 4px; font-family: monospace; font-size: 11px;"></select>
+              <button id="btn-new-preset" class="btn-util" title="Create New Preset">+ New</button>
+              <button id="btn-delete-preset" class="btn-util" style="border-color: #8b2b2b; color: #f0c0c0;" title="Delete Preset">Del</button>
+            </div>
+            <div style="margin-bottom: 8px;">
+              <input type="text" id="music-preset-name" placeholder="Preset Display Name" style="width: 100%; box-sizing: border-box; background: #0c121c; border: 1px solid #7a5e2a; color: #e5ded2; padding: 4px 6px; border-radius: 4px; font-family: monospace; font-size: 11px;" />
+            </div>
+          </div>
+
+          <!-- Single-Track Mode Container -->
+          <div id="container-single-track" class="section">
+            <div class="section-header util">
+              <span>Single Audio Track (public/audio/)</span>
+            </div>
+            <div style="margin-bottom: 8px;">
+              <div style="display: flex; gap: 4px; align-items: center; margin-bottom: 4px;">
+                <input type="text" id="inp-single-url" placeholder="/audio/boss_theme.mp3" style="flex: 1; background: #0c121c; border: 1px solid #7a5e2a; color: #ffd777; padding: 4px 6px; border-radius: 4px; font-family: monospace; font-size: 11px;" />
+                <button id="btn-single-load-url" class="btn-util" style="padding: 4px 8px; font-weight: 700; border-color: #ffd700; color: #ffd777;">Load</button>
+              </div>
+              <div id="single-file-info" class="diag-line" style="margin-top: 4px; font-size: 10.5px;">Track: [Built-in Procedural Theme] (16.0s)</div>
+            </div>
+
+            <!-- Phase 1 Timestamps -->
+            <div style="background: rgba(30, 25, 10, 0.5); border: 1px solid rgba(212, 175, 55, 0.3); border-radius: 4px; padding: 6px 8px; margin-bottom: 8px;">
+              <div class="section-header player" style="margin-bottom: 4px;">
+                <span>Phase 1 Timestamps</span>
+              </div>
+              <div class="slider-row">
+                <span class="slider-label" style="width: 90px;">Intro Start (s):</span>
+                <input type="number" id="inp-single-p1-start" class="slider-input" min="0" step="0.1" value="0.0" style="background: #06090e; color: #ffd700; border: 1px solid #7a5e2a; padding: 2px 4px; font-family: monospace;" />
+              </div>
+              <div class="slider-row">
+                <span class="slider-label" style="width: 90px;">Loop Start (s):</span>
+                <input type="number" id="inp-single-p1-loop-start" class="slider-input" min="0" step="0.1" value="0.0" style="background: #06090e; color: #ffd700; border: 1px solid #7a5e2a; padding: 2px 4px; font-family: monospace;" />
+              </div>
+              <div class="slider-row">
+                <span class="slider-label" style="width: 90px;">Loop End (s):</span>
+                <input type="number" id="inp-single-p1-loop-end" class="slider-input" min="0" step="0.1" value="16.0" style="background: #06090e; color: #ffd700; border: 1px solid #7a5e2a; padding: 2px 4px; font-family: monospace;" />
+              </div>
+            </div>
+
+            <!-- Phase 2 Timestamps -->
+            <div style="background: rgba(40, 15, 15, 0.5); border: 1px solid rgba(255, 85, 85, 0.3); border-radius: 4px; padding: 6px 8px;">
+              <div class="section-header boss" style="margin-bottom: 4px;">
+                <span>Phase 2 Timestamps</span>
+              </div>
+              <div class="slider-row">
+                <span class="slider-label" style="width: 90px;">Intro Start (s):</span>
+                <input type="number" id="inp-single-p2-start" class="slider-input" min="0" step="0.1" value="0.0" style="background: #06090e; color: #ff9999; border: 1px solid #752828; padding: 2px 4px; font-family: monospace;" />
+              </div>
+              <div class="slider-row">
+                <span class="slider-label" style="width: 90px;">Loop Start (s):</span>
+                <input type="number" id="inp-single-p2-loop-start" class="slider-input" min="0" step="0.1" value="0.0" style="background: #06090e; color: #ff9999; border: 1px solid #752828; padding: 2px 4px; font-family: monospace;" />
+              </div>
+              <div class="slider-row">
+                <span class="slider-label" style="width: 90px;">Loop End (s):</span>
+                <input type="number" id="inp-single-p2-loop-end" class="slider-input" min="0" step="0.1" value="16.0" style="background: #06090e; color: #ff9999; border: 1px solid #752828; padding: 2px 4px; font-family: monospace;" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Dual-Track Mode Container -->
+          <div id="container-dual-track" class="section" style="display: none;">
+            <!-- Phase 1 Audio Track -->
+            <div style="background: rgba(30, 25, 10, 0.5); border: 1px solid rgba(212, 175, 55, 0.3); border-radius: 4px; padding: 6px 8px; margin-bottom: 8px;">
+              <div class="section-header player" style="margin-bottom: 4px;">
+                <span>Phase 1 Track (public/audio/)</span>
+              </div>
+              <div style="display: flex; gap: 4px; align-items: center; margin-bottom: 4px;">
+                <input type="text" id="inp-dual-p1-url" placeholder="/audio/AbyssWatchers.mp3" style="flex: 1; background: #0c121c; border: 1px solid #7a5e2a; color: #ffd777; padding: 3px 6px; border-radius: 4px; font-family: monospace; font-size: 11px;" />
+                <button id="btn-dual-p1-load-url" class="btn-util" style="padding: 3px 8px; font-weight: 700; border-color: #ffd700; color: #ffd777;">Load</button>
+              </div>
+              <div id="dual-p1-file-info" class="diag-line" style="margin: 2px 0 6px 0; font-size: 10px;">Track 1: Built-in Theme (16.0s)</div>
+              <div class="slider-row">
+                <span class="slider-label" style="width: 90px;">Loop Start (s):</span>
+                <input type="number" id="inp-dual-p1-loop-start" class="slider-input" min="0" step="0.1" value="0.0" style="background: #06090e; color: #ffd700; border: 1px solid #7a5e2a; padding: 2px 4px; font-family: monospace;" />
+              </div>
+              <div class="slider-row">
+                <span class="slider-label" style="width: 90px;">Loop End (s):</span>
+                <input type="number" id="inp-dual-p1-loop-end" class="slider-input" min="0" step="0.1" value="16.0" style="background: #06090e; color: #ffd700; border: 1px solid #7a5e2a; padding: 2px 4px; font-family: monospace;" />
+              </div>
+            </div>
+
+            <!-- Phase 2 Audio Track -->
+            <div style="background: rgba(40, 15, 15, 0.5); border: 1px solid rgba(255, 85, 85, 0.3); border-radius: 4px; padding: 6px 8px;">
+              <div class="section-header boss" style="margin-bottom: 4px;">
+                <span>Phase 2 Track (public/audio/)</span>
+              </div>
+              <div style="display: flex; gap: 4px; align-items: center; margin-bottom: 4px;">
+                <input type="text" id="inp-dual-p2-url" placeholder="/audio/DarkSoul.mp3" style="flex: 1; background: #0c121c; border: 1px solid #752828; color: #ff9999; padding: 3px 6px; border-radius: 4px; font-family: monospace; font-size: 11px;" />
+                <button id="btn-dual-p2-load-url" class="btn-util" style="padding: 3px 8px; font-weight: 700; border-color: #ff5555; color: #ff9999;">Load</button>
+              </div>
+              <div id="dual-p2-file-info" class="diag-line" style="margin: 2px 0 6px 0; font-size: 10px;">Track 2: Built-in Theme (16.0s)</div>
+              <div class="slider-row">
+                <span class="slider-label" style="width: 90px;">Loop Start (s):</span>
+                <input type="number" id="inp-dual-p2-loop-start" class="slider-input" min="0" step="0.1" value="0.0" style="background: #06090e; color: #ff9999; border: 1px solid #752828; padding: 2px 4px; font-family: monospace;" />
+              </div>
+              <div class="slider-row">
+                <span class="slider-label" style="width: 90px;">Loop End (s):</span>
+                <input type="number" id="inp-dual-p2-loop-end" class="slider-input" min="0" step="0.1" value="16.0" style="background: #06090e; color: #ff9999; border: 1px solid #752828; padding: 2px 4px; font-family: monospace;" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Live Preview & Transition Testing Controls -->
+          <div class="section">
+            <div class="section-header util">
+              <span>Live Preview & Transition Testing</span>
+            </div>
+            <div class="btn-group" style="margin-bottom: 8px;">
+              <button id="btn-preview-p1" class="btn-player" style="border-color: #ffd700; font-weight: 700;">▶ Play P1</button>
+              <button id="btn-preview-p2" class="btn-boss" style="border-color: #ff5555; font-weight: 700;">▶ Play P2</button>
+              <button id="btn-preview-transition" class="btn-util" style="border-color: #ffaa33; color: #ffaa33; font-weight: 700;">⚡ Trigger P2 Transition</button>
+              <button id="btn-preview-stop" class="btn-util" style="border-color: #777;">⏹ Stop</button>
+            </div>
+            <div class="slider-row">
+              <span class="slider-label" style="width: 70px;">Volume:</span>
+              <input type="range" id="inp-music-preview-vol" class="slider-input" min="0" max="100" step="1" value="75" />
+              <span id="val-music-preview-vol" class="slider-val">75%</span>
+            </div>
+            <div id="music-preview-telemetry" class="diag-line" style="color: #ffd777; font-size: 10.5px;">Status: Standby | Loop: Ready</div>
+          </div>
+
+          <!-- Save & Export Section -->
+          <div class="section">
+            <div class="section-header" style="color: #38d665;">
+              <span>Save & Export</span>
+              <span id="music-save-status" class="active-badge" style="color: #38d665; border-color: #38d665;">READY</span>
+            </div>
+            <div class="btn-group">
+              <button id="btn-save-music-preset" style="background: #1c3824; border-color: #38d665; color: #38d665; font-weight: 700;">Save to Game</button>
+              <button id="btn-export-music-json" class="btn-util">Export presets.json</button>
+            </div>
+            <div id="music-code-container" style="margin-top: 6px; display: none;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                <span style="font-size: 10px; color: #ffaa33;">presets.json (ignored by git):</span>
+                <button id="btn-close-music-code" style="padding: 1px 4px; font-size: 9px;">&times;</button>
+              </div>
+              <pre id="music-code-output" style="background: #06090e; border: 1px solid #7a5e2a; padding: 6px; border-radius: 4px; font-size: 10px; color: #38d665; max-height: 140px; overflow-y: auto; margin: 0;"></pre>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </main>
+
+    <!-- ================= UNIFIED PLAYBACK STRIP (PINNED AT BOTTOM-CENTER) ================= -->
+    <nav id="unified-playback-strip" class="unified-playback-strip" aria-label="Unified Playback Controls">
+      <button id="btn-step-prev" class="btn-util" title="Step Back 1 Frame (Key: [)">◀ -1 Frame</button>
+      <button id="btn-play-pause" class="btn-util" title="Play/Pause (Space)">⏸ Pause</button>
+      <button id="btn-step-next" class="btn-util" title="Step Forward 1 Frame (Key: ])">+1 Frame ▶</button>
+      <div class="playback-divider"></div>
+      <div class="btn-group" id="speed-buttons">
+        <button class="btn-util" data-speed="0.25">0.25x</button>
+        <button class="btn-util" data-speed="0.5">0.5x</button>
+        <button class="btn-util active" data-speed="1.0">1.0x</button>
+        <button class="btn-util" data-speed="1.5">1.5x</button>
+      </div>
+      <div id="frame-telemetry">Frame: -- / -- | Phase: --</div>
+    </nav>
+
+    <!-- Hidden compatibility elements for existing event bindings -->
+    <div style="display: none;" aria-hidden="true">
+      <button id="btn-duel-step-prev"></button>
+      <button id="btn-duel-play-pause"></button>
+      <button id="btn-duel-step-next"></button>
+      <div id="duel-speed-buttons"></div>
+      <div id="anim-buttons"></div>
+    </div>
+
+  </body>
+</html>
