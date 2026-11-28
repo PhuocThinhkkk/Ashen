@@ -591,7 +591,7 @@ export class Game {
     );
 
     this.profiler.markUpdateEnd();
-    if (this.frame % 4 === 0 || this.frame <= 2) {
+    if (this.frame % 4 === 0 || this.frame <= 2 || this.boss.state !== this.prevBossState) {
       this.publishDiagnostics();
     }
   }
@@ -632,9 +632,6 @@ export class Game {
       this.profiler.markCombatEvent('BOSS_WINDUP', { attack: this.boss.currentAttack?.name });
     } else if (this.boss.state === 'active' && this.prevBossState !== 'active') {
       this.audio.attackSwing(true);
-      if (this.boss.currentAttack?.isHeavy) {
-        this.audio.bossSmash();
-      }
       this.profiler.markCombatEvent('BOSS_ATTACK', { attack: this.boss.currentAttack?.name });
     }
     this.prevBossState = this.boss.state;

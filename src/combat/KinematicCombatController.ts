@@ -452,14 +452,14 @@ export class KinematicCombatController {
       }
     }
 
-    // Airborne landing sound
+    // Airborne landing sound (heavy foot landing; sword ground slam SFX triggers at impact frame in onGroundSlam)
     if (
       this.prevPhase === 'Airborne' &&
       (this.currentPhase === 'Impact' || this.currentPhase === 'Recovery') &&
       !this.firedTriggers.has('audio_landing_thud')
     ) {
       this.firedTriggers.add('audio_landing_thud');
-      this.callbacks.onLandingThud?.(cfg.id === 'attack_jump');
+      this.callbacks.onLandingThud?.(false);
     }
   }
 

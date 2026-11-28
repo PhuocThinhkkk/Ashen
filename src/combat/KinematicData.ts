@@ -169,8 +169,6 @@ export const KINEMATIC_ACTIONS: Record<string, KinematicActionConfig> = {
       peakSwooshFrame: 53,
       peakSwooshFreq: 320,
       peakSwooshDuration: 0.24,
-      peakImpactFrame: 60,
-      peakImpactHeavy: true,
     },
   },
 
@@ -208,8 +206,6 @@ export const KINEMATIC_ACTIONS: Record<string, KinematicActionConfig> = {
       peakSwooshFrame: 49,
       peakSwooshFreq: 450,
       peakSwooshDuration: 0.20,
-      peakImpactFrame: 53,
-      peakImpactHeavy: true,
     },
   },
 
@@ -256,8 +252,6 @@ export const KINEMATIC_ACTIONS: Record<string, KinematicActionConfig> = {
       peakSwooshFrame: 55,
       peakSwooshFreq: 480,
       peakSwooshDuration: 0.22,
-      peakImpactFrame: 160,
-      peakImpactHeavy: true,
     },
   },
 
